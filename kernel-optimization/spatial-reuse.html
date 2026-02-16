@@ -1,0 +1,458 @@
+<!doctype html>
+<!-- Brief: Visualization of spatial reuse and contiguous-access benefits. -->
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Spatial Reuse Interactive Visualizer</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap");
+
+        body {
+            font-family: "Inter", sans-serif;
+            background-color: #f9fafb;
+        }
+
+        .pattern-blue {
+            background-color: #3b82f6;
+            color: white;
+        }
+
+        .pattern-red {
+            background-color: #ef4444;
+            color: white;
+        }
+
+        /* Weight Specific Colors */
+        .w-color-0 {
+            background-color: #22c55e;
+            color: white;
+            border-color: #166534;
+        }
+
+        /* Green */
+        .w-color-1 {
+            background-color: #a855f7;
+            color: white;
+            border-color: #6b21a8;
+        }
+
+        /* Purple */
+        .w-color-2 {
+            background-color: #f59e0b;
+            color: white;
+            border-color: #92400e;
+        }
+
+        /* Amber */
+        .w-color-3 {
+            background-color: #06b6d4;
+            color: white;
+            border-color: #155e75;
+        }
+
+        /* Cyan */
+
+        .box {
+            width: 40px;
+            height: 40px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border: 2px solid #333;
+            font-weight: 800;
+            font-size: 16px;
+            transition: all 0.3s ease;
+            border-radius: 4px;
+        }
+
+        .pe-box {
+            width: 60px;
+            height: 60px;
+            border: 2px solid #94a3b8;
+            background-color: #f1f5f9;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 8px;
+            position: relative;
+            transition: all 0.3s ease;
+        }
+
+        .highlight-main {
+            outline: 4px solid #f59e0b;
+            transform: scale(1.15);
+            z-index: 20;
+            box-shadow: 0 0 15px rgba(245, 158, 11, 0.6);
+        }
+
+        .grid-cell {
+            width: 44px;
+            height: 44px;
+            border: 1px solid #e2e8f0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 700;
+            transition: all 0.3s ease;
+        }
+
+        .grid-highlight {
+            background-color: #fef3c7;
+            border: 2px solid #f59e0b;
+            color: #b45309;
+            z-index: 10;
+        }
+
+        .line-active {
+            stroke-width: 4;
+            stroke-dasharray: 1000;
+            stroke-dashoffset: 1000;
+            animation: dash 0.5s linear forwards;
+            filter: drop-shadow(0 2px 2px rgba(0, 0, 0, 0.1));
+        }
+
+        @keyframes dash {
+            to {
+                stroke-dashoffset: 0;
+            }
+        }
+
+        .source-mem {
+            border: 2px solid #64748b;
+            background-color: #f8fafc;
+            padding: 8px;
+            border-radius: 4px;
+        }
+    </style>
+</head>
+
+<body class="p-4 md:p-8">
+    <div class="max-w-6xl mx-auto bg-white rounded-xl shadow-2xl p-6 border border-gray-200">
+        <h1 class="text-3xl font-bold text-gray-800 mb-2">
+            Spatial Reuse Visualizer
+        </h1>
+        <p class="text-gray-600 mb-12">
+            Tracking data movement from Global Buffer to Consumers.
+        </p>
+
+        <!-- (a) Example 1D Convolution Equation -->
+        <div class="mb-16 flex flex-col items-center">
+            <div class="flex items-center gap-4 md:gap-8">
+                <!-- Input Map -->
+                <div class="flex gap-1">
+                    <div class="box pattern-blue">0</div>
+                    <div class="box pattern-blue">1</div>
+                    <div class="box pattern-blue">2</div>
+                    <div class="box pattern-blue">3</div>
+                    <div class="box pattern-blue">4</div>
+                    <div class="box pattern-blue">5</div>
+                    <div class="box pattern-blue">6</div>
+                </div>
+
+                <div class="text-3xl font-bold text-gray-400">*</div>
+
+                <!-- Filter -->
+                <div class="flex gap-1">
+                    <div class="box w-color-0">0</div>
+                    <div class="box w-color-1">1</div>
+                    <div class="box w-color-2">2</div>
+                    <div class="box w-color-3">3</div>
+                </div>
+
+                <div class="text-3xl font-bold text-gray-400">=</div>
+
+                <!-- Output Result -->
+                <div class="flex gap-1">
+                    <div class="box pattern-red">0</div>
+                    <div class="box pattern-red">1</div>
+                    <div class="box pattern-red">2</div>
+                    <div class="box pattern-red">3</div>
+                </div>
+            </div>
+            <p class="text-sm font-bold text-gray-400 uppercase mt-4 tracking-widest">
+                (a) Example 1D convolution
+            </p>
+        </div>
+
+        <!-- Mode Selector -->
+        <div class="flex flex-wrap gap-4 mb-8">
+            <button onclick="setMode(1)" id="btn-mode1" class="px-6 py-2 rounded-full font-semibold transition-all bg-blue-600 text-white shadow-md">
+                Ordering 1: Perfect Reuse (Broadcast)
+            </button>
+            <button onclick="setMode(2)" id="btn-mode2" class="px-6 py-2 rounded-full font-semibold transition-all bg-gray-100 text-gray-600 hover:bg-gray-200">
+                Ordering 2: Partial Reuse (Multicast)
+            </button>
+            <button onclick="setMode(3)" id="btn-mode3" class="px-6 py-2 rounded-full font-semibold transition-all bg-gray-100 text-gray-600 hover:bg-gray-200">
+                Ordering 3: No Spatial Reuse
+            </button>
+        </div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-12">
+            <!-- Left Side: Time vs Space Grid -->
+            <div class="border rounded-xl p-6 bg-gray-50 relative">
+                <div class="flex justify-between items-center mb-6">
+                    <h3 class="text-lg font-bold text-gray-700">Space-Time Grid</h3>
+                    <div id="step-info" class="text-xs font-bold text-gray-400 uppercase">
+                        Time Step: 0 / 4
+                    </div>
+                </div>
+
+                <div class="relative inline-block ml-8">
+                    <div class="absolute -left-10 top-1/2 -rotate-90 origin-center text-xs font-bold text-gray-400 uppercase tracking-widest">
+                        Space (Consumers)
+                    </div>
+                    <div class="absolute -bottom-6 left-1/2 -translate-x-1/2 text-xs font-bold text-gray-400 uppercase tracking-widest">
+                        Time
+                    </div>
+
+                    <div class="flex flex-col gap-1">
+                        <div class="flex gap-1 ml-10 mb-1">
+                            <div class="w-11 text-center text-[10px] font-bold text-gray-400">
+                                T0
+                            </div>
+                            <div class="w-11 text-center text-[10px] font-bold text-gray-400">
+                                T1
+                            </div>
+                            <div class="w-11 text-center text-[10px] font-bold text-gray-400">
+                                T2
+                            </div>
+                            <div class="w-11 text-center text-[10px] font-bold text-gray-400">
+                                T3
+                            </div>
+                        </div>
+                        <div id="grid-rows" class="flex flex-col gap-1"></div>
+                    </div>
+                </div>
+
+                <div class="mt-12 flex flex-wrap gap-2 border-t pt-6">
+                    <button onclick="reset()" class="bg-gray-800 text-white px-4 py-2 rounded hover:bg-black transition text-sm">
+                        Reset
+                    </button>
+                    <button onclick="stepBack()" id="back-btn" class="bg-gray-200 text-gray-700 px-6 py-2 rounded hover:bg-gray-300 transition font-bold disabled:opacity-50">
+                        Back
+                    </button>
+                    <button onclick="step()" id="step-btn" class="bg-blue-600 text-white px-8 py-2 rounded hover:bg-blue-700 transition font-bold shadow-lg disabled:opacity-50">
+                        Next Time Step
+                    </button>
+                </div>
+            </div>
+
+            <!-- Right Side: Memory Hierarchy & PE Animation -->
+            <div class="border rounded-xl p-8 bg-white shadow-sm flex flex-col items-center relative overflow-hidden">
+                <h3 class="text-lg font-bold mb-8 text-gray-700">
+                    Memory Hierarchy (Spatial)
+                </h3>
+
+                <!-- Source Memory -->
+                <div class="source-mem mb-12 flex gap-2">
+                    <div id="mem-w-0" class="box w-color-0">0</div>
+                    <div id="mem-w-1" class="box w-color-1">1</div>
+                    <div id="mem-w-2" class="box w-color-2">2</div>
+                    <div id="mem-w-3" class="box w-color-3">3</div>
+                </div>
+
+                <svg id="conn-svg" class="absolute top-0 left-0 w-full h-full pointer-events-none" style="z-index: 5"></svg>
+
+                <!-- Consumers -->
+                <div class="grid grid-cols-2 gap-x-12 gap-y-12 mt-4">
+                    <div class="flex flex-col items-center">
+                        <span class="text-[10px] font-bold text-gray-400 mb-1">Consumer C0</span>
+                        <div id="pe-0" class="pe-box text-xl font-bold">-</div>
+                    </div>
+                    <div class="flex flex-col items-center">
+                        <span class="text-[10px] font-bold text-gray-400 mb-1">Consumer C1</span>
+                        <div id="pe-1" class="pe-box text-xl font-bold">-</div>
+                    </div>
+                    <div class="flex flex-col items-center">
+                        <span class="text-[10px] font-bold text-gray-400 mb-1">Consumer C2</span>
+                        <div id="pe-2" class="pe-box text-xl font-bold">-</div>
+                    </div>
+                    <div class="flex flex-col items-center">
+                        <span class="text-[10px] font-bold text-gray-400 mb-1">Consumer C3</span>
+                        <div id="pe-3" class="pe-box text-xl font-bold">-</div>
+                    </div>
+                </div>
+
+                <div id="reuse-msg" class="mt-12 p-4 bg-gray-50 border border-gray-200 rounded-lg text-xs text-gray-800 text-center w-full min-h-[60px] flex items-center justify-center">
+                    Select a mode and click "Next" to see data movement.
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const grids = {
+            1: [
+                [0, 1, 2, 3],
+                [0, 1, 2, 3],
+                [0, 1, 2, 3],
+                [0, 1, 2, 3],
+            ],
+            2: [
+                [0, 1, 2, 3],
+                [0, 1, 2, 3],
+                [1, 0, 3, 2],
+                [1, 0, 3, 2],
+            ],
+            3: [
+                [0, 3, 2, 1],
+                [1, 0, 3, 2],
+                [2, 1, 0, 3],
+                [3, 2, 1, 0],
+            ],
+        };
+
+        const weightColors = {
+            0: "#22c55e", // Green
+            1: "#a855f7", // Purple
+            2: "#f59e0b", // Amber
+            3: "#06b6d4", // Cyan
+        };
+
+        const messages = {
+            1: "<strong>Broadcast:</strong> One weight from memory supplies all 4 Consumers. Perfect spatial reuse!",
+            2: "<strong>Multicast:</strong> Weights are shared in pairs. Partial spatial reuse.",
+            3: "<strong>No Spatial Reuse:</strong> Every consumer requires a different weight simultaneously.",
+        };
+
+        let currentMode = 1;
+        let currentTime = -1;
+
+        function setMode(m) {
+            currentMode = m;
+            document.querySelectorAll('[id^="btn-mode"]').forEach((btn) => {
+                btn.className =
+                    "px-6 py-2 rounded-full font-semibold transition-all bg-gray-100 text-gray-600 hover:bg-gray-200";
+            });
+            document.getElementById(`btn-mode${m}`).className =
+                "px-6 py-2 rounded-full font-semibold transition-all bg-blue-600 text-white shadow-md";
+            reset();
+        }
+
+        function reset() {
+            currentTime = -1;
+            updateUI();
+
+            const gridRows = document.getElementById("grid-rows");
+            gridRows.innerHTML = "";
+            const data = grids[currentMode];
+            for (let r = 0; r < 4; r++) {
+                const rowDiv = document.createElement("div");
+                rowDiv.className = "flex gap-1 items-center";
+                rowDiv.innerHTML = `<span class="w-10 text-[10px] font-bold text-gray-400">C${r}</span>`;
+                for (let c = 0; c < 4; c++) {
+                    const cell = document.createElement("div");
+                    cell.className = "grid-cell";
+                    cell.id = `grid-${r}-${c}`;
+                    cell.innerText = data[r][c];
+                    // Apply subtle background color to grid based on weight
+                    cell.style.color = weightColors[data[r][c]];
+                    rowDiv.appendChild(cell);
+                }
+                gridRows.appendChild(rowDiv);
+            }
+        }
+
+        function step() {
+            if (currentTime < 3) {
+                currentTime++;
+                updateUI();
+            }
+        }
+
+        function stepBack() {
+            if (currentTime >= 0) {
+                currentTime--;
+                updateUI();
+            }
+        }
+
+        function updateUI() {
+            document.getElementById("step-info").innerText =
+                `Time Step: ${currentTime + 1} / 4`;
+            document.getElementById("back-btn").disabled = currentTime === -1;
+            document.getElementById("step-btn").disabled = currentTime === 3;
+            document.getElementById("step-btn").innerText =
+                currentTime === 3 ? "Finished" : "Next Time Step";
+
+            if (currentTime === -1) {
+                document.getElementById("reuse-msg").innerHTML =
+                    'Select a mode and click "Next" to see data movement.';
+            } else {
+                document.getElementById("reuse-msg").innerHTML =
+                    messages[currentMode];
+            }
+
+            document.getElementById("conn-svg").innerHTML = "";
+            document
+                .querySelectorAll(".grid-cell")
+                .forEach((c) => c.classList.remove("grid-highlight"));
+            document
+                .querySelectorAll(".source-mem .box")
+                .forEach((b) => b.classList.remove("highlight-main"));
+
+            for (let i = 0; i < 4; i++) {
+                const pe = document.getElementById(`pe-${i}`);
+                pe.innerText = "-";
+                pe.className = "pe-box text-xl font-bold";
+                pe.style.backgroundColor = "";
+                pe.style.color = "";
+            }
+
+            if (currentTime === -1) return;
+
+            for (let r = 0; r < 4; r++) {
+                document
+                    .getElementById(`grid-${r}-${currentTime}`)
+                    .classList.add("grid-highlight");
+            }
+
+            const gridData = grids[currentMode];
+            const neededWeights = new Set();
+            for (let r = 0; r < 4; r++) neededWeights.add(gridData[r][currentTime]);
+
+            neededWeights.forEach((w) => {
+                document.getElementById(`mem-w-${w}`).classList.add("highlight-main");
+            });
+
+            const svg = document.getElementById("conn-svg");
+            const svgRect = svg.getBoundingClientRect();
+
+            for (let r = 0; r < 4; r++) {
+                const w = gridData[r][currentTime];
+                const pe = document.getElementById(`pe-${r}`);
+                const mem = document.getElementById(`mem-w-${w}`);
+                const color = weightColors[w];
+
+                pe.innerText = w;
+                pe.classList.add(`w-color-${w}`);
+
+                const mRect = mem.getBoundingClientRect();
+                const pRect = pe.getBoundingClientRect();
+
+                const x1 = mRect.left + mRect.width / 2 - svgRect.left;
+                const y1 = mRect.bottom - svgRect.top;
+                const x2 = pRect.left + pRect.width / 2 - svgRect.left;
+                const y2 = pRect.top - svgRect.top;
+
+                const path = document.createElementNS(
+                    "http://www.w3.org/2000/svg",
+                    "path",
+                );
+                const d = `M ${x1} ${y1} C ${x1} ${(y1 + y2) / 2} ${x2} ${(y1 + y2) / 2} ${x2} ${y2}`;
+                path.setAttribute("d", d);
+                path.setAttribute("class", "line-active");
+                path.setAttribute("fill", "none");
+                path.setAttribute("stroke", color);
+                svg.appendChild(path);
+            }
+        }
+
+        window.onload = () => setMode(1);
+    </script>
+</body>
+
+</html>

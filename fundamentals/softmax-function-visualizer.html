@@ -1,0 +1,414 @@
+<!doctype html>
+<!-- Brief: Visualization of softmax logits-to-probability conversion. -->
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Softmax: Scores to Probabilities</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- MathJax for Formulas -->
+    <script>
+        window.MathJax = {
+            tex: {
+                inlineMath: [
+                    ["$", "$"],
+                    ["\\(", "\\)"],
+                ],
+            },
+        };
+    </script>
+    <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+    <style>
+        .grid-bg {
+            background: #0f172a;
+        }
+
+        .math-card {
+            background: rgba(255, 255, 255, 0.03);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .logit-slider {
+            -webkit-appearance: none;
+            width: 100%;
+            height: 6px;
+            background: #334155;
+            border-radius: 5px;
+            outline: none;
+        }
+
+        .logit-slider::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            width: 18px;
+            height: 18px;
+            background: #6366f1;
+            cursor: pointer;
+            border-radius: 50%;
+            transition: all 0.2s;
+        }
+
+        .logit-slider::-webkit-slider-thumb:hover {
+            transform: scale(1.2);
+            box-shadow: 0 0 10px rgba(99, 102, 241, 0.5);
+        }
+
+        .preset-btn {
+            @apply px-2 py-1 text-[10px] font-bold rounded border border-white/10 bg-slate-800 hover:bg-slate-700 transition-colors uppercase tracking-wider;
+        }
+    </style>
+</head>
+
+<body class="grid-bg text-gray-200 min-h-screen font-sans p-4 md:p-8">
+    <div class="max-w-6xl mx-auto">
+        <!-- Header -->
+        <header class="text-center mb-12">
+            <h1 class="text-5xl font-extrabold mb-4 text-white tracking-tight">
+                Demystifying <span class="text-indigo-500">Softmax</span>
+            </h1>
+            <div class="flex items-center justify-center gap-4">
+                <p class="text-lg text-gray-400">
+                    Visualizing Logits vs. Softmax vs. Hard Max
+                </p>
+            </div>
+        </header>
+
+        <!-- Concept Grid -->
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-8 mb-12">
+            <div class="math-card p-8 rounded-3xl col-span-2">
+                <h2 class="text-2xl font-bold mb-4 flex items-center">
+                    <svg class="w-6 h-6 mr-2 text-indigo-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path>
+                    </svg>
+                    Temperature & The Flattening Effect
+                </h2>
+                <div class="space-y-4 text-gray-300 text-sm leading-relaxed">
+                    <p>
+                        Temperature ($T$) acts as a <strong>smoothing factor</strong>. By
+                        dividing logits by $T$ before exponentiation, we scale the
+                        relative differences between scores.
+                    </p>
+                    <ul class="list-disc ml-6 space-y-2">
+                        <li>
+                            <span class="text-pink-400 font-bold">Sharpening ($T \to 0$):</span>
+                            Small differences in logits are amplified. The winner dominates,
+                            approaching <strong>Hard Max</strong>.
+                        </li>
+                        <li>
+                            <span class="text-indigo-400 font-bold">Standard ($T = 1$):</span>
+                            The original relative differences are preserved through $e^z$.
+                        </li>
+                        <li>
+                            <span class="text-green-400 font-bold">Flattening ($T \to \infty$):</span>
+                            Logits are "crushed" toward zero. The distribution becomes
+                            <strong>uniform</strong> ($1/K$), meaning the model becomes
+                            uncertain and "creative."
+                        </li>
+                    </ul>
+                </div>
+            </div>
+
+            <div class="math-card p-8 rounded-3xl border-indigo-500/20 bg-indigo-500/5">
+                <h3 class="text-xl font-bold mb-4 text-white">The Math</h3>
+                <div class="text-center py-4 bg-black/40 rounded-xl mb-4">
+                    <div class="text-xl font-mono text-indigo-300">
+                        $$\sigma(z, T)_i = \frac{e^{z_i/T}}{\sum_{j=1}^K e^{z_j/T}}$$
+                    </div>
+                </div>
+                <p class="text-xs text-gray-400 italic">
+                    As $T \to \infty$, $z_i/T \to 0$, so $e^{z_i/T} \to 1$. Every class
+                    then gets a probability of $1/K$.
+                </p>
+            </div>
+        </div>
+
+        <!-- Interactive Playground -->
+        <div class="math-card p-8 rounded-3xl shadow-2xl mb-12 bg-slate-900/50">
+            <div class="flex flex-col md:flex-row justify-between items-center mb-8 gap-4 border-b border-white/10 pb-6">
+                <div>
+                    <h3 class="text-2xl font-bold text-white">Interactive Lab</h3>
+                    <p class="text-sm text-gray-400">
+                        Broad = Logits. Mid = Softmax. Thin = Hard Max.
+                    </p>
+                </div>
+                <div class="flex flex-wrap items-center gap-6">
+                    <div class="bg-slate-800 p-3 rounded-xl border border-white/10">
+                        <div class="flex items-center gap-3 mb-2">
+                            <span class="text-xs font-bold text-gray-400 uppercase">Temp ($T$)</span>
+                            <input type="range" id="temp-slider" min="0.1" max="10" step="0.1" value="1" class="w-32 accent-indigo-500" oninput="updateSoftmax()" />
+                            <span id="temp-val" class="text-xs font-mono text-indigo-400 w-8">1.0</span>
+                        </div>
+                        <div class="flex gap-2">
+                            <button onclick="setTemp(0.1)" class="preset-btn">
+                                Hard (0.1)
+                            </button>
+                            <button onclick="setTemp(1)" class="preset-btn">
+                                Std (1.0)
+                            </button>
+                            <button onclick="setTemp(10)" class="preset-btn text-green-400 border-green-500/30">
+                                Flat (10.0)
+                            </button>
+                        </div>
+                    </div>
+                    <label class="flex items-center cursor-pointer select-none">
+                        <div class="relative">
+                            <input type="checkbox" id="show-hardmax" class="sr-only" onchange="updateSoftmax()" checked />
+                            <div class="block bg-slate-700 w-10 h-6 rounded-full"></div>
+                            <div class="dot absolute left-1 top-1 bg-white w-4 h-4 rounded-full transition"></div>
+                        </div>
+                        <div class="ml-3 text-gray-300 text-xs font-bold uppercase tracking-wider">
+                            Show Hard Max
+                        </div>
+                    </label>
+                </div>
+            </div>
+
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-12 items-center">
+                <!-- Sliders -->
+                <div class="space-y-8">
+                    <div class="space-y-3">
+                        <div class="flex justify-between text-sm">
+                            <span class="font-bold flex items-center gap-2 text-red-400">CAT (Logit 1)</span>
+                            <span id="l1-val" class="font-mono text-indigo-300">5.0</span>
+                        </div>
+                        <input type="range" id="l1" min="-5" max="10" step="0.1" value="5" class="logit-slider" oninput="updateSoftmax()" />
+                    </div>
+                    <div class="space-y-3">
+                        <div class="flex justify-between text-sm">
+                            <span class="font-bold flex items-center gap-2 text-blue-400">DOG (Logit 2)</span>
+                            <span id="l2-val" class="font-mono text-indigo-300">1.0</span>
+                        </div>
+                        <input type="range" id="l2" min="-5" max="10" step="0.1" value="1" class="logit-slider" oninput="updateSoftmax()" />
+                    </div>
+                    <div class="space-y-3">
+                        <div class="flex justify-between text-sm">
+                            <span class="font-bold flex items-center gap-2 text-green-400">BIRD (Logit 3)</span>
+                            <span id="l3-val" class="font-mono text-indigo-300">0.0</span>
+                        </div>
+                        <input type="range" id="l3" min="-5" max="10" step="0.1" value="0" class="logit-slider" oninput="updateSoftmax()" />
+                    </div>
+                </div>
+
+                <!-- Visualization -->
+                <div class="relative h-96 bg-black/20 rounded-2xl p-4 border border-white/5">
+                    <canvas id="softmaxChart"></canvas>
+                </div>
+            </div>
+
+            <!-- Calculation Trace -->
+            <div class="mt-12 grid grid-cols-1 md:grid-cols-3 gap-6">
+                <div class="p-5 rounded-2xl bg-white/5 border border-white/10">
+                    <h4 class="text-xs font-bold text-gray-500 mb-3 uppercase tracking-widest">
+                        Exponentials ($e^{z/T}$)
+                    </h4>
+                    <div id="trace-exp" class="text-sm font-mono space-y-2"></div>
+                </div>
+                <div class="p-5 rounded-2xl bg-indigo-500/10 border border-indigo-500/20">
+                    <h4 class="text-xs font-bold text-indigo-400 mb-3 uppercase tracking-widest">
+                        Softmax Probabilities
+                    </h4>
+                    <div id="trace-prob" class="text-sm font-mono space-y-2"></div>
+                </div>
+                <div class="p-5 rounded-2xl bg-pink-500/10 border border-pink-500/20">
+                    <h4 class="text-xs font-bold text-pink-400 mb-3 uppercase tracking-widest">
+                        Hard Max (Winner)
+                    </h4>
+                    <div id="trace-hard" class="text-sm font-mono space-y-2"></div>
+                </div>
+            </div>
+        </div>
+
+        <footer class="mt-16 text-center text-gray-600 text-xs pb-10">
+            Interactive Learning Guide • Softmax, Temperature & Argmax
+        </footer>
+    </div>
+
+    <script>
+        let chart;
+        const style = document.createElement("style");
+        style.innerHTML = `
+            #show-hardmax:checked ~ .dot { transform: translateX(100%); background-color: #6366f1; }
+        `;
+        document.head.appendChild(style);
+
+        function initChart() {
+            const ctx = document.getElementById("softmaxChart").getContext("2d");
+            chart = new Chart(ctx, {
+                type: "bar",
+                data: {
+                    labels: ["CAT", "DOG", "BIRD"],
+                    datasets: [{
+                            label: "Logit (Raw Score)",
+                            data: [0, 0, 0],
+                            backgroundColor: "rgba(99, 102, 241, 0.1)",
+                            borderColor: "rgba(99, 102, 241, 0.2)",
+                            borderWidth: 1,
+                            borderRadius: 4,
+                            barThickness: 60,
+                            xAxisID: "xLogit",
+                        },
+                        {
+                            label: "Softmax Prob",
+                            data: [0, 0, 0],
+                            backgroundColor: ["#ef4444", "#3b82f6", "#22c55e"],
+                            borderRadius: 4,
+                            barThickness: 30,
+                            xAxisID: "xProb",
+                        },
+                        {
+                            label: "Hard Max (Argmax)",
+                            data: [0, 0, 0],
+                            backgroundColor: "rgba(255, 255, 255, 0.5)",
+                            borderColor: "#ffffff",
+                            borderWidth: 2,
+                            borderRadius: 2,
+                            barThickness: 8,
+                            xAxisID: "xProb",
+                            hidden: false,
+                        },
+                    ],
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    indexAxis: "y",
+                    scales: {
+                        xLogit: {
+                            type: "linear",
+                            position: "bottom",
+                            min: -5,
+                            max: 10,
+                            title: {
+                                display: true,
+                                text: "Logit Value",
+                                color: "#6366f1",
+                                font: {
+                                    size: 10
+                                },
+                            },
+                            grid: {
+                                color: "rgba(99, 102, 241, 0.05)"
+                            },
+                            ticks: {
+                                color: "#6366f1"
+                            },
+                        },
+                        xProb: {
+                            type: "linear",
+                            position: "top",
+                            min: 0,
+                            max: 1,
+                            title: {
+                                display: true,
+                                text: "Probability",
+                                color: "#f1f5f9",
+                                font: {
+                                    size: 10
+                                },
+                            },
+                            grid: {
+                                display: false
+                            },
+                            ticks: {
+                                color: "#94a3b8"
+                            },
+                        },
+                        y: {
+                            grid: {
+                                display: false
+                            },
+                            ticks: {
+                                color: "#f1f5f9",
+                                font: {
+                                    weight: "bold"
+                                }
+                            },
+                        },
+                    },
+                    plugins: {
+                        legend: {
+                            display: true,
+                            position: "bottom",
+                            labels: {
+                                color: "#94a3b8",
+                                boxWidth: 10,
+                                font: {
+                                    size: 11
+                                }
+                            },
+                        },
+                    },
+                },
+            });
+            updateSoftmax();
+        }
+
+        function setTemp(v) {
+            document.getElementById("temp-slider").value = v;
+            updateSoftmax();
+        }
+
+        function updateSoftmax() {
+            const z1 = parseFloat(document.getElementById("l1").value);
+            const z2 = parseFloat(document.getElementById("l2").value);
+            const z3 = parseFloat(document.getElementById("l3").value);
+            const temp = parseFloat(document.getElementById("temp-slider").value);
+            const showHard = document.getElementById("show-hardmax").checked;
+
+            document.getElementById("l1-val").innerText = z1.toFixed(1);
+            document.getElementById("l2-val").innerText = z2.toFixed(1);
+            document.getElementById("l3-val").innerText = z3.toFixed(1);
+            document.getElementById("temp-val").innerText = temp.toFixed(1);
+
+            // Step 1: Exponentials
+            const exp1 = Math.exp(z1 / temp);
+            const exp2 = Math.exp(z2 / temp);
+            const exp3 = Math.exp(z3 / temp);
+            const sumExp = exp1 + exp2 + exp3;
+
+            // Step 2: Softmax Probabilities
+            const p1 = exp1 / sumExp;
+            const p2 = exp2 / sumExp;
+            const p3 = exp3 / sumExp;
+
+            // Step 3: Hard Max (Argmax)
+            const logits = [z1, z2, z3];
+            const maxVal = Math.max(...logits);
+            const hardMax = logits.map((v) => (v === maxVal ? 1.0 : 0.0));
+
+            // Update Chart
+            chart.data.datasets[0].data = [z1, z2, z3];
+            chart.data.datasets[1].data = [p1, p2, p3];
+            chart.data.datasets[2].data = hardMax;
+            chart.data.datasets[2].hidden = !showHard;
+            chart.update();
+
+            // Trace Updates
+            document.getElementById("trace-exp").innerHTML = `
+                <div class="flex justify-between"><span>Cat ($e^{z/T}$):</span> <span>${exp1.toFixed(2)}</span></div>
+                <div class="flex justify-between"><span>Dog ($e^{z/T}$):</span> <span>${exp2.toFixed(2)}</span></div>
+                <div class="flex justify-between"><span>Bird ($e^{z/T}$):</span> <span>${exp3.toFixed(2)}</span></div>
+            `;
+            document.getElementById("trace-prob").innerHTML = `
+                <div class="flex justify-between text-red-400"><span>Cat ($P$):</span> <span>${(p1 * 100).toFixed(1)}%</span></div>
+                <div class="flex justify-between text-blue-400"><span>Dog ($P$):</span> <span>${(p2 * 100).toFixed(1)}%</span></div>
+                <div class="flex justify-between text-green-400"><span>Bird ($P$):</span> <span>${(p3 * 100).toFixed(1)}%</span></div>
+            `;
+            document.getElementById("trace-hard").innerHTML = `
+                <div class="flex justify-between ${hardMax[0] ? "text-white font-bold" : "text-gray-600"}"><span>Cat:</span> <span>${hardMax[0].toFixed(0)}</span></div>
+                <div class="flex justify-between ${hardMax[1] ? "text-white font-bold" : "text-gray-600"}"><span>Dog:</span> <span>${hardMax[1].toFixed(0)}</span></div>
+                <div class="flex justify-between ${hardMax[2] ? "text-white font-bold" : "text-gray-600"}"><span>Bird:</span> <span>${hardMax[2].toFixed(0)}</span></div>
+            `;
+
+            if (window.MathJax && window.MathJax.typeset) {
+                window.MathJax.typeset();
+            }
+        }
+
+        window.onload = initChart;
+    </script>
+</body>
+
+</html>

@@ -1,0 +1,583 @@
+<!doctype html>
+<!-- Brief: Visualization comparing pooling operations and spatial-resolution effects. -->
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>CNN Pooling: Dimensionality Reduction</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- MathJax for Formulas -->
+    <script>
+        window.MathJax = {
+            tex: {
+                inlineMath: [
+                    ["$", "$"],
+                    ["\\(", "\\)"],
+                ],
+            },
+        };
+    </script>
+    <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+    <style>
+        .grid-bg {
+            background: #0f172a;
+        }
+
+        .pixel {
+            transition: all 0.2s;
+            border: 1px solid rgba(255, 255, 255, 0.05);
+        }
+
+        .pool-window {
+            border: 2px solid #ef4444;
+            background: rgba(239, 68, 68, 0.1);
+            position: absolute;
+            pointer-events: none;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        .math-card {
+            background: rgba(255, 255, 255, 0.03);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .highlight-blue {
+            color: #60a5fa;
+            font-weight: bold;
+        }
+
+        .highlight-red {
+            color: #f87171;
+            font-weight: bold;
+        }
+
+        .highlight-green {
+            color: #4ade80;
+            font-weight: bold;
+        }
+
+        .image-pixelated {
+            image-rendering: pixelated;
+            image-rendering: crisps-edges;
+        }
+    </style>
+</head>
+
+<body class="grid-bg text-gray-200 min-h-screen font-sans p-4 md:p-8">
+    <div class="max-w-6xl mx-auto">
+        <!-- Header -->
+        <header class="text-center mb-12">
+            <h1 class="text-5xl font-extrabold mb-4 text-white tracking-tight">
+                Mastering <span class="text-red-500">Pooling Layers</span>
+            </h1>
+            <p class="text-lg text-gray-400 max-w-2xl mx-auto">
+                How neural networks "summarize" images to find the most important
+                features.
+            </p>
+        </header>
+
+        <!-- Concept Grid -->
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-8 mb-12">
+            <div class="math-card p-8 rounded-3xl col-span-2">
+                <h2 class="text-2xl font-bold mb-4 flex items-center">
+                    <svg class="w-6 h-6 mr-2 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4">
+                        </path>
+                    </svg>
+                    The Two Main Types
+                </h2>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6 text-gray-300">
+                    <div>
+                        <h3 class="font-bold text-white mb-2 flex items-center gap-2">
+                            <div class="w-2 h-2 rounded-full bg-red-500"></div>
+                            Max Pooling
+                        </h3>
+                        <p class="text-sm">
+                            Picks the <span class="highlight-red">Maximum</span> value. Best
+                            for detecting sharp features like edges or high-contrast
+                            patterns. It answers: <em>"Is the feature here?"</em>
+                        </p>
+                        <div class="text-xs mt-2 font-mono text-red-400">
+                            $\max(x_{1 \dots n})$
+                        </div>
+                    </div>
+                    <div>
+                        <h3 class="font-bold text-white mb-2 flex items-center gap-2">
+                            <div class="w-2 h-2 rounded-full bg-green-500"></div>
+                            Average Pooling
+                        </h3>
+                        <p class="text-sm">
+                            Calculates the <span class="highlight-green">Average</span>.
+                            Smooths out the input, giving a generalized overview. Often used
+                            at the end of networks (Global Average Pooling).
+                        </p>
+                        <div class="text-xs mt-2 font-mono text-green-400">
+                            $\frac{1}{n}\sum x_i$
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="math-card p-8 rounded-3xl border-blue-500/20 bg-blue-500/5">
+                <h3 class="text-xl font-bold mb-4 text-white">Why Use It?</h3>
+                <ul class="space-y-4 text-sm">
+                    <li class="flex items-start gap-2">
+                        <span class="text-blue-500">✓</span>
+                        <span><strong>Invariance:</strong> Small shifts in the image won't
+                            change the pooled output.</span>
+                    </li>
+                    <li class="flex items-start gap-2">
+                        <span class="text-blue-500">✓</span>
+                        <span><strong>Efficiency:</strong> Fewer pixels means fewer weights
+                            to train in later layers.</span>
+                    </li>
+                </ul>
+            </div>
+        </div>
+
+        <!-- Interactive Playground -->
+        <div class="math-card p-8 rounded-3xl shadow-2xl mb-12 bg-slate-900/50">
+            <div class="flex flex-col md:flex-row justify-between items-center mb-8 gap-4 border-b border-white/10 pb-6">
+                <div class="flex items-center gap-4">
+                    <div>
+                        <h3 class="text-2xl font-bold text-white">Interactive Pooler</h3>
+                        <p class="text-sm text-gray-400">
+                            Switch modes to see how calculations change.
+                        </p>
+                    </div>
+                    <div class="flex bg-slate-800 p-1 rounded-xl border border-white/10">
+                        <button id="btn-max" onclick="setMode('max')" class="px-4 py-1.5 rounded-lg text-sm font-bold bg-red-600 text-white shadow-lg transition-all">
+                            MAX
+                        </button>
+                        <button id="btn-avg" onclick="setMode('avg')" class="px-4 py-1.5 rounded-lg text-sm font-bold text-gray-400 hover:text-white transition-all">
+                            AVG
+                        </button>
+                    </div>
+                </div>
+                <div class="flex gap-3">
+                    <button onclick="prevStep()" class="px-4 py-2 bg-slate-700 hover:bg-slate-600 rounded-lg transition">
+                        Back
+                    </button>
+                    <button onclick="nextStep()" class="px-6 py-2 bg-slate-100 hover:bg-white text-slate-900 rounded-lg font-bold shadow-lg transition">
+                        Next Step
+                    </button>
+                    <button onclick="resetSteps()" class="px-4 py-2 border border-white/10 hover:bg-white/5 rounded-lg transition">
+                        Reset
+                    </button>
+                </div>
+            </div>
+
+            <div class="flex flex-col lg:flex-row gap-12 items-center justify-center">
+                <!-- Input Grid -->
+                <div class="flex flex-col items-center">
+                    <div class="text-xs font-bold text-gray-500 mb-2 uppercase">
+                        Input Feature Map (4x4)
+                    </div>
+                    <div class="relative p-1 bg-black/40 rounded-lg border border-white/10" id="input-container">
+                        <div id="input-grid" class="grid grid-cols-4 gap-1"></div>
+                        <div id="pool-selector" class="pool-window"></div>
+                    </div>
+                </div>
+
+                <!-- Arrow -->
+                <div class="hidden lg:block text-4xl text-gray-600">→</div>
+
+                <!-- Output Grid -->
+                <div class="flex flex-col items-center">
+                    <div class="text-xs font-bold text-gray-500 mb-2 uppercase">
+                        Pooled Output (2x2)
+                    </div>
+                    <div class="p-1 bg-black/40 rounded-lg border border-white/10">
+                        <div id="output-grid" class="grid grid-cols-2 gap-1"></div>
+                    </div>
+                </div>
+
+                <!-- Explanation Box -->
+                <div class="w-full lg:w-64 space-y-4">
+                    <div class="p-4 rounded-xl bg-white/5 border border-white/10">
+                        <span id="label-op" class="text-[10px] uppercase font-bold text-red-400">MAX OPERATION</span>
+                        <div id="step-op" class="text-sm font-mono mt-1 text-white">
+                            $\max(12, 5, 8, 20) = 20$
+                        </div>
+                    </div>
+                    <div class="p-4 rounded-xl bg-blue-500/10 border border-blue-500/20">
+                        <span class="text-[10px] uppercase font-bold text-blue-400">Current Hyperparams</span>
+                        <div class="text-xs mt-1 text-blue-100">
+                            Pool Size: 2x2<br />
+                            Stride: 2
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Before and After Visual Image Section -->
+        <section class="math-card p-8 rounded-3xl border-white/5 bg-slate-900/80">
+            <h2 class="text-2xl font-bold mb-8 text-center flex flex-col items-center gap-2">
+                <span>Realistic Feature Downsampling</span>
+                <span class="text-sm font-normal text-gray-400">Visualizing a hand-drawn digit '8'</span>
+            </h2>
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4 items-center justify-items-center">
+                <!-- 128x128 -->
+                <div class="text-center">
+                    <div class="inline-block p-2 bg-black rounded-xl border border-white/10 mb-4 shadow-2xl">
+                        <canvas id="cvs-128" width="128" height="128" class="w-40 h-40 image-pixelated bg-black block"></canvas>
+                    </div>
+                    <h4 class="text-xs font-bold text-gray-400 uppercase tracking-widest">
+                        Input ($128$)
+                    </h4>
+                </div>
+
+                <!-- 64x64 -->
+                <div class="text-center">
+                    <div class="inline-block p-2 bg-black rounded-xl border border-white/10 mb-4 shadow-2xl">
+                        <canvas id="cvs-64" width="64" height="64" class="w-40 h-40 image-pixelated bg-black block"></canvas>
+                    </div>
+                    <h4 id="label-64" class="text-xs font-bold text-blue-400 uppercase tracking-widest">
+                        Pool ($64$)
+                    </h4>
+                </div>
+
+                <!-- 32x32 -->
+                <div class="text-center">
+                    <div class="inline-block p-2 bg-black rounded-xl border border-white/10 mb-4 shadow-2xl">
+                        <canvas id="cvs-32" width="32" height="32" class="w-40 h-40 image-pixelated bg-black block"></canvas>
+                    </div>
+                    <h4 id="label-32" class="text-xs font-bold text-purple-400 uppercase tracking-widest">
+                        Pool ($32$)
+                    </h4>
+                </div>
+
+                <!-- 16x16 -->
+                <div class="text-center">
+                    <div class="inline-block p-2 bg-black rounded-xl border border-white/10 mb-4 shadow-2xl">
+                        <canvas id="cvs-16" width="16" height="16" class="w-40 h-40 image-pixelated bg-black block"></canvas>
+                    </div>
+                    <h4 id="label-16" class="text-xs font-bold text-red-400 uppercase tracking-widest">
+                        Pool ($16$)
+                    </h4>
+                </div>
+
+                <!-- 8x8 -->
+                <div class="text-center">
+                    <div class="inline-block p-2 bg-black rounded-xl border border-white/10 mb-4 shadow-2xl">
+                        <canvas id="cvs-8" width="8" height="8" class="w-40 h-40 image-pixelated bg-black block"></canvas>
+                    </div>
+                    <h4 id="label-8" class="text-xs font-bold text-orange-400 uppercase tracking-widest">
+                        Final ($8$)
+                    </h4>
+                </div>
+            </div>
+            <div class="mt-10 p-6 bg-white/5 rounded-2xl border border-white/10 text-center max-w-2xl mx-auto">
+                <p class="text-sm text-gray-300 mb-4">
+                    Even after aggressive downsampling (from 16,384 pixels to 64
+                    pixels), the
+                    <span class="highlight-blue">topology of the digit</span> is
+                    preserved. This massive compression allows the network to process
+                    larger images efficiently while focusing on key features.
+                </p>
+                <div class="text-xs text-gray-400 border-t border-white/10 pt-4">
+                    <span class="text-yellow-500 font-bold">Note:</span> This
+                    demonstrates a <strong>sequential cascade</strong>. Each stage is
+                    pooled from the <em>previous</em> stage's output (128 &rarr; 64
+                    &rarr; 32 &rarr; 16 &rarr; 8), simulating sequential layers in a
+                    Deep CNN.
+                </div>
+            </div>
+        </section>
+
+        <footer class="mt-16 text-center text-gray-600 text-xs pb-10">
+            Interactive Learning Guide • Max & Average Pooling
+        </footer>
+    </div>
+
+    <script>
+        // --- STEPPER LOGIC ---
+        const inputValues = [
+            12, 20, 30, 0, 8, 12, 2, 5, 15, 70, 5, 8, 3, 4, 10, 12,
+        ];
+
+        let currentStep = 0;
+        let mode = "max"; // 'max' or 'avg'
+        const totalSteps = 4;
+        const stride = 2;
+        const poolSize = 2;
+
+        function initGrids() {
+            const inputGrid = document.getElementById("input-grid");
+            const outputGrid = document.getElementById("output-grid");
+            inputGrid.innerHTML = "";
+            outputGrid.innerHTML = "";
+
+            inputValues.forEach((v, i) => {
+                const cell = document.createElement("div");
+                cell.className =
+                    "w-12 h-12 flex items-center justify-center text-xs font-mono border border-white/10 bg-white/5 rounded";
+                cell.innerText = v;
+                cell.id = `input-${i}`;
+                inputGrid.appendChild(cell);
+            });
+
+            for (let i = 0; i < 4; i++) {
+                const cell = document.createElement("div");
+                cell.className =
+                    "w-12 h-12 flex items-center justify-center text-xs font-mono border border-white/10 bg-white/5 rounded transition-all duration-300";
+                cell.id = `output-${i}`;
+                cell.innerText = "-";
+                outputGrid.appendChild(cell);
+            }
+
+            updateStep();
+        }
+
+        function setMode(newMode) {
+            mode = newMode;
+            // Update buttons
+            const btnMax = document.getElementById("btn-max");
+            const btnAvg = document.getElementById("btn-avg");
+            const labelOp = document.getElementById("label-op");
+
+            if (mode === "max") {
+                btnMax.className =
+                    "px-4 py-1.5 rounded-lg text-sm font-bold bg-red-600 text-white shadow-lg transition-all";
+                btnAvg.className =
+                    "px-4 py-1.5 rounded-lg text-sm font-bold text-gray-400 hover:text-white transition-all";
+                labelOp.innerText = "MAX OPERATION";
+                labelOp.className = "text-[10px] uppercase font-bold text-red-400";
+            } else {
+                btnAvg.className =
+                    "px-4 py-1.5 rounded-lg text-sm font-bold bg-green-600 text-white shadow-lg transition-all";
+                btnMax.className =
+                    "px-4 py-1.5 rounded-lg text-sm font-bold text-gray-400 hover:text-white transition-all";
+                labelOp.innerText = "AVERAGE OPERATION";
+                labelOp.className = "text-[10px] uppercase font-bold text-green-400";
+            }
+            updateStep();
+            drawRealisticOutput();
+        }
+
+        function updateStep() {
+            const row = Math.floor(currentStep / 2);
+            const col = currentStep % 2;
+            const startIdx = row * stride * 4 + col * stride;
+
+            // Move selector
+            const selector = document.getElementById("pool-selector");
+            selector.style.width = poolSize * 48 + (poolSize - 1) * 4 + 8 + "px";
+            selector.style.height = poolSize * 48 + (poolSize - 1) * 4 + 8 + "px";
+            selector.style.left = col * stride * 52 + "px";
+            selector.style.top = row * stride * 52 + "px";
+
+            // Calc
+            const indices = [startIdx, startIdx + 1, startIdx + 4, startIdx + 5];
+            const windowValues = indices.map((idx) => inputValues[idx]);
+
+            let result;
+            let mathString;
+            if (mode === "max") {
+                result = Math.max(...windowValues);
+                mathString = `$\\max(${windowValues.join(", ")}) = ${result}$`;
+            } else {
+                result = (
+                    windowValues.reduce((a, b) => a + b, 0) / windowValues.length
+                ).toFixed(1);
+                mathString = `$\\frac{${windowValues.join(" + ")}}{4} = ${result}$`;
+            }
+
+            // UI feedback
+            const themeColor = mode === "max" ? "bg-red-500/40" : "bg-green-500/40";
+            const themeActive = mode === "max" ? "bg-red-500" : "bg-green-500";
+
+            document.querySelectorAll("#input-grid div").forEach((d) => {
+                d.classList.remove("bg-red-500/40", "bg-green-500/40");
+                d.classList.add("bg-white/5");
+            });
+
+            indices.forEach((idx) => {
+                const d = document.getElementById(`input-${idx}`);
+                d.classList.remove("bg-white/5");
+                d.classList.add(themeColor);
+            });
+
+            // Update output cells visibility
+            for (let i = 0; i < 4; i++) {
+                const cell = document.getElementById(`output-${i}`);
+                if (i <= currentStep) {
+                    const r = i === currentStep ? result : cell.innerText;
+                    cell.innerText = r;
+                    cell.classList.remove(
+                        "bg-white/5",
+                        "bg-red-500",
+                        "bg-green-500",
+                        "scale-110",
+                    );
+                    if (i === currentStep) {
+                        cell.classList.add(themeActive, "text-white", "scale-110");
+                    } else {
+                        cell.classList.add("bg-slate-700", "text-gray-300");
+                    }
+                } else {
+                    cell.innerText = "-";
+                    cell.classList.remove(
+                        "bg-red-500",
+                        "bg-green-500",
+                        "bg-slate-700",
+                        "scale-110",
+                    );
+                    cell.classList.add("bg-white/5");
+                }
+            }
+
+            document.getElementById("step-op").innerHTML = mathString;
+            if (window.MathJax) window.MathJax.typeset();
+        }
+
+        function nextStep() {
+            if (currentStep < totalSteps - 1) {
+                currentStep++;
+                updateStep();
+            }
+        }
+
+        function prevStep() {
+            if (currentStep > 0) {
+                currentStep--;
+                updateStep();
+            }
+        }
+
+        function resetSteps() {
+            currentStep = 0;
+            initGrids();
+        }
+
+        // --- REALISTIC IMAGE VISUALIZATION (CANVAS) ---
+        let data128 = null;
+
+        function generateDigit8(size) {
+            const data = new Float32Array(size * size);
+            for (let y = 0; y < size; y++) {
+                for (let x = 0; x < size; x++) {
+                    const nx = (x / size) * 2 - 1;
+                    const ny = (y / size) * 2 - 1;
+
+                    // Top loop center (0, -0.5), Bottom loop center (0, 0.5)
+                    const d1 = Math.sqrt(nx * nx + (ny + 0.5) ** 2);
+                    const d2 = Math.sqrt(nx * nx + (ny - 0.5) ** 2);
+
+                    // Thickness 0.15 around radius 0.35
+                    const ring1 = Math.abs(d1 - 0.35) < 0.15 ? 1.0 : 0.0;
+                    const ring2 = Math.abs(d2 - 0.45) < 0.15 ? 1.0 : 0.0;
+
+                    let val = Math.max(ring1, ring2);
+                    // Add noise
+                    if (val > 0) val = val * 0.8 + Math.random() * 0.4;
+                    else val = Math.random() * 0.05; // background noise
+
+                    // Clamp
+                    data[y * size + x] = Math.min(1, Math.max(0, val)) * 255;
+                }
+            }
+            return data;
+        }
+
+        function performPool(input, w, h, poolWidth, poolHeight, mode) {
+            const newW = Math.floor(w / poolWidth);
+            const newH = Math.floor(h / poolHeight);
+            const output = new Float32Array(newW * newH);
+
+            for (let y = 0; y < newH; y++) {
+                for (let x = 0; x < newW; x++) {
+                    let acc = mode === "max" ? -Infinity : 0;
+                    let count = 0;
+
+                    const startY = y * poolHeight;
+                    const startX = x * poolWidth;
+
+                    for (let dy = 0; dy < poolHeight; dy++) {
+                        for (let dx = 0; dx < poolWidth; dx++) {
+                            const val = input[(startY + dy) * w + (startX + dx)];
+                            if (mode === "max") acc = Math.max(acc, val);
+                            else acc += val;
+                            count++;
+                        }
+                    }
+
+                    if (mode === "avg") acc /= count;
+                    output[y * newW + x] = acc;
+                }
+            }
+            return output;
+        }
+
+        function renderToCanvas(id, data, w, h) {
+            const cvs = document.getElementById(id);
+            if (!cvs) return;
+            const ctx = cvs.getContext("2d");
+            const imgData = ctx.createImageData(w, h);
+
+            for (let i = 0; i < data.length; i++) {
+                const v = Math.floor(data[i]);
+                imgData.data[i * 4 + 0] = v; // R
+                imgData.data[i * 4 + 1] = v; // G
+                imgData.data[i * 4 + 2] = v; // B
+                imgData.data[i * 4 + 3] = 255; // Alpha
+            }
+            ctx.putImageData(imgData, 0, 0);
+        }
+
+        function initRealisticData() {
+            data128 = generateDigit8(128);
+            renderToCanvas("cvs-128", data128, 128, 128);
+        }
+
+        function drawRealisticOutput() {
+            if (!data128) return;
+
+            // Step 1: 128x128 -> 64x64 (2x2 Pooling)
+            const data64 = performPool(data128, 128, 128, 2, 2, mode);
+            renderToCanvas("cvs-64", data64, 64, 64);
+
+            // Step 2: 64x64 -> 32x32 (2x2 Pooling)
+            const data32 = performPool(data64, 64, 64, 2, 2, mode);
+            renderToCanvas("cvs-32", data32, 32, 32);
+
+            // Step 3: 32x32 -> 16x16 (2x2 Pooling)
+            const data16 = performPool(data32, 32, 32, 2, 2, mode);
+            renderToCanvas("cvs-16", data16, 16, 16);
+
+            // Step 4: 16x16 -> 8x8 (2x2 Pooling)
+            const data8 = performPool(data16, 16, 16, 2, 2, mode);
+            renderToCanvas("cvs-8", data8, 8, 8);
+
+            // Update Labels
+            const label64 = document.getElementById("label-64");
+            const label32 = document.getElementById("label-32");
+            const label16 = document.getElementById("label-16");
+            const label8 = document.getElementById("label-8");
+            const colorClass = mode === "max" ? "text-red-400" : "text-green-400";
+
+            label64.className = `text-xs font-bold ${colorClass} uppercase tracking-widest`;
+            label64.innerText = `${mode === "max" ? "Max" : "Avg"} Pool (64)`;
+
+            label32.className = `text-xs font-bold ${colorClass} uppercase tracking-widest`;
+            label32.innerText = `${mode === "max" ? "Max" : "Avg"} Pool (32)`;
+
+            label16.className = `text-xs font-bold ${colorClass} uppercase tracking-widest`;
+            label16.innerText = `${mode === "max" ? "Max" : "Avg"} Pool (16)`;
+
+            label8.className = `text-xs font-bold ${colorClass} uppercase tracking-widest`;
+            label8.innerText = `${mode === "max" ? "Max" : "Avg"} Pool (8)`;
+        }
+
+        window.onload = () => {
+            initGrids();
+            initRealisticData();
+            drawRealisticOutput();
+        };
+    </script>
+</body>
+
+</html>

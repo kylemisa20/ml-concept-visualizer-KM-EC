@@ -1,0 +1,656 @@
+<!doctype html>
+<!-- Brief: Visualization of baseline GEMM loop ordering and memory access. -->
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Matrix Multiplication Loop Ordering</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- MathJax for LaTeX Rendering -->
+    <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+    <style>
+        body {
+            background-color: #f8fafc;
+            font-family: "Inter", sans-serif;
+        }
+
+        .matrix-label {
+            font-weight: 700;
+            text-align: center;
+            margin-bottom: 24px;
+            font-size: 1.1rem;
+            color: #1e293b;
+        }
+
+        canvas {
+            border: 2px solid #334155;
+            background: white;
+            border-radius: 4px;
+        }
+
+        .stats-card {
+            background: white;
+            padding: 1.25rem;
+            border-radius: 12px;
+            box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1);
+        }
+
+        .code-block {
+            background: #1e293b;
+            color: #e2e8f0;
+            padding: 1.5rem;
+            border-radius: 8px;
+            font-family: "Fira Code", "Courier New", monospace;
+            font-size: 0.9rem;
+            line-height: 1.5;
+            overflow-x: auto;
+            white-space: pre;
+        }
+
+        .step-btn {
+            transition: all 0.2s;
+        }
+
+        .step-btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .highlight-red {
+            color: #f87171;
+            font-weight: bold;
+            border-bottom: 1px dashed #f87171;
+        }
+
+        .formula-box {
+            background: #f1f5f9;
+            padding: 1rem;
+            border-radius: 8px;
+            border-left: 4px solid #3b82f6;
+            margin-top: 1rem;
+        }
+    </style>
+</head>
+
+<body class="p-4 md:p-8">
+    <div class="max-w-6xl mx-auto">
+        <header class="mb-8">
+            <h1 class="text-3xl font-bold text-slate-800">
+                Matrix Multiplication: All 12 Data/Loop Combinations
+            </h1>
+            <p class="text-slate-600 mt-2">
+                Exploring how Transposing B affects every permutation of the
+                triple-nested loops.
+            </p>
+        </header>
+
+        <!-- Efficiency Logic Section -->
+        <div class="stats-card mb-8 border-t-4 border-blue-500">
+            <h2 class="text-2xl font-bold text-slate-800 border-b pb-3 mb-6">
+                Locality Comparison: Standard vs Transposed B
+            </h2>
+            <div class="overflow-x-auto">
+                <table class="w-full text-sm text-left text-slate-500">
+                    <thead class="text-xs text-slate-700 uppercase bg-slate-50">
+                        <tr>
+                            <th class="px-4 py-3">Inner Loop</th>
+                            <th class="px-4 py-3">Standard B (Miss Rate)</th>
+                            <th class="px-4 py-3">Transposed B (Miss Rate)</th>
+                            <th class="px-4 py-3">Result of Transpose</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-slate-100">
+                        <tr>
+                            <td class="px-4 py-2 font-bold text-blue-600 italic">
+                                k (ijk, jik)
+                            </td>
+                            <td class="px-4 py-2">1.25 (B is Col-wise)</td>
+                            <td class="px-4 py-2 text-green-700 font-bold">
+                                0.50 (Bᵀ is Row-wise)
+                            </td>
+                            <td class="px-4 py-2 text-green-600 font-bold">🎉 Improves</td>
+                        </tr>
+                        <tr>
+                            <td class="px-4 py-2 font-bold text-green-600 italic">
+                                j (kij, ikj)
+                            </td>
+                            <td class="px-4 py-2 text-green-700 font-bold">
+                                0.50 (B is Row-wise)
+                            </td>
+                            <td class="px-4 py-2">1.25 (Bᵀ is Col-wise)</td>
+                            <td class="px-4 py-2 text-red-600">⚠️ Worsens</td>
+                        </tr>
+                        <tr>
+                            <td class="px-4 py-2 font-bold text-red-600 italic">
+                                i (jki, kji)
+                            </td>
+                            <td class="px-4 py-2 text-red-700 font-bold">
+                                2.00 (B is Fixed)
+                            </td>
+                            <td class="px-4 py-2 text-red-700 font-bold">
+                                2.00 (Bᵀ is Fixed)
+                            </td>
+                            <td class="px-4 py-2">No Change</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
+            <!-- Simulation Control -->
+            <div class="stats-card flex flex-col gap-4">
+                <h2 class="text-xl font-semibold border-b pb-2 text-slate-700">
+                    Simulation Control
+                </h2>
+                <div>
+                    <label class="block text-sm font-medium text-slate-700 font-bold mb-1">Select Loop Order & Layout</label>
+                    <select id="orderSelect" class="mt-1 block w-full border border-slate-300 rounded-md p-2 focus:ring-blue-500 focus:border-blue-500 bg-white font-mono text-sm">
+                        <optgroup label="Standard Matrix B">
+                            <option value="ijk">ijk (C-Stationary)</option>
+                            <option value="jik">jik (C-Stationary)</option>
+                            <option value="kij">kij (A-Stationary)</option>
+                            <option value="ikj">ikj (A-Stationary)</option>
+                            <option value="jki">jki (B-Stationary)</option>
+                            <option value="kji">kji (B-Stationary)</option>
+                        </optgroup>
+                        <optgroup label="Transposed Matrix B (BT)">
+                            <option value="ijk_t">ijk (C-Stationary, BT)</option>
+                            <option value="jik_t">jik (C-Stationary, BT)</option>
+                            <option value="kij_t">kij (A-Stationary, BT)</option>
+                            <option value="ikj_t">ikj (A-Stationary, BT)</option>
+                            <option value="jki_t">jki (B-Stationary, BT)</option>
+                            <option value="kji_t">kji (B-Stationary, BT)</option>
+                        </optgroup>
+                    </select>
+                </div>
+
+                <div class="grid grid-cols-2 gap-2">
+                    <button id="prevBtn" class="step-btn bg-slate-600 text-white px-4 py-2 rounded hover:bg-slate-700 text-sm">
+                        ← Back
+                    </button>
+                    <button id="nextBtn" class="step-btn bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 font-bold text-sm">
+                        Next Step →
+                    </button>
+                </div>
+                <div class="grid grid-cols-2 gap-2">
+                    <button id="resetBtn" class="step-btn bg-slate-200 text-slate-800 px-4 py-2 rounded hover:bg-slate-300 text-sm">
+                        Reset
+                    </button>
+                    <button id="jumpBtn" class="step-btn bg-slate-100 text-slate-600 px-4 py-2 rounded hover:bg-slate-200 text-sm">
+                        Jump +4
+                    </button>
+                </div>
+
+                <div class="mt-2 text-center text-sm font-medium text-slate-500">
+                    Iteration:
+                    <span id="stepCounter" class="font-bold text-slate-800">0</span> /
+                    63
+                </div>
+            </div>
+
+            <!-- Locality Stats & Cache Tracking -->
+            <div class="stats-card lg:col-span-2">
+                <div class="flex justify-between items-center border-b pb-2 mb-4">
+                    <h2 class="text-xl font-semibold text-slate-700">
+                        Live Stride Analysis & Cache Stats
+                    </h2>
+                    <span id="stationaryLabel" class="px-3 py-1 bg-blue-100 rounded-full text-xs font-bold uppercase text-blue-600">-</span>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+                    <div class="p-3 bg-slate-50 rounded-lg border border-slate-200">
+                        <div id="labelA" class="text-slate-500 text-[0.6rem] uppercase font-bold tracking-wider">
+                            A Access
+                        </div>
+                        <div id="accessA" class="text-sm font-bold mt-1">Row-wise</div>
+                        <div id="missA" class="text-xs text-slate-400 font-mono">
+                            Miss Rate: 0.25
+                        </div>
+                    </div>
+                    <div class="p-3 bg-slate-50 rounded-lg border border-slate-200">
+                        <div id="labelB" class="text-slate-500 text-[0.6rem] uppercase font-bold tracking-wider">
+                            B Access
+                        </div>
+                        <div id="accessB" class="text-sm font-bold mt-1">Column-wise</div>
+                        <div id="missB" class="text-xs text-slate-400 font-mono">
+                            Miss Rate: 1.0
+                        </div>
+                    </div>
+                    <div class="p-3 bg-slate-50 rounded-lg border border-slate-200">
+                        <div id="labelC" class="text-slate-500 text-[0.6rem] uppercase font-bold tracking-wider">
+                            C Access
+                        </div>
+                        <div id="accessC" class="text-sm font-bold mt-1">Fixed</div>
+                        <div id="missC" class="text-xs text-slate-400 font-mono">
+                            Miss Rate: 0.0
+                        </div>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-2 gap-4 mb-4">
+                    <div id="avgMissBox" class="p-3 bg-yellow-50 border border-yellow-100 rounded-lg text-center flex flex-col justify-center">
+                        <span class="text-xs font-bold text-yellow-700 uppercase">Avg Misses / Iteration</span>
+                        <span id="avgMissVal" class="text-2xl font-bold text-yellow-800 mt-1">-</span>
+                    </div>
+                    <div class="p-3 bg-blue-50 border border-blue-100 rounded-lg">
+                        <div class="text-xs font-bold text-blue-600 uppercase">
+                            Step Counter
+                        </div>
+                        <div class="text-2xl font-bold text-blue-800 mt-1">
+                            <span id="curStep">1</span> / 64
+                        </div>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-2 gap-4 p-3 bg-slate-50 rounded-lg border border-slate-200">
+                    <div class="text-center">
+                        <div class="text-[0.6rem] text-slate-400 uppercase font-bold mb-2">
+                            Current Step Misses
+                        </div>
+                        <div id="stepMisses" class="text-3xl font-bold text-red-500">
+                            0
+                        </div>
+                        <div id="stepMissDetails" class="text-[0.6rem] font-bold text-red-400 font-mono mt-2 uppercase text-center">
+                            None
+                        </div>
+                    </div>
+                    <div class="text-center">
+                        <div class="text-[0.6rem] text-slate-400 uppercase font-bold mb-2">
+                            Total Physical Misses
+                        </div>
+                        <div id="totalMisses" class="text-3xl font-bold text-slate-800">
+                            0
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Matrix Area -->
+        <div class="flex flex-col gap-8 mb-8">
+            <div class="flex flex-col gap-8 p-10 bg-white rounded-xl shadow-inner border border-slate-200 overflow-x-auto items-center">
+                <div class="flex items-center gap-12">
+                    <div class="flex flex-col items-center">
+                        <div id="nameA" class="matrix-label">A</div>
+                        <canvas id="canvasA" width="160" height="160"></canvas>
+                    </div>
+                    <div class="text-3xl font-light text-slate-300">×</div>
+                    <div class="flex flex-col items-center">
+                        <div id="nameB" class="matrix-label">B</div>
+                        <canvas id="canvasB" width="160" height="160"></canvas>
+                    </div>
+                    <div class="text-3xl font-light text-slate-300">=</div>
+                    <div class="flex flex-col items-center">
+                        <div id="nameC" class="matrix-label">C</div>
+                        <canvas id="canvasC" width="160" height="160"></canvas>
+                    </div>
+                </div>
+                <div id="loopStatus" class="font-mono text-sm text-blue-600 bg-blue-50 px-6 py-2 rounded-full border border-blue-100 shadow-sm flex gap-6">
+                    <span>i = 0</span><span>j = 0</span><span>k = 0</span>
+                </div>
+            </div>
+
+            <!-- Code View Area -->
+            <div class="code-block w-full shadow-lg" id="codeDisplay"></div>
+        </div>
+
+        <!-- Trace Text -->
+        <div class="pe-unit mx-auto max-w-4xl shadow-xl border-4 border-blue-900/20 mb-12">
+            <div class="flex justify-between items-center mb-3">
+                <div class="flex items-center gap-2">
+                    <div class="w-3 h-3 bg-red-500 rounded-full animate-pulse"></div>
+                    <span class="font-bold tracking-widest uppercase text-sm">Iteration Trace</span>
+                </div>
+                <div id="strideNote" class="text-xs font-mono opacity-80 bg-blue-900/40 px-2 py-1 rounded">
+                    Stride Analysis
+                </div>
+            </div>
+            <div id="traceText" class="min-h-[4rem] flex items-center px-4 font-mono text-sm italic leading-relaxed">
+                [ Waiting for selection... ]
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const config = {
+            n: 4,
+            cell: 40,
+            blockSize: 4
+        };
+        const canvases = {
+            A: document.getElementById("canvasA"),
+            B: document.getElementById("canvasB"),
+            C: document.getElementById("canvasC"),
+        };
+        const ctxs = {
+            A: canvases.A.getContext("2d"),
+            B: canvases.B.getContext("2d"),
+            C: canvases.C.getContext("2d"),
+        };
+
+        const scenarios = {
+            ijk: {
+                type: "C-Stationary",
+                vars: ["i", "j", "k"],
+                access: ["Row-wise", "Column-wise", "Fixed"],
+                misses: [0.25, 1.0, 0.0],
+                avg: 1.25,
+                isT: false,
+            },
+            jik: {
+                type: "C-Stationary",
+                vars: ["j", "i", "k"],
+                access: ["Row-wise", "Column-wise", "Fixed"],
+                misses: [0.25, 1.0, 0.0],
+                avg: 1.25,
+                isT: false,
+            },
+            kij: {
+                type: "A-Stationary",
+                vars: ["k", "i", "j"],
+                access: ["Fixed", "Row-wise", "Row-wise"],
+                misses: [0.0, 0.25, 0.25],
+                avg: 0.5,
+                isT: false,
+            },
+            ikj: {
+                type: "A-Stationary",
+                vars: ["i", "k", "j"],
+                access: ["Fixed", "Row-wise", "Row-wise"],
+                misses: [0.0, 0.25, 0.25],
+                avg: 0.5,
+                isT: false,
+            },
+            jki: {
+                type: "B-Stationary",
+                vars: ["j", "k", "i"],
+                access: ["Column-wise", "Fixed", "Column-wise"],
+                misses: [1.0, 0.0, 1.0],
+                avg: 2.0,
+                isT: false,
+            },
+            kji: {
+                type: "B-Stationary",
+                vars: ["k", "j", "i"],
+                access: ["Column-wise", "Fixed", "Column-wise"],
+                misses: [1.0, 0.0, 1.0],
+                avg: 2.0,
+                isT: false,
+            },
+            ijk_t: {
+                type: "C-Stationary (BT)",
+                vars: ["i", "j", "k"],
+                access: ["Row-wise", "Row-wise", "Fixed"],
+                misses: [0.25, 0.25, 0.0],
+                avg: 0.5,
+                isT: true,
+            },
+            jik_t: {
+                type: "C-Stationary (BT)",
+                vars: ["j", "i", "k"],
+                access: ["Row-wise", "Row-wise", "Fixed"],
+                misses: [0.25, 0.25, 0.0],
+                avg: 0.5,
+                isT: true,
+            },
+            kij_t: {
+                type: "A-Stationary (BT)",
+                vars: ["k", "i", "j"],
+                access: ["Fixed", "Column-wise", "Row-wise"],
+                misses: [0.0, 1.0, 0.25],
+                avg: 1.25,
+                isT: true,
+            },
+            ikj_t: {
+                type: "A-Stationary (BT)",
+                vars: ["i", "k", "j"],
+                access: ["Fixed", "Column-wise", "Row-wise"],
+                misses: [0.0, 1.0, 0.25],
+                avg: 1.25,
+                isT: true,
+            },
+            jki_t: {
+                type: "B-Stationary (BT)",
+                vars: ["j", "k", "i"],
+                access: ["Column-wise", "Fixed", "Column-wise"],
+                misses: [1.0, 0.0, 1.0],
+                avg: 2.0,
+                isT: true,
+            },
+            kji_t: {
+                type: "B-Stationary (BT)",
+                vars: ["k", "j", "i"],
+                access: ["Column-wise", "Fixed", "Column-wise"],
+                misses: [1.0, 0.0, 1.0],
+                avg: 2.0,
+                isT: true,
+            },
+        };
+
+        let step = 0;
+        let state = {
+            stepMisses: 0,
+            totalMisses: 0,
+            missedMatrices: [],
+            // Simple physical model: each matrix has one active cache line (streaming buffer).
+            cache: {
+                A: null,
+                B: null,
+                C: null
+            },
+        };
+
+        function getLineId(row, col) {
+            // Row-major cache-line model: one line contains `blockSize` contiguous elements in a row.
+            return `${row}:${Math.floor(col / config.blockSize)}`;
+        }
+
+        function checkAccess(matrixName, row, col) {
+            const lineId = getLineId(row, col);
+            if (state.cache[matrixName] === lineId) return false;
+            state.cache[matrixName] = lineId;
+            return true;
+        }
+
+        function resetPhysicalCounting(id, currentStep) {
+            state.totalMisses = 0;
+            state.stepMisses = 0;
+            state.missedMatrices = [];
+            state.cache.A = null;
+            state.cache.B = null;
+            state.cache.C = null;
+
+            const data = scenarios[id];
+
+            for (let s = 0; s <= currentStep; s++) {
+                const {
+                    i,
+                    j,
+                    k
+                } = calculateIndices(s, id);
+                let curStepMisses = 0;
+                const curMissedMatrices = [];
+
+                const missA = checkAccess("A", i, k);
+                const missB = data.isT ?
+                    checkAccess("B", j, k) :
+                    checkAccess("B", k, j);
+                const missC = checkAccess("C", i, j);
+
+                if (missA) {
+                    curStepMisses++;
+                    curMissedMatrices.push("A");
+                }
+                if (missB) {
+                    curStepMisses++;
+                    curMissedMatrices.push("B");
+                }
+                if (missC) {
+                    curStepMisses++;
+                    curMissedMatrices.push("C");
+                }
+
+                state.totalMisses += curStepMisses;
+
+                if (s === currentStep) {
+                    state.stepMisses = curStepMisses;
+                    state.missedMatrices = curMissedMatrices;
+                }
+            }
+        }
+
+        function getCode(id) {
+            const data = scenarios[id];
+            const v = data.vars;
+            let code = `for (${v[0]}=0; ${v[0]}&lt;n; ${v[0]}++) {\n  for (${v[1]}=0; ${v[1]}&lt;n; ${v[1]}++) {\n`;
+            if (data.type.includes("C-Stationary")) code += `    sum = 0.0;\n`;
+            code += `    for (${v[2]}=0; ${v[2]}&lt;n; ${v[2]}++) {\n`;
+            if (data.isT) {
+                code += `      <span class="highlight-red">${data.type.includes("C-Stationary") ? "sum" : "c[i][j]"} += a[i][k] * bt[j][k];</span>\n`;
+            } else {
+                code += `      <span class="highlight-red">${data.type.includes("C-Stationary") ? "sum" : "c[i][j]"} += a[i][k] * b[k][j];</span>\n`;
+            }
+            code += `    }\n`;
+            if (data.type.includes("C-Stationary")) code += `    c[i][j] = sum;\n`;
+            code += `  }\n}`;
+            return code;
+        }
+
+        function calculateIndices(s, id) {
+            const n = config.n;
+            const i1 = Math.floor(s / (n * n)),
+                i2 = Math.floor((s % (n * n)) / n),
+                i3 = s % n;
+            const vars = scenarios[id].vars;
+            let res = {
+                i: 0,
+                j: 0,
+                k: 0
+            };
+            res[vars[0]] = i1;
+            res[vars[1]] = i2;
+            res[vars[2]] = i3;
+            return res;
+        }
+
+        function draw(ctx, rA, cA, mode) {
+            ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
+            for (let r = 0; r < config.n; r++) {
+                for (let c = 0; c < config.n; c++) {
+                    ctx.beginPath();
+                    ctx.rect(c * 40, r * 40, 40, 40);
+                    let fill = "#f8fafc",
+                        stroke = "#e2e8f0",
+                        lw = 1;
+                    if (mode === "Fixed") {
+                        if (r === rA && c === cA) {
+                            fill = "#ef4444";
+                            stroke = "#b91c1c";
+                            lw = 2;
+                        }
+                    } else if (mode === "Row-wise") {
+                        if (r === rA) {
+                            fill = c === cA ? "#ef4444" : "#fee2e2";
+                            stroke = c === cA ? "#b91c1c" : "#fecaca";
+                        }
+                    } else if (mode === "Column-wise") {
+                        if (c === cA) {
+                            fill = r === rA ? "#ef4444" : "#fee2e2";
+                            stroke = r === rA ? "#b91c1c" : "#fecaca";
+                        }
+                    }
+                    ctx.fillStyle = fill;
+                    ctx.strokeStyle = stroke;
+                    ctx.lineWidth = lw;
+                    ctx.fill();
+                    ctx.stroke();
+                }
+            }
+        }
+
+        function update() {
+            const id = document.getElementById("orderSelect").value;
+            const data = scenarios[id];
+            const {
+                i,
+                j,
+                k
+            } = calculateIndices(step, id);
+
+            resetPhysicalCounting(id, step);
+
+            document.getElementById("stationaryLabel").innerText = data.type;
+            document.getElementById("accessA").innerText = data.access[0];
+            document.getElementById("accessB").innerText = data.access[1];
+            document.getElementById("accessC").innerText = data.access[2];
+            document.getElementById("missA").innerText =
+                `Miss Rate: ${data.misses[0]}`;
+            document.getElementById("missB").innerText =
+                `Miss Rate: ${data.misses[1]}`;
+            document.getElementById("missC").innerText =
+                `Miss Rate: ${data.misses[2]}`;
+            document.getElementById("avgMissVal").innerText = data.avg;
+            document.getElementById("stepCounter").innerText = step;
+            document.getElementById("curStep").innerText = step + 1;
+            document.getElementById("stepMisses").innerText = state.stepMisses;
+            document.getElementById("totalMisses").innerText = state.totalMisses;
+
+            const missDetailsEl = document.getElementById("stepMissDetails");
+            missDetailsEl.innerText =
+                state.missedMatrices.length > 0 ?
+                state.missedMatrices.join(", ") :
+                "None";
+
+            document.getElementById("codeDisplay").innerHTML = getCode(id);
+            document.getElementById("loopStatus").innerHTML =
+                `<span>i = ${i}</span><span>j = ${j}</span><span>k = ${k}</span>`;
+
+            const labelB = data.isT ? "B<sup>T</sup>" : "B";
+            document.getElementById("nameB").innerHTML = labelB;
+            document.getElementById("labelB").innerHTML = `${labelB} Access`;
+
+            draw(ctxs.A, i, k, data.access[0]);
+            if (data.isT) draw(ctxs.B, j, k, data.access[1]);
+            else draw(ctxs.B, k, j, data.access[1]);
+            draw(ctxs.C, i, j, data.access[2]);
+
+            const inner = data.vars[2];
+            document.getElementById("traceText").innerText =
+                `Inner loop index is '${inner}'. Matrix A[i][k] is ${data.access[0]}. Matrix ${labelB} is ${data.access[1]}. Resulting in ${data.avg} avg misses per inner iteration. Current step: ${state.stepMisses} misses.`;
+
+            document.getElementById("prevBtn").disabled = step === 0;
+            document.getElementById("nextBtn").disabled = step === 63;
+        }
+
+        document.getElementById("nextBtn").addEventListener("click", () => {
+            if (step < 63) {
+                step++;
+                update();
+            }
+        });
+        document.getElementById("prevBtn").addEventListener("click", () => {
+            if (step > 0) {
+                step--;
+                update();
+            }
+        });
+        document.getElementById("resetBtn").addEventListener("click", () => {
+            step = 0;
+            update();
+        });
+        document.getElementById("jumpBtn").addEventListener("click", () => {
+            step = Math.min(step + 4, 63);
+            update();
+        });
+        document.getElementById("orderSelect").addEventListener("change", () => {
+            step = 0;
+            update();
+        });
+
+        window.onload = update;
+    </script>
+</body>
+
+</html>

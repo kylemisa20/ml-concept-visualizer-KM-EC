@@ -1,0 +1,594 @@
+<!doctype html>
+<!-- Brief: Visualization of iterative K-means centroid updates and assignments. -->
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>K-Means Clustering: Interactive Tutorial</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        canvas {
+            border-radius: 12px;
+            cursor: crosshair;
+        }
+
+        .step-active {
+            border-left: 4px solid #3b82f6;
+            background: #eff6ff;
+        }
+
+        .centroid-marker {
+            filter: drop-shadow(0 0 4px rgba(0, 0, 0, 0.3));
+        }
+
+        .chart-container {
+            position: relative;
+            height: 150px;
+        }
+
+        /* Fixed Toggle Styling */
+        .toggle-checkbox {
+            left: 0;
+        }
+
+        .toggle-checkbox:checked {
+            left: 1rem;
+            border-color: #3b82f6;
+        }
+
+        .toggle-checkbox:checked+.toggle-label {
+            background-color: #3b82f6;
+        }
+    </style>
+</head>
+
+<body class="bg-slate-50 min-h-screen text-slate-800 font-sans pb-12">
+    <div class="max-w-6xl mx-auto p-4 md:p-8">
+        <header class="mb-8 text-center">
+            <h1 class="text-4xl font-bold text-slate-900 mb-2">
+                K-Means Clustering
+            </h1>
+            <p class="text-slate-600 italic">
+                An unsupervised learning algorithm for finding patterns in data.
+            </p>
+        </header>
+
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+            <!-- Sidebar: Explanation and Steps -->
+            <div class="lg:col-span-1 space-y-6">
+                <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
+                    <h2 class="text-xl font-bold mb-4 text-slate-900">How it works</h2>
+                    <div class="space-y-4 text-sm">
+                        <div id="step-1" class="p-3 rounded-lg transition-all">
+                            <h3 class="font-bold text-blue-600">1. Initialization</h3>
+                            <p class="text-slate-500">
+                                Pick <b>K</b> random points as starting centroids.
+                            </p>
+                        </div>
+                        <div id="step-2" class="p-3 rounded-lg transition-all">
+                            <h3 class="font-bold text-blue-600">2. Assignment</h3>
+                            <p class="text-slate-500">
+                                Assign every data point to its <b>nearest</b> centroid.
+                            </p>
+                        </div>
+                        <div id="step-3" class="p-3 rounded-lg transition-all">
+                            <h3 class="font-bold text-blue-600">3. Update</h3>
+                            <p class="text-slate-500">
+                                Move each centroid to the <b>average position</b> of its
+                                points.
+                            </p>
+                        </div>
+                        <div class="pt-2 border-t border-slate-100 italic text-[11px] text-slate-400">
+                            Repeat steps 2 and 3 until the centroids stop moving.
+                        </div>
+                    </div>
+                </div>
+
+                <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
+                    <h2 class="text-lg font-bold mb-4">Configuration</h2>
+                    <div class="space-y-6">
+                        <div>
+                            <label class="flex justify-between text-xs font-bold uppercase tracking-wider text-slate-400 mb-2">
+                                Number of Clusters (K)
+                                <span id="k-val" class="text-blue-600 font-bold">3</span>
+                            </label>
+                            <input type="range" id="kRange" min="1" max="8" value="3" class="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer" />
+                        </div>
+
+                        <!-- Moved Toggle Up for Visibility -->
+                        <div class="pt-4 border-t border-slate-100">
+                            <div class="flex items-center justify-between">
+                                <span class="text-xs font-bold uppercase tracking-wider text-slate-700">Show Distance Lines</span>
+                                <div class="relative inline-block w-10 align-middle select-none transition duration-200 ease-in">
+                                    <input type="checkbox" name="toggle" id="distanceToggle" class="toggle-checkbox absolute block w-6 h-6 rounded-full bg-white border-4 appearance-none cursor-pointer outline-none transition-all duration-200 ease-in-out z-10" />
+                                    <label for="distanceToggle" class="toggle-label block overflow-hidden h-6 rounded-full bg-gray-300 cursor-pointer transition-all duration-200 ease-in-out"></label>
+                                </div>
+                            </div>
+                            <p class="text-[10px] text-slate-400 mt-1">
+                                Visualize error components of WCSS
+                            </p>
+                        </div>
+
+                        <!-- Elbow Method Section -->
+                        <div class="pt-4 border-t border-slate-100">
+                            <h3 class="text-xs font-bold uppercase tracking-wider text-slate-400 mb-3 flex justify-between">
+                                Elbow Method (WCSS)
+                            </h3>
+                            <div class="chart-container bg-slate-50 rounded-lg border border-slate-100 p-2">
+                                <canvas id="elbowCanvas" width="250" height="130" class="w-full h-full"></canvas>
+                            </div>
+                        </div>
+
+                        <div class="flex flex-col gap-2">
+                            <button id="randomDataBtn" class="w-full py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-sm font-bold rounded-lg transition">
+                                Randomize Points
+                            </button>
+                            <button id="clearBtn" class="w-full py-2 text-red-500 hover:bg-red-50 text-sm font-bold rounded-lg transition">
+                                Clear All
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Main: Visualization Area -->
+            <div class="lg:col-span-2 space-y-6">
+                <div class="bg-white p-4 rounded-2xl shadow-xl border border-slate-200">
+                    <div class="flex justify-between items-center mb-4 px-2">
+                        <div class="flex flex-wrap gap-2">
+                            <span id="status-badge" class="px-3 py-1 bg-blue-100 text-blue-700 rounded-full text-[10px] font-bold uppercase tracking-widest">Ready</span>
+                            <span id="iter-badge" class="px-3 py-1 bg-slate-100 text-slate-500 rounded-full text-[10px] font-bold uppercase tracking-widest">Iter: 0</span>
+                            <span id="wcss-badge" class="px-3 py-1 bg-slate-100 text-slate-400 rounded-full text-[10px] font-bold uppercase tracking-widest">WCSS: -</span>
+                        </div>
+                        <p class="text-[10px] text-slate-400 uppercase font-bold tracking-tighter hidden sm:block">
+                            Click on canvas to add points
+                        </p>
+                    </div>
+
+                    <div class="relative bg-slate-50 rounded-lg overflow-hidden border border-slate-100">
+                        <canvas id="kmeansCanvas" width="700" height="500" class="w-full h-auto"></canvas>
+                    </div>
+
+                    <div class="mt-6 flex gap-3">
+                        <button id="stepBtn" class="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-bold py-4 px-6 rounded-xl transition shadow-lg active:scale-95 flex items-center justify-center gap-2">
+                            <span id="btnText">Initialize K-Means</span>
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                                <path fill-rule="evenodd" d="M10.293 3.293a1 1 0 011.414 0l6 6a1 1 0 010 1.414l-6 6a1 1 0 01-1.414-1.414L14.586 11H3a1 1 0 110-2h11.586l-4.293-4.293a1 1 0 010-1.414z" clip-rule="evenodd" />
+                            </svg>
+                        </button>
+                        <button id="resetAlgoBtn" class="bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold py-4 px-8 rounded-xl transition">
+                            Reset
+                        </button>
+                    </div>
+                </div>
+
+                <div id="insight-box" class="p-4 bg-amber-50 border border-amber-100 rounded-xl text-sm text-amber-800 leading-relaxed transition-all duration-300">
+                    <b>Did you know?</b> K-Means is a "greedy" algorithm. It finds a
+                    local optimum based on its starting points. Try resetting several
+                    times with the same data to see how different initial starting
+                    points lead to different results!
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const canvas = document.getElementById("kmeansCanvas");
+        const ctx = canvas.getContext("2d");
+        const elbowCanvas = document.getElementById("elbowCanvas");
+        const elbowCtx = elbowCanvas.getContext("2d");
+
+        let points = [];
+        let centroids = [];
+        let k = 3;
+        let iteration = 0;
+        let state = "init"; // init, assign, update, converged
+        let elbowData = [];
+        let showDistances = false;
+
+        const clusterColors = [
+            "#ef4444",
+            "#3b82f6",
+            "#10b981",
+            "#f59e0b",
+            "#8b5cf6",
+            "#ec4899",
+            "#06b6d4",
+            "#71717a",
+        ];
+
+        // --- Core Logic ---
+
+        function generateRandomPoints(count) {
+            points = [];
+            for (let i = 0; i < count; i++) {
+                points.push({
+                    x: Math.random() * (canvas.width - 40) + 20,
+                    y: Math.random() * (canvas.height - 40) + 20,
+                    cluster: -1,
+                });
+            }
+            resetAlgo();
+            calculateElbow();
+        }
+
+        function initCentroids() {
+            if (points.length === 0) return;
+            centroids = [];
+            const selectedPoints = [...points].sort(() => 0.5 - Math.random());
+            for (let i = 0; i < k; i++) {
+                centroids.push({
+                    x: selectedPoints[i].x,
+                    y: selectedPoints[i].y,
+                    color: clusterColors[i % clusterColors.length],
+                });
+            }
+            state = "assign";
+            iteration = 0;
+            updateUI();
+            draw();
+        }
+
+        function assignPoints() {
+            let changed = false;
+            points.forEach((p) => {
+                let minDist = Infinity;
+                let clusterIndex = -1;
+                centroids.forEach((c, idx) => {
+                    const d = Math.sqrt((p.x - c.x) ** 2 + (p.y - c.y) ** 2);
+                    if (d < minDist) {
+                        minDist = d;
+                        clusterIndex = idx;
+                    }
+                });
+                if (p.cluster !== clusterIndex) changed = true;
+                p.cluster = clusterIndex;
+            });
+            state = "update";
+            draw();
+            updateUI();
+            return changed;
+        }
+
+        function updateCentroids() {
+            let totalMovement = 0;
+            centroids.forEach((c, idx) => {
+                const clusterPoints = points.filter((p) => p.cluster === idx);
+                if (clusterPoints.length > 0) {
+                    const avgX =
+                        clusterPoints.reduce((sum, p) => sum + p.x, 0) /
+                        clusterPoints.length;
+                    const avgY =
+                        clusterPoints.reduce((sum, p) => sum + p.y, 0) /
+                        clusterPoints.length;
+
+                    totalMovement += Math.abs(c.x - avgX) + Math.abs(c.y - avgY);
+                    c.x = avgX;
+                    c.y = avgY;
+                }
+            });
+
+            iteration++;
+            if (totalMovement < 0.1) {
+                state = "converged";
+            } else {
+                state = "assign";
+            }
+            draw();
+            updateUI();
+        }
+
+        function resetAlgo() {
+            centroids = [];
+            iteration = 0;
+            state = "init";
+            points.forEach((p) => (p.cluster = -1));
+            draw();
+            updateUI();
+        }
+
+        function calculateCurrentWCSS() {
+            if (points.length === 0 || centroids.length === 0) return null;
+            let wcss = 0;
+            points.forEach((p) => {
+                if (p.cluster !== -1) {
+                    const c = centroids[p.cluster];
+                    wcss += (p.x - c.x) ** 2 + (p.y - c.y) ** 2;
+                }
+            });
+            return wcss;
+        }
+
+        // --- Elbow Method Calculation ---
+
+        function calculateWCSS(kValue) {
+            if (points.length === 0) return 0;
+            let tempCentroids = [];
+            const shuffled = [...points].sort(() => 0.5 - Math.random());
+            for (let i = 0; i < kValue; i++) {
+                tempCentroids.push({
+                    x: shuffled[i].x,
+                    y: shuffled[i].y
+                });
+            }
+
+            for (let iter = 0; iter < 5; iter++) {
+                const clusters = Array.from({
+                    length: kValue
+                }, () => []);
+                points.forEach((p) => {
+                    let minDist = Infinity;
+                    let bestIdx = 0;
+                    tempCentroids.forEach((c, idx) => {
+                        const d = (p.x - c.x) ** 2 + (p.y - c.y) ** 2;
+                        if (d < minDist) {
+                            minDist = d;
+                            bestIdx = idx;
+                        }
+                    });
+                    clusters[bestIdx].push(p);
+                });
+
+                tempCentroids = tempCentroids.map((c, idx) => {
+                    if (clusters[idx].length === 0) return c;
+                    return {
+                        x: clusters[idx].reduce((s, p) => s + p.x, 0) /
+                            clusters[idx].length,
+                        y: clusters[idx].reduce((s, p) => s + p.y, 0) /
+                            clusters[idx].length,
+                    };
+                });
+            }
+
+            let wcss = 0;
+            points.forEach((p) => {
+                let minDist = Infinity;
+                tempCentroids.forEach((c) => {
+                    const d = (p.x - c.x) ** 2 + (p.y - c.y) ** 2;
+                    if (d < minDist) minDist = d;
+                });
+                wcss += minDist;
+            });
+            return wcss;
+        }
+
+        function calculateElbow() {
+            elbowData = [];
+            for (let i = 1; i <= 8; i++) {
+                elbowData.push(calculateWCSS(i));
+            }
+            drawElbowChart();
+        }
+
+        function drawElbowChart() {
+            const w = elbowCanvas.width;
+            const h = elbowCanvas.height;
+            const padding = 20;
+
+            elbowCtx.clearRect(0, 0, w, h);
+            if (elbowData.length === 0) return;
+
+            const maxWCSS = Math.max(...elbowData);
+            const minWCSS = Math.min(...elbowData);
+
+            const getX = (i) => padding + (i / 7) * (w - 2 * padding);
+            const getY = (val) =>
+                h -
+                padding -
+                ((val - minWCSS) / (maxWCSS - minWCSS)) * (h - 2 * padding);
+
+            elbowCtx.strokeStyle = "#f1f5f9";
+            elbowCtx.beginPath();
+            for (let i = 0; i < 8; i++) {
+                elbowCtx.moveTo(getX(i), padding);
+                elbowCtx.lineTo(getX(i), h - padding);
+            }
+            elbowCtx.stroke();
+
+            elbowCtx.beginPath();
+            elbowCtx.moveTo(getX(0), getY(elbowData[0]));
+            for (let i = 1; i < 8; i++) {
+                elbowCtx.lineTo(getX(i), getY(elbowData[i]));
+            }
+            elbowCtx.strokeStyle = "#94a3b8";
+            elbowCtx.lineWidth = 2;
+            elbowCtx.stroke();
+
+            elbowData.forEach((val, i) => {
+                const isCurrentK = i + 1 === k;
+                elbowCtx.beginPath();
+                elbowCtx.arc(getX(i), getY(val), isCurrentK ? 5 : 3, 0, Math.PI * 2);
+                elbowCtx.fillStyle = isCurrentK ? "#3b82f6" : "#cbd5e1";
+                elbowCtx.fill();
+
+                if (isCurrentK) {
+                    elbowCtx.strokeStyle = "rgba(59, 130, 246, 0.3)";
+                    elbowCtx.lineWidth = 4;
+                    elbowCtx.stroke();
+                }
+
+                elbowCtx.fillStyle = "#94a3b8";
+                elbowCtx.font = "8px sans-serif";
+                elbowCtx.textAlign = "center";
+                elbowCtx.fillText(i + 1, getX(i), h - 5);
+            });
+        }
+
+        // --- Drawing Main Canvas ---
+
+        function draw() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            // Draw Distance Lines (Visualizing WCSS components)
+            if (showDistances && centroids.length > 0) {
+                points.forEach((p) => {
+                    if (p.cluster !== -1) {
+                        const c = centroids[p.cluster];
+                        ctx.beginPath();
+                        ctx.moveTo(p.x, p.y);
+                        ctx.lineTo(c.x, c.y);
+                        ctx.strokeStyle = c.color;
+                        ctx.globalAlpha = 0.25;
+                        ctx.lineWidth = 1;
+                        ctx.stroke();
+                        ctx.globalAlpha = 1.0;
+                    }
+                });
+            }
+
+            // Draw Points
+            points.forEach((p) => {
+                ctx.beginPath();
+                ctx.arc(p.x, p.y, 5, 0, Math.PI * 2);
+                ctx.fillStyle =
+                    p.cluster === -1 ?
+                    "#cbd5e1" :
+                    clusterColors[p.cluster % clusterColors.length];
+                ctx.fill();
+                ctx.strokeStyle = "#fff";
+                ctx.lineWidth = 1;
+                ctx.stroke();
+            });
+
+            // Draw Centroids
+            centroids.forEach((c, i) => {
+                ctx.save();
+                ctx.shadowBlur = 10;
+                ctx.shadowColor = "rgba(0,0,0,0.2)";
+
+                ctx.beginPath();
+                ctx.moveTo(c.x - 10, c.y);
+                ctx.lineTo(c.x + 10, c.y);
+                ctx.moveTo(c.x, c.y - 10);
+                ctx.lineTo(c.x, c.y + 10);
+                ctx.strokeStyle = c.color;
+                ctx.lineWidth = 4;
+                ctx.stroke();
+
+                ctx.beginPath();
+                ctx.arc(c.x, c.y, 12, 0, Math.PI * 2);
+                ctx.strokeStyle = "#334155";
+                ctx.lineWidth = 2;
+                ctx.stroke();
+
+                ctx.restore();
+            });
+        }
+
+        function updateUI() {
+            const btnText = document.getElementById("btnText");
+            const status = document.getElementById("status-badge");
+            const iterBadge = document.getElementById("iter-badge");
+            const wcssBadge = document.getElementById("wcss-badge");
+            const insightBox = document.getElementById("insight-box");
+
+            document.getElementById("step-1").classList.remove("step-active");
+            document.getElementById("step-2").classList.remove("step-active");
+            document.getElementById("step-3").classList.remove("step-active");
+
+            iterBadge.innerText = `Iter: ${iteration}`;
+
+            const currentWcss = calculateCurrentWCSS();
+            if (currentWcss !== null) {
+                wcssBadge.innerText = `WCSS: ${Math.round(currentWcss).toLocaleString()}`;
+                wcssBadge.className =
+                    "px-3 py-1 bg-blue-50 text-blue-600 rounded-full text-[10px] font-bold uppercase tracking-widest";
+            } else {
+                wcssBadge.innerText = `WCSS: -`;
+                wcssBadge.className =
+                    "px-3 py-1 bg-slate-100 text-slate-400 rounded-full text-[10px] font-bold uppercase tracking-widest";
+            }
+
+            switch (state) {
+                case "init":
+                    btnText.innerText = "Initialize K-Means";
+                    status.innerText = "Ready";
+                    status.className =
+                        "px-3 py-1 bg-blue-100 text-blue-700 rounded-full text-[10px] font-bold uppercase tracking-widest";
+                    document.getElementById("step-1").classList.add("step-active");
+                    break;
+                case "assign":
+                    btnText.innerText = "Assign Points";
+                    status.innerText = "Assigning";
+                    document.getElementById("step-2").classList.add("step-active");
+                    break;
+                case "update":
+                    btnText.innerText = "Update Centroids";
+                    status.innerText = "Moving";
+                    document.getElementById("step-3").classList.add("step-active");
+                    break;
+                case "converged":
+                    btnText.innerText = "Algorithm Converged";
+                    status.innerText = "Finished";
+                    status.className =
+                        "px-3 py-1 bg-green-100 text-green-700 rounded-full text-[10px] font-bold uppercase tracking-widest";
+                    wcssBadge.className =
+                        "px-3 py-1 bg-green-100 text-green-700 rounded-full text-[10px] font-bold uppercase tracking-widest shadow-sm ring-1 ring-green-200";
+                    insightBox.innerHTML = `<b>Success!</b> The algorithm converged with a final WCSS of <b>${Math.round(currentWcss).toLocaleString()}</b>. This represents the total "tightness" of your clusters. Check the Distance Lines toggle to see these errors visualized!`;
+                    break;
+            }
+            drawElbowChart();
+        }
+
+        // --- Event Listeners ---
+
+        document.getElementById("stepBtn").addEventListener("click", () => {
+            if (points.length === 0) {
+                generateRandomPoints(50);
+                return;
+            }
+            if (state === "init") initCentroids();
+            else if (state === "assign") assignPoints();
+            else if (state === "update") updateCentroids();
+        });
+
+        document
+            .getElementById("resetAlgoBtn")
+            .addEventListener("click", resetAlgo);
+
+        document.getElementById("clearBtn").addEventListener("click", () => {
+            points = [];
+            resetAlgo();
+            calculateElbow();
+        });
+
+        document.getElementById("randomDataBtn").addEventListener("click", () => {
+            generateRandomPoints(60);
+        });
+
+        document.getElementById("kRange").addEventListener("input", (e) => {
+            k = parseInt(e.target.value);
+            document.getElementById("k-val").innerText = k;
+            resetAlgo();
+        });
+
+        document
+            .getElementById("distanceToggle")
+            .addEventListener("change", (e) => {
+                showDistances = e.target.checked;
+                draw();
+            });
+
+        canvas.addEventListener("mousedown", (e) => {
+            const rect = canvas.getBoundingClientRect();
+            const x = (e.clientX - rect.left) * (canvas.width / rect.width);
+            const y = (e.clientY - rect.top) * (canvas.height / rect.height);
+
+            points.push({
+                x,
+                y,
+                cluster: -1
+            });
+            if (state !== "init") resetAlgo();
+            else draw();
+            calculateElbow();
+        });
+
+        window.onload = () => {
+            generateRandomPoints(40);
+        };
+    </script>
+</body>
+
+</html>

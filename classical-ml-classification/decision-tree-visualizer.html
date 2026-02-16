@@ -1,0 +1,799 @@
+<!doctype html>
+<!-- Brief: Visualization of decision-tree data splitting for classification. -->
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Interactive Decision Tree Builder</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
+    <style>
+        .slider-label {
+            min-width: 100px;
+        }
+
+        #plot-container {
+            height: 450px;
+        }
+
+        /* Tree Visualization CSS */
+        .tree ul {
+            padding-top: 20px;
+            position: relative;
+            transition: all 0.5s;
+            display: flex;
+            justify-content: center;
+        }
+
+        .tree li {
+            float: left;
+            text-align: center;
+            list-style-type: none;
+            position: relative;
+            padding: 20px 5px 0 5px;
+            transition: all 0.5s;
+        }
+
+        /* Connectors */
+        .tree li::before,
+        .tree li::after {
+            content: "";
+            position: absolute;
+            top: 0;
+            right: 50%;
+            border-top: 2px solid #ccc;
+            width: 50%;
+            height: 20px;
+        }
+
+        .tree li::after {
+            right: auto;
+            left: 50%;
+            border-left: 2px solid #ccc;
+        }
+
+        .tree li:only-child::after,
+        .tree li:only-child::before {
+            display: none;
+        }
+
+        .tree li:only-child {
+            padding-top: 0;
+        }
+
+        .tree li:first-child::before,
+        .tree li:last-child::after {
+            border: 0 none;
+        }
+
+        .tree li:last-child::before {
+            border-right: 2px solid #ccc;
+            border-radius: 0 5px 0 0;
+        }
+
+        .tree li:first-child::after {
+            border-radius: 5px 0 0 0;
+        }
+
+        .tree ul ul::before {
+            content: "";
+            position: absolute;
+            top: 0;
+            left: 50%;
+            border-left: 2px solid #ccc;
+            width: 0;
+            height: 20px;
+        }
+
+        /* Node Styling */
+        .tree-node {
+            border: 2px solid #ccc;
+            padding: 8px;
+            text-decoration: none;
+            color: #666;
+            font-family: monospace;
+            font-size: 12px;
+            display: inline-block;
+            border-radius: 5px;
+            transition: all 0.2s;
+            background: white;
+            min-width: 100px;
+            cursor: pointer;
+        }
+
+        .tree-node:hover {
+            background: #f3f4f6;
+            border-color: #94a3b8;
+        }
+
+        .tree-node.selected {
+            border-color: #3b82f6;
+            background: #eff6ff;
+            box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.3);
+        }
+
+        .tree-node.leaf-pure {
+            border-color: #22c55e;
+            background: #f0fdf4;
+        }
+
+        .region-stats {
+            font-size: 10px;
+            color: #888;
+            margin-top: 4px;
+        }
+    </style>
+</head>
+
+<body class="bg-gray-50 text-gray-900 font-sans p-4">
+    <div class="max-w-7xl mx-auto bg-white rounded-xl shadow-lg p-6">
+        <header class="mb-4 border-b pb-4 flex justify-between items-center">
+            <div>
+                <h1 class="text-2xl font-bold text-blue-900">
+                    Interactive Decision Tree Builder
+                </h1>
+                <p class="text-gray-600 italic text-sm">
+                    Grow a tree node-by-node. Click a leaf node to split it.
+                </p>
+            </div>
+            <div class="flex items-center space-x-4">
+                <div class="bg-green-100 text-green-900 px-4 py-2 rounded-lg border border-green-200 shadow-sm">
+                    <span class="text-xs font-bold uppercase text-green-700">Overall Accuracy</span>
+                    <div id="acc-val" class="text-xl font-bold font-mono">0.0%</div>
+                </div>
+                <button onclick="resetTree()" class="px-4 py-2 bg-gray-200 hover:bg-gray-300 rounded text-sm font-semibold transition h-10">
+                    Reset Tree
+                </button>
+            </div>
+        </header>
+
+        <div class="grid grid-cols-1 lg:grid-cols-12 gap-6 h-full">
+            <!-- LEFT COLUMN: Controls -->
+            <div class="lg:col-span-3 space-y-4 flex flex-col">
+                <!-- Gini Theory Note -->
+                <div class="bg-yellow-50 p-3 rounded border border-yellow-200 text-sm">
+                    <div class="flex items-center mb-1">
+                        <span class="text-lg mr-2">ℹ️</span>
+                        <p class="font-bold text-yellow-800">Gini Impurity</p>
+                    </div>
+                    <code class="block text-xs bg-white p-1 rounded border border-yellow-100 mb-2 text-center text-yellow-900">Gini = 1 - (p₀² + p₁²)</code>
+                    <ul class="text-xs text-yellow-800 list-disc ml-4 space-y-1">
+                        <li><strong>Lower is Better</strong> (Goal: 0.0)</li>
+                        <li><strong>0.0</strong> = Pure (Green Node ✅)</li>
+                        <li><strong>0.5</strong> = Perfectly Mixed (Bad ❌)</li>
+                    </ul>
+                </div>
+
+                <div class="bg-slate-50 p-4 rounded-lg border border-slate-200">
+                    <h2 class="font-bold text-gray-700 mb-2 border-b pb-1 text-sm">
+                        1. Select Node
+                    </h2>
+                    <div id="selection-status" class="text-sm font-mono font-bold text-blue-600 bg-white p-2 rounded border mb-2">
+                        Node: Root
+                    </div>
+                </div>
+
+                <div id="split-controls" class="bg-blue-50 p-4 rounded-lg border border-blue-200 flex-grow">
+                    <h2 class="font-bold text-blue-900 mb-3 border-b border-blue-200 pb-1 text-sm">
+                        2. Configure Split
+                    </h2>
+
+                    <div class="mb-4">
+                        <label class="text-xs font-bold uppercase text-blue-800 mb-2 block">Split Feature</label>
+                        <div class="flex space-x-2">
+                            <button class="flex-1 py-1 px-2 rounded text-sm font-bold bg-white border border-blue-300 text-blue-700 hover:bg-blue-100 feature-btn active-feature" data-feat="x" onclick="setFeature('x')">
+                                X-Axis
+                            </button>
+                            <button class="flex-1 py-1 px-2 rounded text-sm font-bold bg-white border-gray-300 text-gray-600 hover:bg-gray-100 feature-btn" data-feat="y" onclick="setFeature('y')">
+                                Y-Axis
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="mb-6">
+                        <div class="flex justify-between mb-1">
+                            <label class="text-xs font-bold uppercase text-blue-800">Threshold</label>
+                            <span id="threshold-val" class="text-xs font-mono font-bold text-blue-600">0.00</span>
+                        </div>
+                        <input type="range" id="threshold-slider" min="-3" max="5" step="0.1" value="0.5" class="w-full h-2 bg-blue-200 rounded-lg appearance-none cursor-pointer" />
+                    </div>
+
+                    <div class="bg-white p-3 rounded border border-blue-100 mb-4">
+                        <p class="text-xs text-gray-500 font-bold uppercase mb-1">
+                            Preview Weighted Gini
+                        </p>
+                        <div class="flex justify-between items-baseline">
+                            <span class="text-xs text-gray-400">Lower is better</span>
+                            <span id="preview-gini" class="text-lg font-mono font-bold text-green-600">0.450</span>
+                        </div>
+                    </div>
+
+                    <button id="btn-split" onclick="applySplit()" class="w-full py-3 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded shadow transition flex items-center justify-center space-x-2 disabled:bg-gray-400 disabled:cursor-not-allowed">
+                        <span>✂️ Apply Split</span>
+                    </button>
+                    <p id="split-error" class="text-xs text-red-500 mt-2 hidden text-center font-bold"></p>
+                </div>
+            </div>
+
+            <!-- MIDDLE COLUMN: Plot -->
+            <div class="lg:col-span-5 bg-white border rounded-lg p-2 flex flex-col">
+                <div id="plot-container" class="w-full flex-grow"></div>
+            </div>
+
+            <!-- RIGHT COLUMN: Tree Visualization -->
+            <div class="lg:col-span-4 bg-gray-50 border rounded-lg p-4 overflow-auto relative min-h-[500px]">
+                <h3 class="font-bold text-gray-500 text-xs uppercase absolute top-4 left-4">
+                    Tree Structure
+                </h3>
+                <div class="tree mt-8 flex justify-center min-w-max">
+                    <ul id="tree-root">
+                        <!-- Tree will be injected here -->
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // --- 1. DATA GENERATION ---
+        const pointCount = 50;
+        const dataX = [];
+        const dataY = [];
+        const labels = []; // 0 (Blue) or 1 (Red)
+
+        function randn_bm() {
+            let u = 0,
+                v = 0;
+            while (u === 0) u = Math.random();
+            while (v === 0) v = Math.random();
+            return Math.sqrt(-2.0 * Math.log(u)) * Math.cos(2.0 * Math.PI * v);
+        }
+
+        // Generate clustered data (XOR-like problem is interesting for trees)
+        // Cluster 0: Bottom-Left (Blue)
+        for (let i = 0; i < 20; i++) {
+            dataX.push(randn_bm() * 0.6 - 1);
+            dataY.push(randn_bm() * 0.6 - 1);
+            labels.push(0);
+        }
+        // Cluster 1: Top-Right (Blue)
+        for (let i = 0; i < 20; i++) {
+            dataX.push(randn_bm() * 0.6 + 2);
+            dataY.push(randn_bm() * 0.6 + 2);
+            labels.push(0);
+        }
+        // Cluster 2: Bottom-Right (Red)
+        for (let i = 0; i < 20; i++) {
+            dataX.push(randn_bm() * 0.6 + 2);
+            dataY.push(randn_bm() * 0.6 - 1);
+            labels.push(1);
+        }
+        // Cluster 3: Top-Left (Red)
+        for (let i = 0; i < 20; i++) {
+            dataX.push(randn_bm() * 0.6 - 1);
+            dataY.push(randn_bm() * 0.6 + 2);
+            labels.push(1);
+        }
+
+        // --- 2. STATE MANAGEMENT ---
+        let nodeIdCounter = 0;
+        let rootNode = null;
+        let selectedNode = null;
+
+        // Temporary state for the "Split Preview"
+        let splitPreview = {
+            feature: "x",
+            threshold: 0.5
+        };
+
+        // Constants for Plot
+        const PLOT_RANGE = [-4, 5];
+
+        class Node {
+            constructor(
+                indices,
+                parent = null,
+                depth = 0,
+                bounds = {
+                    xMin: PLOT_RANGE[0],
+                    xMax: PLOT_RANGE[1],
+                    yMin: PLOT_RANGE[0],
+                    yMax: PLOT_RANGE[1],
+                },
+            ) {
+                this.id = nodeIdCounter++;
+                this.indices = indices; // Array of indices pointing to dataX/Y/labels
+                this.parent = parent;
+                this.depth = depth;
+                this.bounds = bounds; // The rectangular region this node owns
+
+                this.left = null;
+                this.right = null;
+                this.split = null; // { feature: 'x'|'y', threshold: float }
+
+                // Pre-calculate purity stats
+                this.counts = {
+                    0: 0,
+                    1: 0
+                };
+                this.indices.forEach((i) => this.counts[labels[i]]++);
+                this.total = this.indices.length;
+                this.purity =
+                    this.total === 0 ?
+                    0 :
+                    Math.max(this.counts[0], this.counts[1]) / this.total;
+
+                const p0 = this.total === 0 ? 0 : this.counts[0] / this.total;
+                const p1 = this.total === 0 ? 0 : this.counts[1] / this.total;
+                this.gini = 1 - (p0 * p0 + p1 * p1);
+
+                this.isPure = this.gini < 0.001; // Float tolerance
+            }
+
+            isLeaf() {
+                return this.left === null && this.right === null;
+            }
+        }
+
+        function init() {
+            const allIndices = dataX.map((_, i) => i);
+            rootNode = new Node(allIndices);
+            selectNode(rootNode);
+            renderTree();
+            updatePlot();
+            updateTreeStats(); // Calculate initial accuracy
+        }
+
+        function resetTree() {
+            nodeIdCounter = 0;
+            init();
+        }
+
+        // --- 3. LOGIC ---
+        function updateTreeStats() {
+            // Traverse tree to find all leaves and sum up correct predictions
+            let correct = 0;
+            const totalPoints = dataX.length;
+
+            function traverse(node) {
+                if (node.isLeaf()) {
+                    // Prediction is the majority class
+                    correct += Math.max(node.counts[0], node.counts[1]);
+                } else {
+                    traverse(node.left);
+                    traverse(node.right);
+                }
+            }
+
+            traverse(rootNode);
+            const acc = (correct / totalPoints) * 100;
+            document.getElementById("acc-val").innerText = acc.toFixed(1) + "%";
+        }
+
+        function setFeature(f) {
+            splitPreview.feature = f;
+            // Update buttons visually
+            document.querySelectorAll(".feature-btn").forEach((btn) => {
+                if (btn.dataset.feat === f) {
+                    btn.classList.add("bg-white", "text-blue-700", "border-blue-300");
+                    btn.classList.remove("text-gray-600", "border-gray-300");
+                } else {
+                    btn.classList.remove(
+                        "bg-white",
+                        "text-blue-700",
+                        "border-blue-300",
+                    );
+                    btn.classList.add("text-gray-600", "border-gray-300");
+                }
+            });
+            updateMetrics();
+            updatePlot();
+        }
+
+        // Slider Input
+        document
+            .getElementById("threshold-slider")
+            .addEventListener("input", (e) => {
+                splitPreview.threshold = parseFloat(e.target.value);
+                document.getElementById("threshold-val").innerText =
+                    splitPreview.threshold.toFixed(2);
+                updateMetrics();
+                updatePlot();
+            });
+
+        function updateMetrics() {
+            if (!selectedNode) return;
+
+            // Calculate hypothetical split Gini
+            const leftIndices = [];
+            const rightIndices = [];
+
+            selectedNode.indices.forEach((i) => {
+                const val = splitPreview.feature === "x" ? dataX[i] : dataY[i];
+                if (val < splitPreview.threshold) leftIndices.push(i);
+                else rightIndices.push(i);
+            });
+
+            // Calc Gini for children
+            const getGini = (idxs) => {
+                if (idxs.length === 0) return 0;
+                const c1 = idxs.filter((i) => labels[i] === 1).length;
+                const p1 = c1 / idxs.length;
+                const p0 = 1 - p1;
+                return 1 - (p0 * p0 + p1 * p1);
+            };
+
+            const gL = getGini(leftIndices);
+            const gR = getGini(rightIndices);
+            const nT = selectedNode.total;
+            const weightedGini =
+                (leftIndices.length / nT) * gL + (rightIndices.length / nT) * gR;
+
+            document.getElementById("preview-gini").innerText =
+                weightedGini.toFixed(3);
+
+            // Valid split check
+            const btn = document.getElementById("btn-split");
+            const err = document.getElementById("split-error");
+
+            if (leftIndices.length === 0 || rightIndices.length === 0) {
+                btn.disabled = true;
+                err.innerText = "Split puts all points on one side!";
+                err.classList.remove("hidden");
+            } else {
+                btn.disabled = false;
+                err.classList.add("hidden");
+            }
+        }
+
+        function applySplit() {
+            if (!selectedNode || !selectedNode.isLeaf()) return;
+
+            const feature = splitPreview.feature;
+            const threshold = splitPreview.threshold;
+
+            const leftIndices = [];
+            const rightIndices = [];
+
+            selectedNode.indices.forEach((i) => {
+                const val = feature === "x" ? dataX[i] : dataY[i];
+                if (val < threshold) leftIndices.push(i);
+                else rightIndices.push(i);
+            });
+
+            if (leftIndices.length === 0 || rightIndices.length === 0) {
+                alert("Cannot create empty leaf nodes.");
+                return;
+            }
+
+            // Update current node
+            selectedNode.split = {
+                feature,
+                threshold
+            };
+
+            // Create Bounds for children
+            const b = selectedNode.bounds;
+            let leftBounds, rightBounds;
+
+            if (feature === "x") {
+                leftBounds = {
+                    ...b,
+                    xMax: threshold
+                };
+                rightBounds = {
+                    ...b,
+                    xMin: threshold
+                };
+            } else {
+                leftBounds = {
+                    ...b,
+                    yMax: threshold
+                };
+                rightBounds = {
+                    ...b,
+                    yMin: threshold
+                };
+            }
+
+            selectedNode.left = new Node(
+                leftIndices,
+                selectedNode,
+                selectedNode.depth + 1,
+                leftBounds,
+            );
+            selectedNode.right = new Node(
+                rightIndices,
+                selectedNode,
+                selectedNode.depth + 1,
+                rightBounds,
+            );
+
+            renderTree();
+            updateTreeStats(); // Update accuracy after split
+            // Auto select specific child? or keep parent? Let's clear selection or keep parent
+            selectNode(selectedNode.left);
+            updatePlot();
+        }
+
+        function selectNode(node) {
+            selectedNode = node;
+
+            // Update UI Selection
+            document
+                .querySelectorAll(".tree-node")
+                .forEach((el) => el.classList.remove("selected"));
+            const el = document.getElementById("node-" + node.id);
+            if (el) el.classList.add("selected");
+
+            const status = document.getElementById("selection-status");
+            status.innerText = `Node ${node.id} (${node.isLeaf() ? "Leaf" : "Internal"})`;
+
+            // Enable/Disable Controls
+            const controls = document.getElementById("split-controls");
+
+            if (node.isLeaf() && !node.isPure) {
+                controls.classList.remove("opacity-50", "pointer-events-none");
+                // Set slider range based on bounds roughly
+                const slider = document.getElementById("threshold-slider");
+                if (splitPreview.feature === "x") {
+                    slider.min = node.bounds.xMin;
+                    slider.max = node.bounds.xMax;
+                } else {
+                    slider.min = node.bounds.yMin;
+                    slider.max = node.bounds.yMax;
+                }
+                // Center default value
+                splitPreview.threshold =
+                    (parseFloat(slider.min) + parseFloat(slider.max)) / 2;
+                slider.value = splitPreview.threshold;
+                document.getElementById("threshold-val").innerText =
+                    splitPreview.threshold.toFixed(2);
+                updateMetrics();
+            } else {
+                controls.classList.add("opacity-50", "pointer-events-none");
+                document.getElementById("preview-gini").innerText = "-";
+            }
+
+            updatePlot(); // Need to redraw to show active selection bounds
+        }
+
+        // --- 4. TREE RENDERING ---
+        function renderTree() {
+            const container = document.getElementById("tree-root");
+            container.innerHTML = generateTreeHTML(rootNode);
+        }
+
+        function generateTreeHTML(node) {
+            const isLeaf = node.isLeaf();
+            const colorClass =
+                node.counts[1] > node.counts[0] ? "text-red-600" : "text-blue-600";
+            const purityPercent = (node.purity * 100).toFixed(0);
+            const classes = `tree-node ${isLeaf && node.isPure ? "leaf-pure" : ""} ${selectedNode && selectedNode.id === node.id ? "selected" : ""}`;
+
+            let label = "";
+            if (isLeaf) {
+                label = `<div class="font-bold ${colorClass}">
+                            ${node.counts[1] > node.counts[0] ? "Class 1" : "Class 0"}
+                         </div>
+                         <div class="test-xs text-gray-500">${purityPercent}% Pure</div>`;
+            } else {
+                label = `<div class="font-bold border-b border-gray-200 mb-1 pb-1">
+                            ${node.split.feature.toUpperCase()} < ${node.split.threshold.toFixed(2)}
+                         </div>`;
+            }
+
+            const stats = `<div class="region-stats">
+                                N: ${node.total}<br>
+                                Gini: ${node.gini.toFixed(2)}
+                           </div>`;
+
+            let html = `
+                <li>
+                    <div id="node-${node.id}" class="${classes}" onclick="selectNodeById(${node.id})">
+                        ${label}
+                        ${stats}
+                    </div>
+            `;
+
+            if (!isLeaf) {
+                html += `<ul>
+                            ${generateTreeHTML(node.left)}
+                            ${generateTreeHTML(node.right)}
+                         </ul>`;
+            }
+
+            html += `</li>`;
+            return html;
+        }
+
+        // Helper to find node by ID for click handler
+        function findNode(node, id) {
+            if (node.id === id) return node;
+            if (node.left) {
+                const found = findNode(node.left, id);
+                if (found) return found;
+            }
+            if (node.right) {
+                const found = findNode(node.right, id);
+                if (found) return found;
+            }
+            return null;
+        }
+
+        window.selectNodeById = (id) => {
+            const node = findNode(rootNode, id);
+            if (node) selectNode(node);
+        };
+
+        // --- 5. PLOTTING ---
+        function updatePlot() {
+            // 1. Collect Regions (Leaf Nodes)
+            const shapes = [];
+
+            // Highlight Selected Node Region Only (if selected)
+            if (selectedNode) {
+                const b = selectedNode.bounds;
+                shapes.push({
+                    type: "rect",
+                    x0: b.xMin,
+                    x1: b.xMax,
+                    y0: b.yMin,
+                    y1: b.yMax,
+                    fillcolor: "rgba(255, 255, 0, 0.2)", // Yellow highlight
+                    line: {
+                        color: "#FFD700",
+                        width: 3
+                    },
+                    layer: "below",
+                });
+            }
+
+            function collectLeaves(node) {
+                if (node.isLeaf()) {
+                    // Create Rectangle for this region
+                    const b = node.bounds;
+                    let color = "rgba(200,200,200, 0.1)";
+                    if (node.counts[0] > node.counts[1])
+                        color = "rgba(59, 130, 246, 0.1)"; // Blue tint
+                    if (node.counts[1] > node.counts[0])
+                        color = "rgba(239, 68, 68, 0.1)"; // Red tint
+
+                    shapes.push({
+                        type: "rect",
+                        x0: b.xMin,
+                        x1: b.xMax,
+                        y0: b.yMin,
+                        y1: b.yMax,
+                        fillcolor: color,
+                        line: {
+                            color: "#888",
+                            width: 1
+                        },
+                        layer: "below",
+                    });
+                } else {
+                    collectLeaves(node.left);
+                    collectLeaves(node.right);
+                }
+            }
+            collectLeaves(rootNode);
+
+            // 2. Add "Proposed Split" line if a leaf is selected
+            if (selectedNode && selectedNode.isLeaf() && !selectedNode.isPure) {
+                const b = selectedNode.bounds;
+                if (splitPreview.feature === "x") {
+                    shapes.push({
+                        type: "line",
+                        x0: splitPreview.threshold,
+                        x1: splitPreview.threshold,
+                        y0: b.yMin,
+                        y1: b.yMax,
+                        line: {
+                            color: "black",
+                            width: 3,
+                            dash: "dash"
+                        },
+                    });
+                } else {
+                    shapes.push({
+                        type: "line",
+                        x0: b.xMin,
+                        x1: b.xMax,
+                        y0: splitPreview.threshold,
+                        y1: splitPreview.threshold,
+                        line: {
+                            color: "black",
+                            width: 3,
+                            dash: "dash"
+                        },
+                    });
+                }
+            }
+
+            // 3. Data Points (split into colors)
+            const c0X = [],
+                c0Y = [];
+            const c1X = [],
+                c1Y = [];
+
+            for (let i = 0; i < dataX.length; i++) {
+                if (labels[i] === 0) {
+                    c0X.push(dataX[i]);
+                    c0Y.push(dataY[i]);
+                } else {
+                    c1X.push(dataX[i]);
+                    c1Y.push(dataY[i]);
+                }
+            }
+
+            const traces = [{
+                    x: c0X,
+                    y: c0Y,
+                    mode: "markers",
+                    type: "scatter",
+                    name: "Class 0 (Blue)",
+                    marker: {
+                        color: "#3b82f6",
+                        size: 10,
+                        line: {
+                            color: "white",
+                            width: 1
+                        },
+                    },
+                },
+                {
+                    x: c1X,
+                    y: c1Y,
+                    mode: "markers",
+                    type: "scatter",
+                    name: "Class 1 (Red)",
+                    marker: {
+                        color: "#ef4444",
+                        size: 10,
+                        symbol: "x",
+                        line: {
+                            color: "white",
+                            width: 1
+                        },
+                    },
+                },
+            ];
+
+            // Highlight selected region data points?
+            // Optional enhancement: Make non-selected region points opaque
+
+            const layout = {
+                margin: {
+                    t: 10,
+                    r: 10,
+                    b: 30,
+                    l: 30
+                },
+                xaxis: {
+                    range: PLOT_RANGE,
+                    fixedrange: true
+                },
+                yaxis: {
+                    range: PLOT_RANGE,
+                    fixedrange: true
+                },
+                shapes: shapes,
+                showlegend: false,
+                plot_bgcolor: "#ffffff",
+                paper_bgcolor: "#ffffff",
+            };
+
+            Plotly.newPlot("plot-container", traces, layout, {
+                responsive: true,
+                displayModeBar: false,
+            });
+        }
+
+        // Initialize
+        init();
+    </script>
+</body>
+
+</html>

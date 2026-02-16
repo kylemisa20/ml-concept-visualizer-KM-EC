@@ -1,0 +1,464 @@
+<!doctype html>
+<!-- Brief: Visualization of SVM margins, hyperplanes, and support vectors. -->
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>SVM Interactive Playground</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body {
+            background-color: #f8fafc;
+            font-family:
+                system-ui,
+                -apple-system,
+                sans-serif;
+        }
+
+        canvas {
+            cursor: crosshair;
+            touch-action: none;
+        }
+    </style>
+</head>
+
+<body class="min-h-screen flex flex-col items-center p-4 md:p-8">
+    <div class="max-w-5xl w-full grid grid-cols-1 lg:grid-cols-3 gap-8">
+        <!-- Left: Visualization -->
+        <div class="lg:col-span-2 space-y-4">
+            <div class="bg-white rounded-2xl shadow-xl overflow-hidden border border-slate-200">
+                <div class="p-4 bg-slate-50 border-b border-slate-200 flex justify-between items-center">
+                    <h2 class="font-bold text-slate-800">Visualizing the Hyperplane</h2>
+                    <div class="flex gap-2 text-xs">
+                        <span class="flex items-center gap-1"><span class="w-3 h-3 rounded-full bg-red-500"></span> Class
+                            +1</span>
+                        <span class="flex items-center gap-1"><span class="w-3 h-3 rounded-full bg-blue-500"></span> Class
+                            -1</span>
+                    </div>
+                </div>
+                <div class="relative aspect-square md:aspect-video bg-slate-50">
+                    <canvas id="svmCanvas" class="w-full h-full"></canvas>
+                    <div id="emptyState" class="absolute inset-0 flex flex-col items-center justify-center text-slate-400 pointer-events-none">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-12 w-12 mb-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1" d="M12 9v3m0 0v3m0-3h3m-3 0H9m12 0a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                        <p>Click to add data points</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Enhanced Legend -->
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
+                    <h4 class="text-xs font-bold text-slate-500 uppercase mb-3">
+                        The "Highway" Structure
+                    </h4>
+                    <ul class="text-xs space-y-3">
+                        <li class="flex items-center gap-2">
+                            <div class="w-6 h-1 bg-slate-800"></div>
+                            <span><strong>Decision Boundary:</strong> The exact "fence" (Score
+                                = 0).</span>
+                        </li>
+                        <li class="flex items-center gap-2">
+                            <div class="w-6 h-3 bg-slate-100 border-x border-slate-300"></div>
+                            <span><strong>The Margin (White Area):</strong> The safety gap
+                                between classes.</span>
+                        </li>
+                        <li class="flex items-center gap-2">
+                            <div class="w-6 h-1 border-t border-dashed border-slate-400"></div>
+                            <span><strong>Dotted Lines:</strong> The "gutters" (Score = +1 or
+                                -1).</span>
+                        </li>
+                    </ul>
+                </div>
+                <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
+                    <h4 class="text-xs font-bold text-slate-500 uppercase mb-3">
+                        Special Markers
+                    </h4>
+                    <ul class="text-xs space-y-3">
+                        <li class="flex items-center gap-2">
+                            <div class="w-4 h-4 rounded-full bg-slate-400 shadow-[0_0_0_4px_rgba(0,0,0,0.1)]"></div>
+                            <span><strong>Support Vectors (Halos):</strong> The only points
+                                that "hold up" the boundary.</span>
+                        </li>
+                        <li class="flex items-center gap-2">
+                            <div class="w-6 h-3 bg-red-100/50"></div>
+                            <span><strong>Confidence Zones:</strong> Areas where the model is
+                                certain.</span>
+                        </li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+
+        <!-- Right: Controls -->
+        <div class="space-y-6">
+            <div class="bg-white p-6 rounded-2xl shadow-lg border border-slate-200 space-y-6">
+                <h3 class="text-lg font-bold text-slate-900">Controls</h3>
+
+                <div class="space-y-4">
+                    <div class="flex flex-col gap-2">
+                        <label class="text-sm font-medium text-slate-700">Toggle Class</label>
+                        <div class="flex gap-2">
+                            <button id="btnClassPositive" class="flex-1 py-2 px-4 rounded-lg border-2 border-red-500 bg-red-50 text-red-700 font-bold transition-all">
+                                +1 (Red)
+                            </button>
+                            <button id="btnClassNegative" class="flex-1 py-2 px-4 rounded-lg border-2 border-transparent bg-slate-100 text-slate-500 transition-all">
+                                -1 (Blue)
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="pt-4 border-t border-slate-100">
+                        <label class="text-sm font-medium text-slate-700 flex justify-between">
+                            Soft Margin (C): <span id="cVal" class="font-mono">1.00</span>
+                        </label>
+                        <input type="range" id="cSlider" min="0.01" max="100" step="0.01" value="1" class="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer mt-2" />
+                    </div>
+
+                    <div class="grid grid-cols-2 gap-2">
+                        <button id="btnClear" class="py-2 px-4 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-sm font-medium">
+                            Clear
+                        </button>
+                        <button id="btnRandom" class="py-2 px-4 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-sm font-medium">
+                            Random
+                        </button>
+                    </div>
+                </div>
+
+                <div class="pt-6 border-t border-slate-100">
+                    <h3 class="text-sm font-bold text-slate-900 mb-3 uppercase tracking-wider">
+                        The Math (from Image)
+                    </h3>
+                    <div class="space-y-2 font-mono text-xs text-slate-600">
+                        <p>Minimize: 1/2 ||w||²</p>
+                        <p>Subject to: yᵢ(w·xᵢ + b) ≥ 1</p>
+                        <div class="h-px bg-slate-100 my-2"></div>
+                        <p>Margin Width = 2 / ||w||</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        class SVM {
+            constructor(C = 1.0, tol = 1e-4, maxPasses = 20) {
+                this.C = C;
+                this.tol = tol;
+                this.maxPasses = maxPasses;
+                this.w = [0, 0];
+                this.b = 0;
+                this.alphas = [];
+                this.points = [];
+            }
+
+            dot(a, b) {
+                return a[0] * b[0] + a[1] * b[1];
+            }
+
+            train(points) {
+                if (points.length < 2) return;
+                this.points = points;
+                const n = points.length;
+                this.alphas = new Array(n).fill(0);
+                this.b = 0;
+
+                let passes = 0;
+                while (passes < this.maxPasses) {
+                    let numChangedAlphas = 0;
+                    for (let i = 0; i < n; i++) {
+                        const Ei = this.predictRaw(points[i].x) - points[i].y;
+                        if (
+                            (points[i].y * Ei < -this.tol && this.alphas[i] < this.C) ||
+                            (points[i].y * Ei > this.tol && this.alphas[i] > 0)
+                        ) {
+                            let j = Math.floor(Math.random() * (n - 1));
+                            if (j >= i) j++;
+
+                            const Ej = this.predictRaw(points[j].x) - points[j].y;
+                            const aiOld = this.alphas[i];
+                            const ajOld = this.alphas[j];
+
+                            let L, H;
+                            if (points[i].y !== points[j].y) {
+                                L = Math.max(0, this.alphas[j] - this.alphas[i]);
+                                H = Math.min(
+                                    this.C,
+                                    this.C + this.alphas[j] - this.alphas[i],
+                                );
+                            } else {
+                                L = Math.max(0, this.alphas[i] + this.alphas[j] - this.C);
+                                H = Math.min(this.C, this.alphas[i] + this.alphas[j]);
+                            }
+                            if (L === H) continue;
+
+                            const eta =
+                                2 * this.dot(points[i].x, points[j].x) -
+                                this.dot(points[i].x, points[i].x) -
+                                this.dot(points[j].x, points[j].x);
+                            if (eta >= 0) continue;
+
+                            this.alphas[j] -= (points[j].y * (Ei - Ej)) / eta;
+                            this.alphas[j] = Math.max(L, Math.min(H, this.alphas[j]));
+                            if (Math.abs(this.alphas[j] - ajOld) < 1e-5) continue;
+
+                            this.alphas[i] +=
+                                points[i].y * points[j].y * (ajOld - this.alphas[j]);
+
+                            const b1 =
+                                this.b -
+                                Ei -
+                                points[i].y *
+                                (this.alphas[i] - aiOld) *
+                                this.dot(points[i].x, points[i].x) -
+                                points[j].y *
+                                (this.alphas[j] - ajOld) *
+                                this.dot(points[i].x, points[j].x);
+                            const b2 =
+                                this.b -
+                                Ej -
+                                points[i].y *
+                                (this.alphas[i] - aiOld) *
+                                this.dot(points[i].x, points[j].x) -
+                                points[j].y *
+                                (this.alphas[j] - ajOld) *
+                                this.dot(points[j].x, points[j].x);
+                            if (this.alphas[i] > 0 && this.alphas[i] < this.C) this.b = b1;
+                            else if (this.alphas[j] > 0 && this.alphas[j] < this.C)
+                                this.b = b2;
+                            else this.b = (b1 + b2) / 2;
+                            numChangedAlphas++;
+                        }
+                    }
+                    if (numChangedAlphas === 0) passes++;
+                    else passes = 0;
+                }
+
+                this.w = [0, 0];
+                for (let i = 0; i < n; i++) {
+                    this.w[0] += this.alphas[i] * points[i].y * points[i].x[0];
+                    this.w[1] += this.alphas[i] * points[i].y * points[i].x[1];
+                }
+            }
+
+            predictRaw(x) {
+                let val = this.b;
+                for (let i = 0; i < this.points.length; i++) {
+                    val +=
+                        this.alphas[i] * this.points[i].y * this.dot(this.points[i].x, x);
+                }
+                return val;
+            }
+        }
+
+        const canvas = document.getElementById("svmCanvas");
+        const ctx = canvas.getContext("2d");
+        const emptyState = document.getElementById("emptyState");
+        const btnPos = document.getElementById("btnClassPositive");
+        const btnNeg = document.getElementById("btnClassNegative");
+        const btnClear = document.getElementById("btnClear");
+        const btnRandom = document.getElementById("btnRandom");
+        const cSlider = document.getElementById("cSlider");
+        const cValLabel = document.getElementById("cVal");
+
+        let data = [{
+                x: [0.25, 0.35],
+                y: -1
+            },
+            {
+                x: [0.2, 0.45],
+                y: -1
+            },
+            {
+                x: [0.35, 0.25],
+                y: -1
+            },
+            {
+                x: [0.75, 0.65],
+                y: 1
+            },
+            {
+                x: [0.8, 0.55],
+                y: 1
+            },
+            {
+                x: [0.65, 0.75],
+                y: 1
+            },
+        ];
+        let currentClass = 1;
+        let svm = new SVM();
+
+        function resize() {
+            const rect = canvas.parentElement.getBoundingClientRect();
+            canvas.width = rect.width;
+            canvas.height = rect.height;
+            draw();
+        }
+
+        window.addEventListener("resize", resize);
+
+        function addPoint(e) {
+            const rect = canvas.getBoundingClientRect();
+            const cx = e.clientX || (e.touches && e.touches[0].clientX);
+            const cy = e.clientY || (e.touches && e.touches[0].clientY);
+            if (cx === undefined) return;
+            const nx = (cx - rect.left) / canvas.width;
+            const ny = (cy - rect.top) / canvas.height;
+            data.push({
+                x: [nx, ny],
+                y: currentClass
+            });
+            emptyState.style.display = "none";
+            update();
+        }
+
+        canvas.addEventListener("mousedown", addPoint);
+        canvas.addEventListener(
+            "touchstart",
+            (e) => {
+                e.preventDefault();
+                addPoint(e);
+            }, {
+                passive: false
+            },
+        );
+
+        btnPos.onclick = () => {
+            currentClass = 1;
+            btnPos.className =
+                "flex-1 py-2 px-4 rounded-lg border-2 border-red-500 bg-red-50 text-red-700 font-bold transition-all";
+            btnNeg.className =
+                "flex-1 py-2 px-4 rounded-lg border-2 border-transparent bg-slate-100 text-slate-500 transition-all";
+        };
+        btnNeg.onclick = () => {
+            currentClass = -1;
+            btnNeg.className =
+                "flex-1 py-2 px-4 rounded-lg border-2 border-blue-500 bg-blue-50 text-blue-700 font-bold transition-all";
+            btnPos.className =
+                "flex-1 py-2 px-4 rounded-lg border-2 border-transparent bg-slate-100 text-slate-500 transition-all";
+        };
+        btnClear.onclick = () => {
+            data = [];
+            emptyState.style.display = "flex";
+            update();
+        };
+        btnRandom.onclick = () => {
+            data = [];
+            for (let i = 0; i < 6; i++) {
+                data.push({
+                    x: [Math.random() * 0.4, Math.random() * 0.4],
+                    y: -1
+                });
+                data.push({
+                    x: [0.6 + Math.random() * 0.4, 0.6 + Math.random() * 0.4],
+                    y: 1,
+                });
+            }
+            emptyState.style.display = "none";
+            update();
+        };
+
+        cSlider.oninput = (e) => {
+            const val = parseFloat(e.target.value);
+            cValLabel.innerText = val.toFixed(2);
+            svm.C = val;
+            update();
+        };
+
+        function update() {
+            if (data.length >= 2) svm.train(data);
+            draw();
+        }
+
+        function draw() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            if (data.length >= 2) {
+                const step = 6;
+                for (let x = 0; x < canvas.width; x += step) {
+                    for (let y = 0; y < canvas.height; y += step) {
+                        const score = svm.predictRaw([
+                            x / canvas.width,
+                            y / canvas.height,
+                        ]);
+                        if (score > 1) {
+                            ctx.fillStyle = "rgba(239, 68, 68, 0.05)";
+                            ctx.fillRect(x, y, step, step);
+                        } else if (score < -1) {
+                            ctx.fillStyle = "rgba(59, 130, 246, 0.05)";
+                            ctx.fillRect(x, y, step, step);
+                        }
+                    }
+                }
+                drawHyperplane(0, "#1e293b", 3, [], "Boundary");
+                drawHyperplane(1, "#94a3b8", 1, [5, 5], "+1");
+                drawHyperplane(-1, "#94a3b8", 1, [5, 5], "-1");
+            }
+
+            data.forEach((p, idx) => {
+                const px = p.x[0] * canvas.width;
+                const py = p.x[1] * canvas.height;
+                if (svm.alphas && svm.alphas[idx] > 0.005) {
+                    ctx.beginPath();
+                    ctx.arc(px, py, 12, 0, Math.PI * 2);
+                    ctx.fillStyle = "rgba(0,0,0,0.1)";
+                    ctx.fill();
+                    ctx.strokeStyle = "rgba(0,0,0,0.2)";
+                    ctx.lineWidth = 1;
+                    ctx.stroke();
+                }
+                ctx.beginPath();
+                ctx.arc(px, py, 6, 0, Math.PI * 2);
+                ctx.fillStyle = p.y === 1 ? "#ef4444" : "#3b82f6";
+                ctx.fill();
+                ctx.strokeStyle = "#fff";
+                ctx.lineWidth = 2;
+                ctx.stroke();
+            });
+        }
+
+        function drawHyperplane(offset, color, width, dash, label) {
+            const w0 = svm.w[0];
+            const w1 = svm.w[1];
+            const b = svm.b;
+            ctx.beginPath();
+            ctx.strokeStyle = color;
+            ctx.lineWidth = width;
+            ctx.setLineDash(dash);
+            let x1, y1, x2, y2;
+            if (Math.abs(w1) > 0.0001) {
+                const f = (nx) => (offset - b - w0 * nx) / w1;
+                x1 = 0;
+                y1 = f(0) * canvas.height;
+                x2 = canvas.width;
+                y2 = f(1) * canvas.height;
+            } else if (Math.abs(w0) > 0.0001) {
+                const nx = (offset - b) / w0;
+                x1 = nx * canvas.width;
+                y1 = 0;
+                x2 = nx * canvas.width;
+                y2 = canvas.height;
+            }
+            ctx.moveTo(x1, y1);
+            ctx.lineTo(x2, y2);
+            ctx.stroke();
+            ctx.setLineDash([]);
+
+            // Labeling
+            if (offset === 0) {
+                ctx.fillStyle = color;
+                ctx.font = "bold 10px sans-serif";
+                ctx.fillText("DECISION BOUNDARY", 10, y1 < 20 ? y1 + 15 : y1 - 5);
+            }
+        }
+
+        window.onload = () => {
+            resize();
+            update();
+        };
+    </script>
+</body>
+
+</html>

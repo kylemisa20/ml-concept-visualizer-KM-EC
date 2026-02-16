@@ -1,0 +1,452 @@
+<!doctype html>
+<!-- Brief: Visualization of data-reuse patterns for kernel optimization. -->
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Reuse Distance Interactive Visualizer</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap");
+
+        body {
+            font-family: "Inter", sans-serif;
+            background-color: #f9fafb;
+        }
+
+        .pattern-blue {
+            background-color: #3b82f6;
+            color: white;
+        }
+
+        .pattern-green {
+            background-color: #22c55e;
+            color: white;
+        }
+
+        .pattern-red {
+            background-color: #ef4444;
+            color: white;
+        }
+
+        .box {
+            width: 40px;
+            height: 40px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border: 2px solid #333;
+            font-weight: 800;
+            font-size: 16px;
+            transition: all 0.3s ease;
+            border-radius: 4px;
+        }
+
+        /* Highlighting for the Top Equation */
+        .highlight-main {
+            outline: 4px solid #f59e0b;
+            transform: scale(1.15);
+            z-index: 20;
+            box-shadow: 0 0 15px rgba(245, 158, 11, 0.6);
+        }
+
+        .active-op {
+            outline: 4px solid #f59e0b;
+            transform: translateY(-8px) scale(1.1);
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.2);
+            z-index: 10;
+        }
+
+        .reuse-arc {
+            fill: none;
+            stroke: #ef4444;
+            stroke-width: 3;
+            stroke-dasharray: 6;
+            filter: drop-shadow(0 2px 2px rgba(0, 0, 0, 0.2));
+        }
+
+        .highlight-weight {
+            filter: brightness(1.25);
+            scale: 1.2;
+        }
+
+        .memory-slot {
+            width: 60px;
+            height: 60px;
+            border: 2px dashed #9ca3af;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 4px;
+            background: #f3f4f6;
+        }
+    </style>
+</head>
+
+<body class="p-4 md:p-8">
+    <div class="max-w-5xl mx-auto bg-white rounded-xl shadow-2xl p-6 border border-gray-200">
+        <h1 class="text-3xl font-bold text-gray-800 mb-2">
+            Reuse Distance Visualizer
+        </h1>
+        <p class="text-gray-600 mb-12">
+            Visualizing 1D Convolution: Input Size 6, Filter Size 4.
+        </p>
+
+        <!-- (a) Example 1D Convolution Equation (Now Interactive) -->
+        <div class="mb-16 flex flex-col items-center">
+            <div class="flex items-center gap-4 md:gap-8">
+                <!-- Input Map -->
+                <div class="flex gap-1" id="main-ifm-row">
+                    <div id="main-ifm-0" class="box pattern-blue">0</div>
+                    <div id="main-ifm-1" class="box pattern-blue">1</div>
+                    <div id="main-ifm-2" class="box pattern-blue">2</div>
+                    <div id="main-ifm-3" class="box pattern-blue">3</div>
+                    <div id="main-ifm-4" class="box pattern-blue">4</div>
+                    <div id="main-ifm-5" class="box pattern-blue">5</div>
+                </div>
+
+                <div class="text-3xl font-bold text-gray-400">*</div>
+
+                <!-- Filter -->
+                <div class="flex gap-1" id="main-weight-row">
+                    <div id="main-weight-0" class="box pattern-green">0</div>
+                    <div id="main-weight-1" class="box pattern-green">1</div>
+                    <div id="main-weight-2" class="box pattern-green">2</div>
+                    <div id="main-weight-3" class="box pattern-green">3</div>
+                </div>
+
+                <div class="text-3xl font-bold text-gray-400">=</div>
+
+                <!-- Output Result -->
+                <div class="flex gap-1" id="main-psum-row">
+                    <div id="main-psum-0" class="box pattern-red">0</div>
+                    <div id="main-psum-1" class="box pattern-red">1</div>
+                    <div id="main-psum-2" class="box pattern-red">2</div>
+                </div>
+            </div>
+            <p class="text-sm font-bold text-gray-400 uppercase mt-4 tracking-widest">
+                (a) Example 1D convolution
+            </p>
+            <p class="text-xs text-blue-500 mt-2 italic">
+                The highlighted elements above update as you step through the
+                operation timeline below.
+            </p>
+        </div>
+
+        <!-- Mode Selector -->
+        <div class="flex flex-wrap gap-4 mb-8">
+            <button onclick="setMode(1)" id="btn-mode1" class="px-6 py-2 rounded-full font-semibold transition-all bg-blue-600 text-white shadow-md">
+                Ordering 1: Interleaved (High Reuse Dist)
+            </button>
+            <button onclick="setMode(2)" id="btn-mode2" class="px-6 py-2 rounded-full font-semibold transition-all bg-gray-100 text-gray-600 hover:bg-gray-200">
+                Ordering 2: Weight Stationary (Low Reuse Dist)
+            </button>
+        </div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+            <!-- Left Side: Operation Timeline -->
+            <div class="lg:col-span-2 border rounded-xl p-6 bg-gray-50 relative overflow-hidden">
+                <h3 class="text-lg font-bold mb-4 text-gray-700">
+                    Timeline (Temporal Access)
+                </h3>
+
+                <div class="flex flex-col gap-8 relative" id="timeline-container">
+                    <div class="flex items-center gap-2 overflow-x-auto pb-2">
+                        <span class="w-20 text-xs font-bold text-blue-600 uppercase tracking-tighter">IFM (I)</span>
+                        <div id="ifm-row" class="flex gap-1"></div>
+                    </div>
+
+                    <div class="flex items-center gap-2 overflow-x-auto">
+                        <span class="w-20 text-xs font-bold text-gray-400 uppercase tracking-tighter">Ops</span>
+                        <div id="ops-row" class="flex gap-1 text-gray-400"></div>
+                    </div>
+
+                    <div class="flex items-center gap-2 overflow-x-auto pt-2">
+                        <span class="w-20 text-xs font-bold text-green-700 uppercase tracking-tighter">Filter (W)</span>
+                        <div id="weight-row" class="flex gap-1"></div>
+                    </div>
+
+                    <div class="flex items-center gap-2 overflow-x-auto">
+                        <span class="w-20 text-xs font-bold text-red-700 uppercase tracking-tighter">P-Sum (p)</span>
+                        <div id="psum-row" class="flex gap-1"></div>
+                    </div>
+
+                    <svg id="arc-svg" class="absolute top-0 left-0 w-full h-full pointer-events-none" style="z-index: 5"></svg>
+                </div>
+
+                <div class="mt-8 flex items-center justify-between border-t pt-6">
+                    <div class="flex gap-2">
+                        <button onclick="reset()" class="bg-gray-800 text-white px-4 py-2 rounded hover:bg-black transition">
+                            Reset
+                        </button>
+                        <button onclick="step()" id="step-btn" class="bg-blue-600 text-white px-6 py-2 rounded hover:bg-blue-700 transition font-bold shadow-lg">
+                            Next Step
+                        </button>
+                    </div>
+                    <div class="text-right">
+                        <div id="step-info" class="text-sm font-medium text-gray-500 uppercase tracking-widest">
+                            Step: 0 / 12
+                        </div>
+                        <div id="distance-info" class="text-xl font-bold text-blue-600">
+                            Distance: -
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Right Side: Memory Hierarchy -->
+            <div class="border rounded-xl p-6 bg-white shadow-sm flex flex-col items-center">
+                <h3 class="text-lg font-bold mb-6 text-gray-700">Hardware Level</h3>
+
+                <div class="flex flex-col items-center gap-4">
+                    <div class="text-center">
+                        <span class="text-[10px] font-bold text-gray-400 uppercase">On-Chip Buffer</span>
+                        <div class="flex gap-1 bg-gray-100 p-2 border-2 border-gray-400 rounded">
+                            <div class="box pattern-green">0</div>
+                            <div class="box pattern-green">1</div>
+                            <div class="box pattern-green">2</div>
+                            <div class="box pattern-green">3</div>
+                        </div>
+                    </div>
+
+                    <div class="h-8 flex flex-col items-center">
+                        <div class="w-1 h-full bg-gray-300 relative">
+                            <div class="absolute bottom-0 left-1/2 -translate-x-1/2 translate-y-full border-4 border-transparent border-t-gray-400"></div>
+                        </div>
+                    </div>
+
+                    <div class="text-center">
+                        <span class="text-[10px] font-bold text-gray-400 uppercase">PE Register</span>
+                        <div class="memory-slot" id="l1-slot">
+                            <span class="text-gray-300 text-xs italic">Empty</span>
+                        </div>
+                    </div>
+
+                    <div class="h-8 flex flex-col items-center">
+                        <div class="w-1 h-full bg-gray-300 relative">
+                            <div class="absolute bottom-0 left-1/2 -translate-x-1/2 translate-y-full border-4 border-transparent border-t-gray-400"></div>
+                        </div>
+                    </div>
+
+                    <div class="text-center">
+                        <span class="text-[10px] font-bold text-gray-400 uppercase">ALU</span>
+                        <div class="w-24 h-24 bg-orange-50 border-4 border-orange-200 rounded-lg flex flex-col items-center justify-center relative shadow-inner">
+                            <div class="text-3xl font-black text-orange-300">×</div>
+                            <div id="current-pe-weight" class="text-xs font-bold absolute bottom-2">
+                                -
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="mt-6 text-xs text-gray-500 bg-orange-50 p-4 rounded-lg border border-orange-100">
+                    <p class="font-bold mb-1 text-orange-800">Operational Hint:</p>
+                    Each step represents one MAC operation. Observe how the same Filter
+                    Weight (Green) or Input Pixel (Blue) can be reused across different
+                    time steps.
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const config = {
+            1: {
+                title: "Reuse Distance = 4",
+                weights: [0, 1, 2, 3, 0, 1, 2, 3, 0, 1, 2, 3],
+                ifms: [0, 1, 2, 3, 1, 2, 3, 4, 2, 3, 4, 5],
+                psums: [0, 0, 0, 0, 1, 1, 1, 1, 2, 2, 2, 2],
+            },
+            2: {
+                title: "Reuse Distance = 1",
+                weights: [0, 0, 0, 0, 1, 1, 1, 1, 2, 2, 2, 2],
+                ifms: [0, 1, 2, 3, 1, 2, 3, 4, 2, 3, 4, 5],
+                psums: [0, 1, 2, 3, 0, 1, 2, 3, 0, 1, 2, 3],
+            },
+        };
+
+        let currentMode = 1;
+        let currentStep = -1;
+        let lastAccessIdx = {};
+
+        function setMode(m) {
+            currentMode = m;
+            document.getElementById("btn-mode1").className =
+                m === 1 ?
+                "px-6 py-2 rounded-full font-semibold transition-all bg-blue-600 text-white shadow-md" :
+                "px-6 py-2 rounded-full font-semibold transition-all bg-gray-100 text-gray-600 hover:bg-gray-200";
+            document.getElementById("btn-mode2").className =
+                m === 2 ?
+                "px-6 py-2 rounded-full font-semibold transition-all bg-blue-600 text-white shadow-md" :
+                "px-6 py-2 rounded-full font-semibold transition-all bg-gray-100 text-gray-600 hover:bg-gray-200";
+            reset();
+        }
+
+        function reset() {
+            currentStep = -1;
+            lastAccessIdx = {};
+            document.getElementById("ifm-row").innerHTML = "";
+            document.getElementById("ops-row").innerHTML = "";
+            document.getElementById("weight-row").innerHTML = "";
+            document.getElementById("psum-row").innerHTML = "";
+            document.getElementById("arc-svg").innerHTML = "";
+            document.getElementById("l1-slot").innerHTML =
+                '<span class="text-gray-300 text-xs italic">Empty</span>';
+            document.getElementById("current-pe-weight").innerText = "-";
+            document.getElementById("step-info").innerText = `Step: 0 / 12`;
+            document.getElementById("distance-info").innerText = "Distance: -";
+            document.getElementById("step-btn").disabled = false;
+            document.getElementById("step-btn").innerText = "Next Step";
+
+            // Clear highlights in top equation
+            document
+                .querySelectorAll(
+                    "#main-ifm-row .box, #main-weight-row .box, #main-psum-row .box",
+                )
+                .forEach((el) => {
+                    el.classList.remove("highlight-main");
+                });
+
+            initRows();
+        }
+
+        function initRows() {
+            const data = config[currentMode];
+            for (let i = 0; i < 12; i++) {
+                createBox("ifm-row", data.ifms[i], "pattern-blue", i, "ifm");
+                createBox("ops-row", "×", "", i, "op");
+                createBox(
+                    "weight-row",
+                    data.weights[i],
+                    "pattern-green",
+                    i,
+                    "weight",
+                );
+                createBox("psum-row", data.psums[i], "pattern-red", i, "psum");
+            }
+        }
+
+        function createBox(parentId, val, patternClass, idx, type) {
+            const div = document.createElement("div");
+            div.className = `box ${patternClass}`;
+            div.id = `${type}-${idx}`;
+            div.innerText = val;
+            if (type === "op") {
+                div.style.border = "none";
+                div.style.color = "#cbd5e1";
+            }
+            document.getElementById(parentId).appendChild(div);
+        }
+
+        function updateMainHighlights(inputIdx, weightIdx, psumIdx) {
+            // Remove previous highlights
+            document
+                .querySelectorAll(
+                    "#main-ifm-row .box, #main-weight-row .box, #main-psum-row .box",
+                )
+                .forEach((el) => {
+                    el.classList.remove("highlight-main");
+                });
+
+            // Add new highlights
+            const ifmBox = document.getElementById(`main-ifm-${inputIdx}`);
+            const weightBox = document.getElementById(`main-weight-${weightIdx}`);
+            const psumBox = document.getElementById(`main-psum-${psumIdx}`);
+
+            if (ifmBox) ifmBox.classList.add("highlight-main");
+            if (weightBox) weightBox.classList.add("highlight-main");
+            if (psumBox) psumBox.classList.add("highlight-main");
+        }
+
+        function step() {
+            if (currentStep >= 11) return;
+            currentStep++;
+
+            const data = config[currentMode];
+            const weightVal = data.weights[currentStep];
+            const inputVal = data.ifms[currentStep];
+            const pSumIdx = data.psums[currentStep];
+
+            // Update Timeline UI
+            document
+                .querySelectorAll(".box")
+                .forEach((b) => b.classList.remove("active-op"));
+            document
+                .getElementById(`ifm-${currentStep}`)
+                .classList.add("active-op");
+            document
+                .getElementById(`weight-${currentStep}`)
+                .classList.add("active-op");
+            document
+                .getElementById(`psum-${currentStep}`)
+                .classList.add("active-op");
+
+            // Update Highlights in Top Equation
+            updateMainHighlights(inputVal, weightVal, pSumIdx);
+
+            // Update Memory Hierarchy UI
+            document.getElementById("l1-slot").innerHTML =
+                `<div class="box pattern-green shadow-lg scale-110">${weightVal}</div>`;
+            document.getElementById("current-pe-weight").innerText =
+                `W: ${weightVal}`;
+
+            // Calculate Distance logic
+            if (lastAccessIdx[weightVal] !== undefined) {
+                const distance = currentStep - lastAccessIdx[weightVal];
+                document.getElementById("distance-info").innerText =
+                    `Distance: ${distance}`;
+                drawArc(lastAccessIdx[weightVal], currentStep);
+            } else {
+                document.getElementById("distance-info").innerText =
+                    `Distance: First Access`;
+            }
+
+            lastAccessIdx[weightVal] = currentStep;
+            document.getElementById("step-info").innerText =
+                `Step: ${currentStep + 1} / 12`;
+
+            if (currentStep === 11) {
+                document.getElementById("step-btn").disabled = true;
+                document.getElementById("step-btn").innerText = "Finished";
+            }
+        }
+
+        function drawArc(startIdx, endIdx) {
+            const svg = document.getElementById("arc-svg");
+            const wStart = document
+                .getElementById(`weight-${startIdx}`)
+                .getBoundingClientRect();
+            const wEnd = document
+                .getElementById(`weight-${endIdx}`)
+                .getBoundingClientRect();
+            const container = document
+                .getElementById("timeline-container")
+                .getBoundingClientRect();
+
+            const x1 = wStart.left - container.left + 20;
+            const x2 = wEnd.left - container.left + 20;
+            const y = wStart.top - container.top;
+
+            const height = Math.min(45, (x2 - x1) / 2);
+
+            const path = document.createElementNS(
+                "http://www.w3.org/2000/svg",
+                "path",
+            );
+            const d = `M ${x1} ${y} Q ${(x1 + x2) / 2} ${y - height} ${x2} ${y}`;
+            path.setAttribute("d", d);
+            path.setAttribute("class", "reuse-arc");
+
+            const oldBox = document.getElementById(`weight-${startIdx}`);
+            oldBox.classList.add("highlight-weight");
+            setTimeout(() => oldBox.classList.remove("highlight-weight"), 800);
+
+            svg.appendChild(path);
+        }
+
+        window.onload = () => setMode(1);
+    </script>
+</body>
+
+</html>

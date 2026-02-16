@@ -1,0 +1,350 @@
+<!doctype html>
+<!-- Brief: Visualization of internal-covariate-shift mitigation via batch normalization. -->
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Optimization Landscape Visualizer</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body {
+            background-color: #020617;
+            color: white;
+            overflow-x: hidden;
+            font-family: sans-serif;
+        }
+
+        canvas {
+            touch-action: none;
+            cursor: crosshair;
+        }
+
+        .glass {
+            background: rgba(15, 23, 42, 0.8);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            height: 18px;
+            width: 18px;
+            border-radius: 50%;
+            background: #3b82f6;
+            cursor: pointer;
+            border: 2px solid white;
+        }
+    </style>
+</head>
+
+<body class="min-h-screen flex flex-col items-center p-4 md:p-6">
+    <div class="max-w-5xl w-full space-y-4">
+        <!-- Header -->
+        <header class="flex flex-col md:flex-row md:items-end justify-between gap-4">
+            <div>
+                <h1 class="text-3xl font-black tracking-tight bg-gradient-to-br from-white to-slate-500 bg-clip-text text-transparent">
+                    SMOOTHING THE LANDSCAPE
+                </h1>
+                <p class="text-slate-400 text-sm max-w-md">
+                    Watch how "Internal Covariate Shift" makes training a rocky climb,
+                    and how Normalization turns it into a slide.
+                </p>
+            </div>
+            <div class="flex gap-2">
+                <button id="ruggedBtn" class="px-4 py-2 rounded-lg text-xs font-bold transition-all bg-red-500/20 text-red-400 border border-red-500/40 hover:bg-red-500/30">
+                    RAW (RUGGED)
+                </button>
+                <button id="smoothBtn" class="px-4 py-2 rounded-lg text-xs font-bold transition-all bg-emerald-500 text-white shadow-[0_0_20px_rgba(16,185,129,0.3)]">
+                    NORMALIZED (SMOOTH)
+                </button>
+            </div>
+        </header>
+
+        <!-- Main Workspace -->
+        <div class="grid grid-cols-1 lg:grid-cols-4 gap-4">
+            <!-- Controls Sidebar -->
+            <div class="lg:col-span-1 space-y-4">
+                <div class="glass p-5 rounded-2xl space-y-5">
+                    <div>
+                        <label class="text-[10px] font-bold text-slate-500 uppercase tracking-widest block mb-3">Step Size (Learning Rate)</label>
+                        <input id="lrSlider" type="range" min="0.01" max="0.4" step="0.01" value="0.08" class="w-full h-1.5 bg-slate-800 rounded-lg appearance-none cursor-pointer" />
+                        <div class="flex justify-between mt-2">
+                            <span class="text-[10px] text-slate-500">Cautious</span>
+                            <span id="lrValue" class="text-xs font-mono text-blue-400">0.08</span>
+                            <span class="text-[10px] text-slate-500">Aggressive</span>
+                        </div>
+                    </div>
+
+                    <div class="pt-4 border-t border-white/5">
+                        <button id="resetBtn" class="w-full py-2 bg-slate-800 hover:bg-slate-700 rounded-lg text-sm transition-colors">
+                            Clear Particles
+                        </button>
+                    </div>
+                </div>
+
+                <div id="infoBox" class="glass p-5 rounded-2xl border-l-4 border-emerald-500">
+                    <h3 class="text-xs font-bold text-emerald-400 uppercase mb-1">
+                        Current Insight
+                    </h3>
+                    <p id="insightText" class="text-xs text-slate-400 leading-relaxed">
+                        Smooth landscapes allow for <b>Aggressive</b> learning rates
+                        without the model "exploding."
+                    </p>
+                </div>
+            </div>
+
+            <!-- Visualization Canvas -->
+            <div class="lg:col-span-3 glass rounded-2xl overflow-hidden relative shadow-2xl group border-white/5">
+                <!-- Instruction Overlays -->
+                <div id="canvasGuide" class="absolute inset-0 flex items-center justify-center pointer-events-none z-20 transition-opacity duration-500">
+                    <div class="text-center space-y-2 bg-black/40 backdrop-blur-sm p-6 rounded-3xl border border-white/10">
+                        <div class="text-3xl animate-bounce">👇</div>
+                        <p class="text-sm font-medium">
+                            Click anywhere to drop a particle
+                        </p>
+                        <p class="text-[10px] text-slate-400">
+                            Watch it try to reach the center (the Global Minimum)
+                        </p>
+                    </div>
+                </div>
+
+                <canvas id="landscapeCanvas" class="w-full h-[500px]"></canvas>
+
+                <!-- Legend -->
+                <div class="absolute bottom-4 left-4 flex items-center gap-4 pointer-events-none">
+                    <div class="flex items-center gap-1.5">
+                        <div class="w-2 h-2 rounded-full bg-yellow-400 shadow-[0_0_10px_#fbbf24]"></div>
+                        <span class="text-[10px] font-bold text-white/70 uppercase">Target</span>
+                    </div>
+                    <div class="flex items-center gap-1.5">
+                        <div class="w-2 h-2 rounded-full bg-blue-500"></div>
+                        <span class="text-[10px] font-bold text-white/70 uppercase">Gradient Path</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const canvas = document.getElementById("landscapeCanvas");
+        const ctx = canvas.getContext("2d");
+        const ruggedBtn = document.getElementById("ruggedBtn");
+        const smoothBtn = document.getElementById("smoothBtn");
+        const lrSlider = document.getElementById("lrSlider");
+        const lrValue = document.getElementById("lrValue");
+        const resetBtn = document.getElementById("resetBtn");
+        const guide = document.getElementById("canvasGuide");
+        const insightText = document.getElementById("insightText");
+        const infoBox = document.getElementById("infoBox");
+
+        let isSmooth = true;
+        let learningRate = 0.08;
+        let particles = [];
+        let width, height;
+        let firstClick = false;
+
+        function getLoss(x, y) {
+            const nx = (x / width) * 2 - 1;
+            const ny = (y / height) * 2 - 1;
+
+            // The Global Minimum (A parabolic bowl)
+            const base = (nx * nx + ny * ny) * 12;
+
+            if (isSmooth) {
+                // Low-frequency waves representing a well-behaved network
+                return base + Math.sin(nx * 4) * 0.2 + Math.cos(ny * 4) * 0.2;
+            } else {
+                // High-frequency, high-amplitude noise representing "Internal Covariate Shift"
+                // This creates many "False Bottoms" (Local Minima)
+                return (
+                    base +
+                    Math.sin(nx * 15) * 1.8 +
+                    Math.cos(ny * 18) * 1.8 +
+                    Math.sin(nx * 40) * 0.4
+                );
+            }
+        }
+
+        function getGradient(x, y) {
+            const h = 0.2;
+            const dx = (getLoss(x + h, y) - getLoss(x - h, y)) / (2 * h);
+            const dy = (getLoss(x, y + h) - getLoss(x, y - h)) / (2 * h);
+            return {
+                dx,
+                dy
+            };
+        }
+
+        function resize() {
+            const container = canvas.parentElement;
+            width = container.clientWidth;
+            height = container.clientHeight;
+            canvas.width = width * window.devicePixelRatio;
+            canvas.height = height * window.devicePixelRatio;
+            ctx.scale(window.devicePixelRatio, window.devicePixelRatio);
+            drawBackground();
+        }
+
+        function drawBackground() {
+            const step = 6;
+            for (let x = 0; x < width; x += step) {
+                for (let y = 0; y < height; y += step) {
+                    const val = getLoss(x, y);
+                    const intensity = Math.min(60, Math.max(5, 40 - val * 4));
+                    const hue = isSmooth ? 160 : 0;
+                    const sat = isSmooth ? 30 : 20;
+                    ctx.fillStyle = `hsl(${hue}, ${sat}%, ${intensity}%)`;
+                    ctx.fillRect(x, y, step, step);
+                }
+            }
+
+            // Global Minimum marker
+            ctx.beginPath();
+            ctx.arc(width / 2, height / 2, 6, 0, Math.PI * 2);
+            ctx.fillStyle = "#fbbf24";
+            ctx.shadowBlur = 15;
+            ctx.shadowColor = "#fbbf24";
+            ctx.fill();
+            ctx.shadowBlur = 0;
+        }
+
+        class Particle {
+            constructor(x, y) {
+                this.x = x;
+                this.y = y;
+                this.path = [{
+                    x,
+                    y
+                }];
+                this.done = false;
+                this.color = isSmooth ? "#10b981" : "#3b82f6";
+                this.timer = 0;
+            }
+
+            update() {
+                if (this.done) return;
+                this.timer++;
+
+                const grad = getGradient(this.x, this.y);
+
+                // Standard Gradient Descent Logic
+                this.x -= grad.dx * learningRate * 60;
+                this.y -= grad.dy * learningRate * 60;
+
+                this.path.push({
+                    x: this.x,
+                    y: this.y
+                });
+
+                const distToCenter = Math.hypot(
+                    this.x - width / 2,
+                    this.y - height / 2,
+                );
+                if (
+                    distToCenter < 6 ||
+                    this.path.length > 400 ||
+                    this.x < 0 ||
+                    this.x > width ||
+                    this.y < 0 ||
+                    this.y > height
+                ) {
+                    this.done = true;
+                }
+            }
+
+            draw() {
+                ctx.beginPath();
+                ctx.setLineDash([2, 2]);
+                ctx.moveTo(this.path[0].x, this.path[0].y);
+                for (let i = 1; i < this.path.length; i++) {
+                    ctx.lineTo(this.path[i].x, this.path[i].y);
+                }
+                ctx.strokeStyle = this.color + "88";
+                ctx.lineWidth = 1;
+                ctx.stroke();
+                ctx.setLineDash([]);
+
+                // Draw Head
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, 4, 0, Math.PI * 2);
+                ctx.fillStyle = this.color;
+                ctx.fill();
+
+                // Pulsing effect
+                ctx.beginPath();
+                ctx.arc(
+                    this.x,
+                    this.y,
+                    4 + Math.sin(this.timer * 0.2) * 2,
+                    0,
+                    Math.PI * 2,
+                );
+                ctx.strokeStyle = this.color;
+                ctx.stroke();
+            }
+        }
+
+        function animate() {
+            ctx.clearRect(0, 0, width, height);
+            drawBackground();
+
+            particles.forEach((p) => {
+                p.update();
+                p.draw();
+            });
+
+            requestAnimationFrame(animate);
+        }
+
+        // Interaction
+        canvas.addEventListener("mousedown", (e) => {
+            if (!firstClick) {
+                guide.style.opacity = "0";
+                firstClick = true;
+            }
+            const rect = canvas.getBoundingClientRect();
+            const x = e.clientX - rect.left;
+            const y = e.clientY - rect.top;
+            particles.push(new Particle(x, y));
+        });
+
+        ruggedBtn.addEventListener("click", () => {
+            isSmooth = false;
+            ruggedBtn.className =
+                "px-4 py-2 rounded-lg text-xs font-bold bg-red-500 text-white shadow-[0_0_20px_rgba(239,68,68,0.3)]";
+            smoothBtn.className =
+                "px-4 py-2 rounded-lg text-xs font-bold transition-all bg-emerald-500/10 text-emerald-500 border border-emerald-500/20";
+            insightText.innerHTML =
+                "<b>Rugged Terrain:</b> The noise creates 'local minima.' Particles get trapped in small dips before reaching the center.";
+            infoBox.className = "glass p-5 rounded-2xl border-l-4 border-red-500";
+            particles = [];
+        });
+
+        smoothBtn.addEventListener("click", () => {
+            isSmooth = true;
+            smoothBtn.className =
+                "px-4 py-2 rounded-lg text-xs font-bold transition-all bg-emerald-500 text-white shadow-[0_0_20px_rgba(16,185,129,0.3)]";
+            ruggedBtn.className =
+                "px-4 py-2 rounded-lg text-xs font-bold transition-all bg-red-500/10 text-red-500 border border-red-500/20";
+            insightText.innerHTML =
+                "<b>Smooth Terrain:</b> Normalization removes the 'noise.' The gradient is consistent, allowing for a straight shot to the minimum.";
+            infoBox.className =
+                "glass p-5 rounded-2xl border-l-4 border-emerald-500";
+            particles = [];
+        });
+
+        lrSlider.addEventListener("input", (e) => {
+            learningRate = parseFloat(e.target.value);
+            lrValue.innerText = learningRate.toFixed(2);
+        });
+
+        resetBtn.addEventListener("click", () => (particles = []));
+        window.addEventListener("resize", resize);
+
+        resize();
+        animate();
+    </script>
+</body>
+
+</html>

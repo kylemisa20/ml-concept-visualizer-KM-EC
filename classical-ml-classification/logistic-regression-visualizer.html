@@ -1,0 +1,424 @@
+<!doctype html>
+<!-- Brief: Visualization of logistic-regression decision boundaries and probabilities. -->
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Logistic Regression MLE Visualizer</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Updated Plotly to a modern version (v2.x) to fix console warnings and ensure stability -->
+    <script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
+    <style>
+        .slider-label {
+            min-width: 100px;
+        }
+
+        #plot-container {
+            height: 500px;
+        }
+
+        .stat-card {
+            background: #f9fafb;
+            border: 1px solid #e5e7eb;
+            padding: 1rem;
+            border-radius: 0.5rem;
+        }
+
+        .formula-card {
+            background: #fff;
+            border: 1px dashed #d1d5db;
+            padding: 0.75rem;
+            border-radius: 0.5rem;
+            font-family: serif;
+        }
+    </style>
+</head>
+
+<body class="bg-gray-50 text-gray-900 font-sans p-4">
+    <div class="max-w-6xl mx-auto bg-white rounded-xl shadow-lg p-6">
+        <header class="mb-6 border-b pb-4">
+            <h1 class="text-2xl font-bold text-blue-800">
+                Visualizing Maximum Likelihood
+            </h1>
+            <p class="text-gray-600 italic">
+                Adjust the parameters to find the "peak" likelihood for the data.
+            </p>
+        </header>
+
+        <div class="grid grid-cols-1 lg:grid-cols-4 gap-6">
+            <!-- Controls Sidebar -->
+            <div class="lg:col-span-1 space-y-6 overflow-y-auto max-h-[85vh] pr-2">
+                <div class="space-y-4">
+                    <h2 class="font-semibold text-lg border-b pb-2 text-gray-700">
+                        Theoretical Model
+                    </h2>
+
+                    <div class="formula-card">
+                        <p class="text-xs text-gray-500 mb-1 uppercase font-bold">
+                            Logistic Function
+                        </p>
+                        <div class="text-sm text-center py-2 italic bg-gray-50 rounded">
+                            p = 1 / (1 + e<sup>-(b₀ + b₁x)</sup>)
+                        </div>
+                    </div>
+
+                    <div class="formula-card">
+                        <p class="text-xs text-gray-500 mb-1 uppercase font-bold">
+                            Joint Likelihood (L)
+                        </p>
+                        <div class="text-sm text-center py-2 italic bg-gray-50 rounded">
+                            L = Π p<sub>i</sub><sup>y<sub>i</sub></sup>(1-p<sub>i</sub>)<sup>1-y<sub>i</sub></sup>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="space-y-4 pt-4 border-t">
+                    <h2 class="font-semibold text-lg border-b pb-2 text-gray-700">
+                        Model Parameters
+                    </h2>
+
+                    <div>
+                        <div class="flex justify-between mb-1">
+                            <label class="text-sm font-medium">Intercept (b₀)</label>
+                            <span id="b0-val" class="text-sm font-mono font-bold text-blue-600">0.00</span>
+                        </div>
+                        <input type="range" id="b0-slider" min="-10" max="10" step="0.1" value="0" class="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer" />
+                    </div>
+
+                    <div>
+                        <div class="flex justify-between mb-1">
+                            <label class="text-sm font-medium">Slope (b₁)</label>
+                            <span id="b1-val" class="text-sm font-mono font-bold text-blue-600">1.00</span>
+                        </div>
+                        <input type="range" id="b1-slider" min="-5" max="5" step="0.1" value="1" class="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer" />
+                    </div>
+                </div>
+
+                <!-- Optimization Metrics -->
+                <div class="space-y-3 pt-4 border-t">
+                    <h2 class="font-semibold text-lg border-b pb-2 text-gray-700">
+                        Optimization Stats
+                    </h2>
+                    <div class="stat-card">
+                        <p class="text-xs uppercase text-gray-500 font-bold mb-1">
+                            Likelihood (L)
+                        </p>
+                        <p id="likelihood-val" class="text-xl font-mono text-green-700">
+                            0.0000
+                        </p>
+                    </div>
+                    <div class="stat-card">
+                        <p class="text-xs uppercase text-gray-500 font-bold mb-1">
+                            Log-Likelihood (ln L)
+                        </p>
+                        <p id="log-likelihood-val" class="text-xl font-mono text-purple-700">
+                            -0.00
+                        </p>
+                    </div>
+                </div>
+
+                <!-- Performance Metrics -->
+                <div class="space-y-3 pt-4 border-t">
+                    <h2 class="font-semibold text-lg border-b pb-2 text-gray-700">
+                        Classification (Threshold = 0.5)
+                    </h2>
+                    <div class="grid grid-cols-1 gap-2">
+                        <div class="stat-card py-2 px-3">
+                            <div class="flex justify-between items-center">
+                                <p class="text-[10px] uppercase text-gray-500 font-bold">
+                                    Accuracy
+                                </p>
+                                <p id="accuracy-val" class="text-md font-mono font-bold">
+                                    0%
+                                </p>
+                            </div>
+                        </div>
+                        <div class="stat-card py-2 px-3">
+                            <div class="flex justify-between items-center">
+                                <p class="text-[10px] uppercase text-gray-500 font-bold">
+                                    Precision
+                                </p>
+                                <p id="precision-val" class="text-md font-mono font-bold">
+                                    0%
+                                </p>
+                            </div>
+                        </div>
+                        <div class="stat-card py-2 px-3">
+                            <div class="flex justify-between items-center">
+                                <p class="text-[10px] uppercase text-gray-500 font-bold">
+                                    Recall
+                                </p>
+                                <p id="recall-val" class="text-md font-mono font-bold">0%</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Plot Area -->
+            <div class="lg:col-span-3">
+                <div id="plot-container"></div>
+                <div class="mt-4 p-4 bg-blue-50 border border-blue-100 rounded-lg">
+                    <h3 class="font-bold text-blue-800 text-sm mb-2">
+                        How to read this plot:
+                    </h3>
+                    <ul class="text-sm text-blue-700 list-disc ml-5 space-y-1">
+                        <li>
+                            The <strong>Vertical Lines</strong> represent the likelihood of
+                            each point:
+                            <span class="text-green-600 font-bold">Green</span> for Correct,
+                            <span class="text-red-600 font-bold">Red</span> for Incorrect.
+                        </li>
+                        <li>
+                            <strong>Correct Points:</strong> Appear as solid markers (X or
+                            Circle).
+                        </li>
+                        <li>
+                            <strong>Incorrect Points:</strong> Are highlighted with a
+                            <strong>glowing red outline</strong>.
+                        </li>
+                        <li>
+                            <strong>Goal:</strong> Adjust the curve to minimize the number
+                            of red-outlined points and maximize the total likelihood.
+                        </li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Sample Data: A simple set of points
+        const dataX = [
+            -2.5, -2, -1.8, -1.5, -1, -0.5, 0.2, 0.8, 1.2, 1.5, 2, 2.5, 2.8, -0.2,
+        ];
+        const dataY = [0, 0, 0, 0, 0, 0, 1, 0, 1, 1, 1, 1, 1, 1];
+
+        const b0Slider = document.getElementById("b0-slider");
+        const b1Slider = document.getElementById("b1-slider");
+        const b0ValDisplay = document.getElementById("b0-val");
+        const b1ValDisplay = document.getElementById("b1-val");
+        const likelihoodDisplay = document.getElementById("likelihood-val");
+        const logLikelihoodDisplay =
+            document.getElementById("log-likelihood-val");
+
+        // Performance display elements
+        const accuracyDisplay = document.getElementById("accuracy-val");
+        const precisionDisplay = document.getElementById("precision-val");
+        const recallDisplay = document.getElementById("recall-val");
+
+        function sigmoid(z) {
+            return 1 / (1 + Math.exp(-z));
+        }
+
+        function updatePlot() {
+            const b0 = parseFloat(b0Slider.value);
+            const b1 = parseFloat(b1Slider.value);
+
+            b0ValDisplay.innerText = b0.toFixed(2);
+            b1ValDisplay.innerText = b1.toFixed(2);
+
+            // Generate Curve
+            const curveX = [];
+            const curveY = [];
+            for (let x = -4; x <= 4; x += 0.1) {
+                curveX.push(x);
+                curveY.push(sigmoid(b0 + b1 * x));
+            }
+
+            // Calculate Likelihoods and Classification metrics
+            let totalLikelihood = 1.0;
+            let logLikelihood = 0.0;
+            const likelihoodLines = [];
+
+            let tp = 0,
+                tn = 0,
+                fp = 0,
+                fn = 0;
+            const threshold = 0.5;
+
+            // Arrays for different types of markers
+            const c1_correct_X = [],
+                c1_correct_Y = [];
+            const c1_incorrect_X = [],
+                c1_incorrect_Y = [];
+            const c0_correct_X = [],
+                c0_correct_Y = [];
+            const c0_incorrect_X = [],
+                c0_incorrect_Y = [];
+
+            dataX.forEach((x, i) => {
+                const yTrue = dataY[i];
+                const p = sigmoid(b0 + b1 * x);
+                const likelihood = yTrue === 1 ? p : 1 - p;
+
+                totalLikelihood *= likelihood;
+                logLikelihood += Math.log(Math.max(likelihood, 1e-10));
+
+                // Classification Logic
+                const yPred = p >= threshold ? 1 : 0;
+                const isCorrect = yTrue === yPred;
+
+                if (yTrue === 1 && yPred === 1) {
+                    tp++;
+                    c1_correct_X.push(x);
+                    c1_correct_Y.push(1);
+                } else if (yTrue === 0 && yPred === 0) {
+                    tn++;
+                    c0_correct_X.push(x);
+                    c0_correct_Y.push(0);
+                } else if (yTrue === 0 && yPred === 1) {
+                    fp++;
+                    c0_incorrect_X.push(x);
+                    c0_incorrect_Y.push(0);
+                } else if (yTrue === 1 && yPred === 0) {
+                    fn++;
+                    c1_incorrect_X.push(x);
+                    c1_incorrect_Y.push(1);
+                }
+
+                // Line from data point to the curve
+                likelihoodLines.push({
+                    x: [x, x],
+                    y: [yTrue, p],
+                    mode: "lines",
+                    line: {
+                        color: isCorrect ?
+                            "rgba(34, 197, 94, 0.6)" :
+                            "rgba(239, 68, 68, 0.7)",
+                        width: isCorrect ? 2 : 3,
+                    },
+                    showlegend: false,
+                    hoverinfo: "none",
+                });
+            });
+
+            // Update Optimization Text
+            likelihoodDisplay.innerText = totalLikelihood.toExponential(4);
+            logLikelihoodDisplay.innerText = logLikelihood.toFixed(2);
+
+            // Calculate Metrics
+            const total = dataX.length;
+            const accuracy = ((tp + tn) / total) * 100;
+            const precision = tp + fp > 0 ? (tp / (tp + fp)) * 100 : 0;
+            const recall = tp + fn > 0 ? (tp / (tp + fn)) * 100 : 0;
+
+            accuracyDisplay.innerText = accuracy.toFixed(0) + "%";
+            precisionDisplay.innerText = precision.toFixed(0) + "%";
+            recallDisplay.innerText = recall.toFixed(0) + "%";
+
+            const traces = [{
+                    x: curveX,
+                    y: curveY,
+                    name: "Predicted Probability (p)",
+                    line: {
+                        color: "#1d4ed8",
+                        width: 3
+                    },
+                },
+                // Correct Class 1
+                {
+                    x: c1_correct_X,
+                    y: c1_correct_Y,
+                    mode: "markers",
+                    name: "Correct Class 1",
+                    marker: {
+                        color: "#ef4444",
+                        symbol: "x",
+                        size: 10,
+                        line: {
+                            width: 0
+                        },
+                    },
+                },
+                // Incorrect Class 1 (Highlighted)
+                {
+                    x: c1_incorrect_X,
+                    y: c1_incorrect_Y,
+                    mode: "markers",
+                    name: "Incorrect Class 1",
+                    marker: {
+                        color: "#ef4444",
+                        symbol: "x",
+                        size: 10,
+                        line: {
+                            color: "rgba(239, 68, 68, 0.8)",
+                            width: 6
+                        },
+                    },
+                },
+                // Correct Class 0
+                {
+                    x: c0_correct_X,
+                    y: c0_correct_Y,
+                    mode: "markers",
+                    name: "Correct Class 0",
+                    marker: {
+                        color: "#3b82f6",
+                        symbol: "circle",
+                        size: 10,
+                        line: {
+                            width: 0
+                        },
+                    },
+                },
+                // Incorrect Class 0 (Highlighted)
+                {
+                    x: c0_incorrect_X,
+                    y: c0_incorrect_Y,
+                    mode: "markers",
+                    name: "Incorrect Class 0",
+                    marker: {
+                        color: "#3b82f6",
+                        symbol: "circle",
+                        size: 10,
+                        line: {
+                            color: "rgba(239, 68, 68, 0.8)",
+                            width: 3
+                        },
+                    },
+                },
+                ...likelihoodLines,
+            ];
+
+            const layout = {
+                margin: {
+                    t: 20,
+                    r: 20,
+                    b: 40,
+                    l: 40
+                },
+                xaxis: {
+                    title: "Feature Value (X)",
+                    range: [-4, 4],
+                    fixedrange: true,
+                },
+                yaxis: {
+                    title: "Probability / Outcome",
+                    range: [-0.1, 1.1],
+                    fixedrange: true,
+                },
+                legend: {
+                    orientation: "h",
+                    y: -0.2
+                },
+                hovermode: "closest",
+                plot_bgcolor: "#ffffff",
+                paper_bgcolor: "#ffffff",
+            };
+
+            Plotly.newPlot("plot-container", traces, layout, {
+                responsive: true,
+                displayModeBar: false,
+            });
+        }
+
+        b0Slider.oninput = updatePlot;
+        b1Slider.oninput = updatePlot;
+
+        window.onload = updatePlot;
+    </script>
+</body>
+
+</html>

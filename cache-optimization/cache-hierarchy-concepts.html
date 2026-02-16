@@ -1,0 +1,585 @@
+<!doctype html>
+<!-- Brief: Visualization of cache hierarchy concepts and memory-level performance effects. -->
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Visualizing CPU Cache & Penalty</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body {
+            background-color: #f8fafc;
+            color: #1e293b;
+            font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+            overflow-x: hidden;
+        }
+
+        canvas {
+            cursor: crosshair;
+        }
+
+        .stat-card {
+            background: #ffffff;
+            border: 1px solid #e2e8f0;
+            box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1);
+        }
+
+        .instruction-box {
+            background: #eff6ff;
+            border: 1px solid #bfdbfe;
+        }
+
+        .latency-bar {
+            height: 8px;
+            border-radius: 4px;
+            transition: width 0.3s ease;
+        }
+
+        @keyframes float-up {
+            0% {
+                transform: translateY(0);
+                opacity: 1;
+            }
+
+            100% {
+                transform: translateY(-40px);
+                opacity: 0;
+            }
+        }
+
+        .cycle-floater {
+            position: absolute;
+            animation: float-up 1s forwards;
+            font-weight: bold;
+            pointer-events: none;
+            z-index: 50;
+        }
+    </style>
+</head>
+
+<body class="p-4 md:p-8">
+    <div class="max-w-6xl mx-auto">
+        <header class="mb-8">
+            <h1 class="text-3xl font-bold text-blue-600">
+                Cache Latency & Eviction
+            </h1>
+            <p class="text-slate-600 mt-2">
+                Cache capacity: <span class="text-blue-600 font-bold">4 Blocks</span>.
+                Watch for the
+                <span class="text-rose-600 font-bold">Red Flash</span> when data is
+                evicted!
+            </p>
+        </header>
+
+        <div class="grid grid-cols-1 lg:grid-cols-4 gap-6">
+            <!-- Controls & Stats -->
+            <div class="lg:col-span-1 space-y-6">
+                <div class="stat-card p-6 rounded-xl">
+                    <h2 class="text-xs font-semibold uppercase tracking-wider text-slate-400 mb-4 font-bold">
+                        Latency Comparison
+                    </h2>
+                    <div class="space-y-4">
+                        <div class="space-y-1">
+                            <div class="flex justify-between text-xs font-bold text-emerald-600">
+                                <span>CACHE HIT</span>
+                                <span>1 Cycle</span>
+                            </div>
+                            <div class="w-full bg-slate-100 rounded-full h-2">
+                                <div class="latency-bar bg-emerald-500" style="width: 2%"></div>
+                            </div>
+                        </div>
+                        <div class="space-y-1">
+                            <div class="flex justify-between text-xs font-bold text-rose-600">
+                                <span>CACHE MISS (RAM)</span>
+                                <span>50 Cycles</span>
+                            </div>
+                            <div class="w-full bg-slate-100 rounded-full h-2">
+                                <div class="latency-bar bg-rose-500" style="width: 100%"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="stat-card p-6 rounded-xl">
+                    <h2 class="text-xs font-semibold uppercase tracking-wider text-slate-400 mb-4 font-bold">
+                        Live Performance
+                    </h2>
+                    <div class="space-y-3">
+                        <div class="flex justify-between">
+                            <span class="text-slate-600">Total Cycles:</span>
+                            <span id="cycles" class="font-mono text-blue-600 font-bold">0</span>
+                        </div>
+                        <div class="flex justify-between">
+                            <span class="text-slate-600">Hit Rate:</span>
+                            <span id="hitRate" class="font-mono font-black">0%</span>
+                        </div>
+                        <div class="pt-2 border-t border-slate-100 text-[11px] text-slate-500">
+                            Avg Latency:
+                            <span id="avgLatency" class="font-bold">0</span> cycles/access
+                        </div>
+                    </div>
+                </div>
+
+                <div class="stat-card p-6 rounded-xl">
+                    <div class="space-y-4">
+                        <button id="accessBtn" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 rounded-lg transition-colors shadow-md active:scale-95">
+                            Request Random
+                        </button>
+                        <button id="autoBtn" class="w-full border-2 border-blue-600 text-blue-600 hover:bg-blue-50 font-bold py-2 rounded-lg transition-colors">
+                            Toggle Auto-Run
+                        </button>
+                        <button id="resetBtn" class="w-full border-2 border-rose-600 text-rose-600 hover:bg-rose-50 font-bold py-2 rounded-lg transition-colors">
+                            Reset Simulation
+                        </button>
+                        <div>
+                            <label class="text-xs text-slate-500 font-bold">Sim Speed</label>
+                            <input type="range" id="speedSlider" min="1" max="10" value="5" class="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-blue-600" />
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Visualization Area -->
+            <div class="lg:col-span-3 flex flex-col gap-4">
+                <div id="canvasContainer" class="relative bg-white rounded-2xl p-4 border border-slate-200 shadow-xl overflow-hidden min-h-[550px]">
+                    <canvas id="cacheCanvas" class="w-full h-full"></canvas>
+
+                    <!-- Overlay Notification -->
+                    <div id="statusOverlay" class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-5xl font-black italic opacity-0 pointer-events-none uppercase transition-all duration-300">
+                        MISS!
+                    </div>
+                </div>
+
+                <div class="instruction-box p-4 rounded-xl flex items-center gap-4 text-blue-900">
+                    <div class="bg-rose-600 text-white p-2 rounded-lg">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M3 6h18" />
+                            <path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6" />
+                            <path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2" />
+                            <line x1="10" y1="11" x2="10" y2="17" />
+                            <line x1="14" y1="11" x2="14" y2="17" />
+                        </svg>
+                    </div>
+                    <div>
+                        <p class="text-sm">
+                            <strong>Eviction in Action:</strong> When the cache is full (4
+                            blocks), it must kick out the <em>oldest</em> block to make
+                            room. Watch the cache slot turn
+                            <span class="text-rose-600 font-bold">red</span> when this
+                            happens.
+                        </p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const canvas = document.getElementById("cacheCanvas");
+        const container = document.getElementById("canvasContainer");
+        const ctx = canvas.getContext("2d");
+        const statusOverlay = document.getElementById("statusOverlay");
+
+        // Configuration
+        const RAM_SIZE = 64;
+        const CACHE_SIZE = 4;
+        const LINE_SIZE = 4;
+        const RAM_COLUMNS = 8;
+        const CELL_GAP = 12;
+        const PENALTY_CYCLES = 50;
+        const HIT_CYCLES = 1;
+
+        // Shared Drawing Vars
+        let cellW, cellH, ramXStart, ramYStart;
+
+        // State
+        let ram = Array.from({
+            length: RAM_SIZE
+        }, (_, i) => ({
+            id: i
+        }));
+        let cache = [];
+        let stats = {
+            cycles: 0,
+            hits: 0,
+            misses: 0,
+            total: 0
+        };
+        let isAuto = false;
+        let animationStage = "idle"; // 'idle', 'requesting', 'penalizing', 'evicting', 'found'
+        let currentTarget = null;
+        let evictingBlock = null; // { ramStart: x, slotIndex: y }
+        let penaltyCountdown = 0;
+        let speed = 5;
+        let activeInterval = null;
+
+        function createFloater(text, color, x, y) {
+            const el = document.createElement("div");
+            el.className = "cycle-floater text-sm";
+            el.innerText = text;
+            el.style.color = color;
+            el.style.left = `${x}px`;
+            el.style.top = `${y}px`;
+            container.appendChild(el);
+            setTimeout(() => el.remove(), 1000);
+        }
+
+        function showStatus(text, color) {
+            statusOverlay.innerText = text;
+            statusOverlay.style.color = color;
+            statusOverlay.style.opacity = "1";
+            statusOverlay.style.transform = "translate(-50%, -50%) scale(1.1)";
+            setTimeout(() => {
+                statusOverlay.style.opacity = "0";
+                statusOverlay.style.transform = "translate(-50%, -50%) scale(1)";
+            }, 800);
+        }
+
+        function resize() {
+            canvas.width = canvas.offsetWidth * window.devicePixelRatio;
+            canvas.height = canvas.offsetHeight * window.devicePixelRatio;
+            ctx.scale(window.devicePixelRatio, window.devicePixelRatio);
+        }
+
+        window.addEventListener("resize", resize);
+        resize();
+
+        function draw() {
+            const w = canvas.width / window.devicePixelRatio;
+            const h = canvas.height / window.devicePixelRatio;
+            ctx.clearRect(0, 0, w, h);
+
+            cellW = (w * 0.45) / RAM_COLUMNS - CELL_GAP;
+            cellH = cellW * 0.8;
+            ramXStart = w * 0.48;
+            ramYStart = 70;
+
+            // 1. Draw CPU
+            ctx.fillStyle = "#2563eb";
+            ctx.beginPath();
+            ctx.roundRect(40, 40, 120, 70, 12);
+            ctx.fill();
+            ctx.fillStyle = "white";
+            ctx.font = "bold 18px sans-serif";
+            ctx.textAlign = "center";
+            ctx.fillText("CPU", 100, 83);
+            ctx.textAlign = "start";
+
+            // 2. Draw Cache
+            ctx.strokeStyle = "#10b981";
+            ctx.lineWidth = 1;
+            ctx.setLineDash([5, 3]);
+            ctx.strokeRect(30, 140, 180, (cellH + 8) * CACHE_SIZE + 20);
+            ctx.setLineDash([]);
+            ctx.fillStyle = "#059669";
+            ctx.font = "bold 12px sans-serif";
+            ctx.fillText(`L1 CACHE (${CACHE_SIZE} BLOCKS)`, 30, 135);
+
+            for (let i = 0; i < CACHE_SIZE; i++) {
+                const cx = 40;
+                const cy = 155 + i * (cellH + 8);
+                const cachedData = cache[i];
+                const isEvicting = evictingBlock && evictingBlock.slotIndex === i;
+
+                if (isEvicting) {
+                    ctx.fillStyle = "#fff1f2";
+                    ctx.strokeStyle = "#f43f5e";
+                    ctx.lineWidth = 3;
+                } else {
+                    ctx.fillStyle = cachedData ? "#ecfdf5" : "#f1f5f9";
+                    ctx.strokeStyle = cachedData ? "#10b981" : "#e2e8f0";
+                    ctx.lineWidth = 2;
+                }
+
+                ctx.beginPath();
+                ctx.roundRect(cx, cy, 160, cellH, 6);
+                ctx.fill();
+                ctx.stroke();
+
+                if (cachedData) {
+                    ctx.fillStyle = isEvicting ? "#be123c" : "#065f46";
+                    ctx.font = "bold 10px monospace";
+                    ctx.fillText(
+                        isEvicting ?
+                        "EVICTING..." :
+                        `BLOCK: ${cachedData.ramStart}-${cachedData.ramStart + 3}`,
+                        cx + 10,
+                        cy + 20,
+                    );
+                }
+            }
+
+            // 3. Draw RAM
+            ctx.fillStyle = "#be123c";
+            ctx.font = "bold 12px sans-serif";
+            ctx.fillText("MAIN RAM", ramXStart, 55);
+
+            ram.forEach((cell, i) => {
+                const col = i % RAM_COLUMNS;
+                const row = Math.floor(i / RAM_COLUMNS);
+                const x = ramXStart + col * (cellW + CELL_GAP);
+                const y = ramYStart + row * (cellH + CELL_GAP);
+
+                const isCached = cache.some(
+                    (slot) => i >= slot.ramStart && i < slot.ramStart + LINE_SIZE,
+                );
+                const isBeingEvicted =
+                    evictingBlock &&
+                    i >= evictingBlock.ramStart &&
+                    i < evictingBlock.ramStart + LINE_SIZE;
+
+                if (currentTarget === i) {
+                    ctx.fillStyle = "#fbbf24"; // Request target
+                } else if (isBeingEvicted) {
+                    ctx.fillStyle = "#ffe4e6"; // Eviction flash
+                } else if (isCached) {
+                    ctx.fillStyle = "#f0fdf4"; // Normal cached
+                } else {
+                    ctx.fillStyle = Math.floor(i / 4) % 2 === 0 ? "#ffffff" : "#f8fafc";
+                }
+
+                ctx.beginPath();
+                ctx.roundRect(x, y, cellW, cellH, 6);
+                ctx.fill();
+
+                // Borders
+                if (currentTarget === i) {
+                    ctx.strokeStyle = "#d97706";
+                    ctx.lineWidth = 3;
+                } else if (isBeingEvicted) {
+                    ctx.strokeStyle = "#f43f5e";
+                    ctx.lineWidth = 3;
+                } else if (isCached) {
+                    ctx.strokeStyle = "#10b981";
+                    ctx.lineWidth = 2;
+                } else {
+                    ctx.strokeStyle = "#e2e8f0";
+                    ctx.lineWidth = 1;
+                }
+                ctx.stroke();
+
+                ctx.fillStyle =
+                    currentTarget === i ?
+                    "#000" :
+                    isBeingEvicted ?
+                    "#be123c" :
+                    "#64748b";
+                ctx.font = "bold 10px monospace";
+                ctx.fillText(i.toString().padStart(2, "0"), x + 6, y + 18);
+            });
+
+            // Status indicator for eviction
+            if (animationStage === "evicting") {
+                ctx.fillStyle = "#be123c";
+                ctx.font = "bold 14px sans-serif";
+                ctx.textAlign = "center";
+                ctx.fillText("CACHE FULL: EVICTING OLDEST BLOCK...", w / 2, h - 30);
+                ctx.textAlign = "start";
+            }
+
+            // Penalty Animation
+            if (animationStage === "penalizing") {
+                const progress = 1 - penaltyCountdown / PENALTY_CYCLES;
+                ctx.beginPath();
+                ctx.setLineDash([8, 4]);
+                ctx.moveTo(ramXStart, 90);
+                ctx.lineTo(160, 90);
+                ctx.strokeStyle = "#f43f5e";
+                ctx.lineWidth = 4;
+                ctx.stroke();
+                ctx.setLineDash([]);
+                ctx.fillStyle = "#e11d48";
+                ctx.font = "bold 16px monospace";
+                ctx.fillText(
+                    `FETCHING: +${PENALTY_CYCLES - penaltyCountdown} CYCLES`,
+                    180,
+                    80,
+                );
+            }
+
+            requestAnimationFrame(draw);
+        }
+
+        function requestData(manualAddr = null) {
+            if (animationStage !== "idle") return;
+
+            let addr =
+                manualAddr !== null ?
+                manualAddr :
+                Math.floor(Math.random() * RAM_SIZE);
+            currentTarget = addr;
+            stats.total++;
+
+            const lineStart = Math.floor(addr / LINE_SIZE) * LINE_SIZE;
+            const isHit = cache.some((slot) => slot.ramStart === lineStart);
+
+            if (isHit) {
+                animationStage = "requesting";
+                createFloater("+1 Cycle (HIT)", "#059669", 100, 50);
+                setTimeout(
+                    () => {
+                        if (animationStage === "requesting") {
+                            stats.hits++;
+                            stats.cycles += HIT_CYCLES;
+                            showStatus("HIT! (1 CYCLE)", "#059669");
+                            animationStage = "idle";
+                            updateStats();
+                        }
+                    },
+                    400 / (speed / 5),
+                );
+            } else {
+                animationStage = "penalizing";
+                penaltyCountdown = PENALTY_CYCLES;
+                showStatus("MISS!", "#be123c");
+
+                activeInterval = setInterval(() => {
+                    penaltyCountdown--;
+                    stats.cycles++;
+                    updateStats();
+
+                    if (penaltyCountdown <= 0) {
+                        clearInterval(activeInterval);
+                        activeInterval = null;
+
+                        // Check if we need to evict
+                        if (cache.length >= CACHE_SIZE) {
+                            evictionStep(lineStart);
+                        } else {
+                            finalizeMiss(lineStart);
+                        }
+                    }
+                }, 50 / speed);
+            }
+        }
+
+        function evictionStep(newLineStart) {
+            animationStage = "evicting";
+            evictingBlock = {
+                ramStart: cache[0].ramStart,
+                slotIndex: 0
+            };
+            createFloater("EVICTING...", "#be123c", 40, 160);
+
+            // Allow user to see the eviction flash
+            setTimeout(
+                () => {
+                    if (animationStage === "evicting") {
+                        cache.shift();
+                        evictingBlock = null;
+                        finalizeMiss(newLineStart);
+                    }
+                },
+                800 / (speed / 5),
+            );
+        }
+
+        function finalizeMiss(lineStart) {
+            createFloater("+50 Cycles (MISS)", "#be123c", 100, 50);
+            cache.push({
+                ramStart: lineStart
+            });
+            stats.misses++;
+            animationStage = "found";
+            setTimeout(
+                () => {
+                    if (animationStage === "found") {
+                        animationStage = "idle";
+                        updateStats();
+                    }
+                },
+                300 / (speed / 5),
+            );
+        }
+
+        function updateStats() {
+            document.getElementById("cycles").innerText = stats.cycles;
+            const rate =
+                stats.total > 0 ? Math.round((stats.hits / stats.total) * 100) : 0;
+            const rateEl = document.getElementById("hitRate");
+            rateEl.innerText = rate + "%";
+            rateEl.className =
+                "font-mono font-black " +
+                (rate > 70 ? "text-emerald-600" : "text-rose-600");
+
+            const avg =
+                stats.total > 0 ? (stats.cycles / stats.total).toFixed(1) : 0;
+            document.getElementById("avgLatency").innerText = avg;
+        }
+
+        canvas.addEventListener("mousedown", (e) => {
+            const rect = canvas.getBoundingClientRect();
+            const x =
+                (e.clientX - rect.left) *
+                (canvas.width / window.devicePixelRatio / rect.width);
+            const y =
+                (e.clientY - rect.top) *
+                (canvas.height / window.devicePixelRatio / rect.height);
+            const dx = x - ramXStart;
+            const dy = y - ramYStart;
+            if (dx >= 0 && dy >= 0) {
+                const col = Math.floor(dx / (cellW + CELL_GAP));
+                const row = Math.floor(dy / (cellH + CELL_GAP));
+                if (col >= 0 && col < RAM_COLUMNS) {
+                    const idx = row * RAM_COLUMNS + col;
+                    if (idx >= 0 && idx < RAM_SIZE) requestData(idx);
+                }
+            }
+        });
+
+        document
+            .getElementById("accessBtn")
+            .addEventListener("click", () => requestData());
+        document
+            .getElementById("speedSlider")
+            .addEventListener("input", (e) => (speed = e.target.value));
+        document.getElementById("autoBtn").addEventListener("click", () => {
+            isAuto = !isAuto;
+            const btn = document.getElementById("autoBtn");
+            btn.innerText = isAuto ? "Stop Auto-Run" : "Toggle Auto-Run";
+            btn.classList.toggle("bg-blue-600", isAuto);
+            btn.classList.toggle("text-white", isAuto);
+            if (isAuto) autoRunner();
+        });
+
+        document.getElementById("resetBtn").addEventListener("click", () => {
+            // Stop auto-run
+            isAuto = false;
+            const btn = document.getElementById("autoBtn");
+            btn.innerText = "Toggle Auto-Run";
+            btn.classList.remove("bg-blue-600", "text-white");
+
+            // Clear animations
+            if (activeInterval) clearInterval(activeInterval);
+            activeInterval = null;
+
+            // Reset state
+            stats = {
+                cycles: 0,
+                hits: 0,
+                misses: 0,
+                total: 0
+            };
+            cache = [];
+            animationStage = "idle";
+            currentTarget = null;
+            evictingBlock = null;
+            penaltyCountdown = 0;
+
+            // Update UI
+            updateStats();
+            showStatus("RESET", "#64748b");
+        });
+
+        function autoRunner() {
+            if (!isAuto) return;
+            if (animationStage === "idle") requestData();
+            setTimeout(autoRunner, 1500 / (speed / 5));
+        }
+
+        requestAnimationFrame(draw);
+    </script>
+</body>
+
+</html>

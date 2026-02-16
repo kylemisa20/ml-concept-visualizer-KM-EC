@@ -1,0 +1,400 @@
+<!doctype html>
+<!-- Brief: Visualization of cache-cliff behavior and tiling benefits for GEMM. -->
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Tiling Performance & The Cache Cliff</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- React and Recharts Dependencies -->
+    <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script src="https://unpkg.com/prop-types@15.8.1/prop-types.min.js"></script>
+    <script src="https://unpkg.com/recharts@2.12.7/umd/Recharts.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <style>
+        body {
+            background-color: #f8fafc;
+        }
+
+        .recharts-default-tooltip {
+            border-radius: 0.75rem !important;
+            border: 1px solid #334155 !important;
+            background-color: #0f172a !important;
+            color: white !important;
+            box-shadow: 0 20px 25px -5px rgb(0 0 0 / 0.1) !important;
+        }
+    </style>
+</head>
+
+<body>
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useMemo } = React;
+      const {
+        Line,
+        XAxis,
+        YAxis,
+        CartesianGrid,
+        Tooltip,
+        ResponsiveContainer,
+        ReferenceLine,
+        Area,
+        ComposedChart,
+        Scatter,
+        Label,
+        Legend,
+      } = window.Recharts;
+
+      const App = () => {
+        const [n, setN] = useState(1024);
+        const [cacheCapacity, setCacheCapacity] = useState(120000);
+
+        const data = useMemo(() => {
+          const points = [];
+          const maxTheoretical = Math.pow(n, 3) / (2 * 4);
+          const visualCap = (maxTheoretical / 1000000) * 1.5;
+
+          for (let T = 4; T <= 256; T += 4) {
+            const theoreticalMisses = Math.pow(n, 3) / (2 * T);
+            const cacheUsage = 3 * Math.pow(T, 2);
+
+            let misses = theoreticalMisses;
+            let status = "Optimal";
+
+            if (cacheUsage > cacheCapacity) {
+              const overflowFactor = cacheUsage / cacheCapacity;
+              misses =
+                theoreticalMisses *
+                (1 + Math.pow(overflowFactor - 1, 1.5) * 15);
+              status = "Cache Overflow";
+            }
+
+            const missesInMillions = misses / 1000000;
+
+            points.push({
+              T,
+              misses: Math.min(missesInMillions, visualCap),
+              actualMisses: Math.round(missesInMillions),
+              usage: cacheUsage,
+              usageK: (cacheUsage / 1000).toFixed(1),
+              capacity: cacheCapacity,
+              status,
+              isCapped: missesInMillions > visualCap,
+            });
+          }
+          return points;
+        }, [n, cacheCapacity]);
+
+        const tableData = useMemo(() => {
+          const targets = [4, 32, 64, 128, 200, 256];
+          return data.filter((d) => targets.includes(d.T));
+        }, [data]);
+
+        return (
+          <div className="flex flex-col min-h-screen p-4 md:p-8 font-sans bg-slate-50">
+            <div className="mb-6 flex flex-col md:flex-row md:items-center justify-between gap-4">
+              <div>
+                <h1 className="text-2xl font-bold text-slate-800 tracking-tight">
+                  Tiling Performance & The Cache Cliff
+                </h1>
+                <p className="text-slate-600 mt-1">
+                  Visualizing the trade-off between <i>Temporal Reuse</i> and{" "}
+                  <i>Hardware Capacity</i>.
+                </p>
+              </div>
+
+              <div className="flex gap-6 bg-white p-4 rounded-xl shadow-sm border border-slate-200">
+                <div className="flex flex-col">
+                  <label className="text-[10px] font-black text-slate-400 uppercase mb-2">
+                    Matrix Size (n)
+                  </label>
+                  <input
+                    type="range"
+                    min="512"
+                    max="2048"
+                    step="128"
+                    value={n}
+                    onChange={(e) => setN(parseInt(e.target.value))}
+                    className="w-32 accent-blue-600 cursor-pointer"
+                  />
+                  <span className="text-xs font-mono text-slate-600 mt-1">
+                    {n} x {n}
+                  </span>
+                </div>
+                <div className="flex flex-col">
+                  <label className="text-[10px] font-black text-slate-400 uppercase mb-2">
+                    Cache Capacity
+                  </label>
+                  <input
+                    type="range"
+                    min="50000"
+                    max="250000"
+                    step="10000"
+                    value={cacheCapacity}
+                    onChange={(e) => setCacheCapacity(parseInt(e.target.value))}
+                    className="w-32 accent-red-500 cursor-pointer"
+                  />
+                  <span className="text-xs font-mono text-slate-600 mt-1">
+                    {(cacheCapacity / 1000).toFixed(0)}k elements
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
+              <div className="lg:col-span-3 bg-white p-6 rounded-2xl shadow-sm border border-slate-200 flex flex-col">
+                <div
+                  style={{ width: "100%", height: "400px" }}
+                  className="mb-4"
+                >
+                  <ResponsiveContainer width="100%" height="100%">
+                    <ComposedChart
+                      data={data}
+                      margin={{ top: 20, right: 30, left: 10, bottom: 20 }}
+                    >
+                      <CartesianGrid
+                        strokeDasharray="3 3"
+                        vertical={false}
+                        stroke="#f1f5f9"
+                      />
+                      <XAxis
+                        dataKey="T"
+                        type="number"
+                        domain={[0, 260]}
+                        tick={{ fontSize: 12, fill: "#64748b" }}
+                        axisLine={{ stroke: "#e2e8f0" }}
+                      >
+                        <Label
+                          value="Tile Size (T)"
+                          offset={-15}
+                          position="insideBottom"
+                          fill="#94a3b8"
+                          fontSize={12}
+                        />
+                      </XAxis>
+                      <YAxis
+                        yAxisId="left"
+                        tick={{ fontSize: 12, fill: "#3b82f6" }}
+                        axisLine={false}
+                        tickLine={false}
+                        label={{
+                          value: "Misses (Millions)",
+                          angle: -90,
+                          position: "insideLeft",
+                          fill: "#3b82f6",
+                          fontSize: 12,
+                        }}
+                      />
+                      <YAxis
+                        yAxisId="right"
+                        orientation="right"
+                        tick={{ fontSize: 12, fill: "#94a3b8" }}
+                        tickFormatter={(value) =>
+                          `${(value / 1000).toFixed(0)}k`
+                        }
+                        axisLine={false}
+                        tickLine={false}
+                        label={{
+                          value: "Cache Usage (k)",
+                          angle: 90,
+                          position: "insideRight",
+                          fill: "#94a3b8",
+                          fontSize: 12,
+                        }}
+                      />
+                      <Tooltip
+                        cursor={{ stroke: "#e2e8f0", strokeWidth: 1 }}
+                        content={({ active, payload }) => {
+                          if (active && payload && payload.length) {
+                            const d = payload[0].payload;
+                            return (
+                              <div className="bg-slate-900 text-white p-4 shadow-2xl rounded-xl text-xs border border-slate-700">
+                                <p className="font-bold border-b border-slate-700 pb-2 mb-2 text-sm">
+                                  Tile Size: {d.T}
+                                </p>
+                                <p className="text-blue-300 mb-1">
+                                  Misses:{" "}
+                                  <span className="font-mono">
+                                    {d.actualMisses}
+                                    {d.isCapped ? "+" : ""}M
+                                  </span>
+                                </p>
+                                <p className="text-slate-400 mb-2">
+                                  Cache Usage:{" "}
+                                  <span className="font-mono">{d.usageK}k</span>
+                                </p>
+                                <div
+                                  className={`px-2 py-1 rounded text-center font-bold ${d.status === "Optimal" ? "bg-green-500/20 text-green-400" : "bg-red-500/20 text-red-400"}`}
+                                >
+                                  {d.status}
+                                </div>
+                              </div>
+                            );
+                          }
+                          return null;
+                        }}
+                      />
+                      <Legend verticalAlign="top" align="right" height={40} />
+                      <Area
+                        yAxisId="right"
+                        type="monotone"
+                        dataKey="usage"
+                        name="Cache Pressure (3T²)"
+                        fill="#f8fafc"
+                        stroke="#cbd5e1"
+                        strokeDasharray="5 5"
+                      />
+                      <Line
+                        yAxisId="left"
+                        type="monotone"
+                        dataKey="misses"
+                        name="Total Misses"
+                        stroke="#3b82f6"
+                        strokeWidth={4}
+                        dot={false}
+                        activeDot={{ r: 8, strokeWidth: 0 }}
+                      />
+                      <Scatter yAxisId="left" data={tableData} fill="#1e293b" />
+                      <ReferenceLine
+                        yAxisId="right"
+                        y={cacheCapacity}
+                        stroke="#ef4444"
+                        strokeWidth={2}
+                        strokeDasharray="10 5"
+                      >
+                        <Label
+                          value={`LIMIT: ${(cacheCapacity / 1000).toFixed(0)}k`}
+                          position="top"
+                          fill="#ef4444"
+                          fontSize={10}
+                          fontWeight="900"
+                        />
+                      </ReferenceLine>
+                    </ComposedChart>
+                  </ResponsiveContainer>
+                </div>
+
+                <div className="mt-4 border-t border-slate-100 pt-4 overflow-x-auto">
+                  <table className="w-full text-left">
+                    <thead>
+                      <tr className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                        <th className="pb-2 pl-2">Tile Size (T)</th>
+                        <th className="pb-2">Misses (M)</th>
+                        <th className="pb-2">Cache Usage</th>
+                        <th className="pb-2 pr-2">Status</th>
+                      </tr>
+                    </thead>
+                    <tbody className="text-xs">
+                      {tableData.map((row) => (
+                        <tr
+                          key={row.T}
+                          className="border-t border-slate-50 hover:bg-slate-50 transition-colors"
+                        >
+                          <td className="py-2 pl-2 font-bold text-slate-700">
+                            {row.T}
+                          </td>
+                          <td className="py-2 font-mono text-blue-600">
+                            {row.actualMisses}
+                            {row.isCapped ? "+" : ""}M
+                          </td>
+                          <td className="py-2 font-mono text-slate-500">
+                            {row.usageK}k
+                          </td>
+                          <td className="py-2 pr-2">
+                            <span
+                              className={`px-2 py-0.5 rounded-full font-bold text-[9px] uppercase ${row.status === "Optimal" ? "bg-green-100 text-green-700" : "bg-red-100 text-red-700"}`}
+                            >
+                              {row.status}
+                            </span>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              <div className="flex flex-col gap-6">
+                <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
+                  <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-4">
+                    The Logic
+                  </h3>
+                  <div className="space-y-4">
+                    <div>
+                      <p className="text-xs text-slate-400 font-bold uppercase mb-1">
+                        Ideal Formula
+                      </p>
+                      <p className="text-lg font-serif italic text-slate-800">
+                        Misses ≈ n³ / 2T
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-slate-400 font-bold uppercase mb-1">
+                        Constraint
+                      </p>
+                      <p className="text-lg font-serif italic text-slate-800">
+                        3T² &lt; Cache
+                      </p>
+                    </div>
+                    <p className="text-xs text-slate-500 leading-relaxed border-t border-slate-100 pt-4">
+                      Increasing <b>T</b> reduces misses linearly in the
+                      denominator, but consumes cache space <b>quadratically</b>
+                      .
+                    </p>
+                  </div>
+                </div>
+
+                <div className="bg-blue-600 p-6 rounded-2xl shadow-lg text-white">
+                  <h3 className="text-[10px] font-black text-blue-200 uppercase tracking-widest mb-2">
+                    Optimal Tile Size
+                  </h3>
+                  <p className="text-sm leading-relaxed mb-4">
+                    The sweet spot is just before usage crosses the red dashed
+                    line.
+                  </p>
+                  <div className="text-3xl font-bold bg-blue-500/50 p-3 rounded-xl text-center">
+                    T ≈ {Math.floor(Math.sqrt(cacheCapacity / 3))}
+                  </div>
+                </div>
+
+                <div className="bg-slate-100 p-6 rounded-2xl border border-slate-200 flex-grow">
+                  <h3 className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-3">
+                    Why it spikes:
+                  </h3>
+                  <ul className="text-xs text-slate-600 space-y-3">
+                    <li className="flex gap-3">
+                      <span className="flex-none w-5 h-5 rounded-full bg-red-100 text-red-600 flex items-center justify-center font-bold text-[10px]">
+                        1
+                      </span>
+                      <span>
+                        <b>Thrashing:</b> Cache lines are evicted before they
+                        can be reused.
+                      </span>
+                    </li>
+                    <li className="flex gap-3">
+                      <span className="flex-none w-5 h-5 rounded-full bg-red-100 text-red-600 flex items-center justify-center font-bold text-[10px]">
+                        2
+                      </span>
+                      <span>
+                        <b>Lost Locality:</b> The algorithm regresses to
+                        non-blocked performance levels.
+                      </span>
+                    </li>
+                  </ul>
+                </div>
+              </div>
+            </div>
+          </div>
+        );
+      };
+
+      const root = ReactDOM.createRoot(document.getElementById("root"));
+      root.render(<App />);
+    </script>
+</body>
+
+</html>

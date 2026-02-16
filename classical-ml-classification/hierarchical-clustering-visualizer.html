@@ -1,0 +1,738 @@
+<!doctype html>
+<!-- Brief: Visualization of agglomerative hierarchical clustering and merge structure. -->
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Interactive Hierarchical Clustering</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
+    <style>
+        .slider-container {
+            margin-top: 10px;
+        }
+
+        #dendrogram-container {
+            height: 300px;
+        }
+
+        #scatter-container {
+            height: 400px;
+        }
+    </style>
+</head>
+
+<body class="bg-gray-50 text-gray-900 font-sans p-4">
+    <div class="max-w-7xl mx-auto bg-white rounded-xl shadow-lg p-6">
+        <header class="mb-4 border-b pb-4 flex justify-between items-center">
+            <div>
+                <h1 class="text-2xl font-bold text-indigo-900">
+                    Interactive Hierarchical Clustering
+                </h1>
+                <p class="text-gray-600 italic text-sm">
+                    Visualize Agglomerative Clustering and Dendrograms step-by-step.
+                </p>
+            </div>
+            <div class="flex items-center space-x-4">
+                <div class="bg-indigo-100 text-indigo-900 px-4 py-2 rounded-lg border border-indigo-200 shadow-sm">
+                    <span class="text-xs font-bold uppercase text-indigo-700">Clusters</span>
+                    <div id="cluster-count" class="text-xl font-bold font-mono">0</div>
+                </div>
+                <button onclick="resetData()" class="px-4 py-2 bg-gray-200 hover:bg-gray-300 rounded text-sm font-semibold transition h-10">
+                    New Data
+                </button>
+            </div>
+        </header>
+
+        <div class="grid grid-cols-1 lg:grid-cols-12 gap-6 h-full">
+            <!-- LEFT COLUMN: Controls -->
+            <div class="lg:col-span-3 space-y-4 flex flex-col">
+                <!-- Theory Note -->
+                <div class="bg-indigo-50 p-3 rounded border border-indigo-200 text-sm">
+                    <div class="flex items-center mb-1">
+                        <span class="text-lg mr-2">ℹ️</span>
+                        <p class="font-bold text-indigo-800">Agglomerative Strategy</p>
+                    </div>
+                    <ul class="text-xs text-indigo-800 list-disc ml-4 space-y-1">
+                        <li>Start with <strong>N</strong> clusters (1 point each).</li>
+                        <li>
+                            Find the two <strong>closest</strong> clusters based on
+                            <strong>Linkage</strong>:
+                            <ul class="list-disc ml-4 mt-1 space-y-0.5 text-indigo-600">
+                                <li><strong>Single:</strong> Closest pair of points.</li>
+                                <li><strong>Complete:</strong> Farthest pair of points.</li>
+                                <li><strong>Average:</strong> Avg dist between all pairs.</li>
+                                <li><strong>Centroid:</strong> Dist between centers.</li>
+                            </ul>
+                        </li>
+                        <li><strong>Merge</strong> them into one.</li>
+                        <li>Repeat until only <strong>1</strong> cluster remains.</li>
+                    </ul>
+                </div>
+
+                <div class="bg-slate-50 p-4 rounded-lg border border-slate-200">
+                    <h2 class="font-bold text-gray-700 mb-3 border-b pb-1 text-sm">
+                        1. Settings
+                    </h2>
+
+                    <div class="mb-4">
+                        <label class="text-xs font-bold uppercase text-slate-800 mb-1 block">Linkage Criteria</label>
+                        <select id="linkage-select" onchange="runAlgorithm()" class="w-full text-sm border-gray-300 rounded shadow-sm p-2 bg-white">
+                            <option value="min">Single Linkage (Min Dist)</option>
+                            <option value="max">Complete Linkage (Max Dist)</option>
+                            <option value="avg">Average Linkage</option>
+                            <option value="centroid">Centroid Linkage</option>
+                        </select>
+                        <p class="text-xs text-gray-500 mt-1" id="linkage-desc">
+                            Distance between closest points in clusters.
+                        </p>
+                    </div>
+
+                    <div class="mb-2">
+                        <label class="text-xs font-bold uppercase text-slate-800 mb-1 block">Data Pattern</label>
+                        <select id="data-pattern" onchange="resetData()" class="w-full text-sm border-gray-300 rounded shadow-sm p-2 bg-white">
+                            <option value="blobs">Gaussian Blobs</option>
+                            <option value="circles">Concentric Circles</option>
+                            <option value="moons">Moons</option>
+                            <option value="random">Uniform Random</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="bg-blue-50 p-4 rounded-lg border border-blue-200 flex-grow">
+                    <h2 class="font-bold text-blue-900 mb-3 border-b border-blue-200 pb-1 text-sm">
+                        2. Control
+                    </h2>
+
+                    <div class="mb-6">
+                        <div class="flex justify-between mb-1">
+                            <label class="text-xs font-bold uppercase text-blue-800">Progress (Merges)</label>
+                            <span id="step-display" class="text-xs font-mono font-bold text-blue-600">0 / 0</span>
+                        </div>
+                        <input type="range" id="step-slider" min="0" max="100" value="0" class="w-full h-2 bg-blue-200 rounded-lg appearance-none cursor-pointer" />
+                    </div>
+
+                    <div class="flex space-x-2 mb-4">
+                        <button onclick="changeStep(-1)" class="flex-1 py-2 bg-white border border-blue-300 hover:bg-blue-50 text-blue-800 rounded font-bold">
+                            Prev
+                        </button>
+                        <button id="btn-play" onclick="togglePlay()" class="flex-1 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded font-bold shadow">
+                            Play
+                        </button>
+                        <button onclick="changeStep(1)" class="flex-1 py-2 bg-white border border-blue-300 hover:bg-blue-50 text-blue-800 rounded font-bold">
+                            Next
+                        </button>
+                    </div>
+
+                    <div class="bg-white p-3 rounded border border-blue-100">
+                        <p class="text-xs text-gray-500 font-bold uppercase mb-1">
+                            Information
+                        </p>
+                        <div class="text-xs text-gray-700 space-y-1">
+                            <div class="flex justify-between">
+                                <span>Current Height:</span>
+                                <span id="info-height" class="font-mono font-bold">0.00</span>
+                            </div>
+                            <div class="flex justify-between">
+                                <span>Latest Merge:</span>
+                                <span id="info-merge" class="font-mono">None</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- RIGHT COLUMN: Visualization -->
+            <div class="lg:col-span-9 flex flex-col space-y-4">
+                <!-- Scatter Plot -->
+                <div class="bg-white border rounded-lg p-2 flex-grow relative">
+                    <h3 class="absolute top-2 left-2 z-10 text-xs font-bold uppercase bg-white/80 px-2 rounded">
+                        Feature Space
+                    </h3>
+                    <div id="scatter-container" class="w-full h-full"></div>
+                </div>
+
+                <!-- Dendrogram -->
+                <div class="bg-white border rounded-lg p-2 h-1/3 min-h-[300px] relative">
+                    <h3 class="absolute top-2 left-2 z-10 text-xs font-bold uppercase bg-white/80 px-2 rounded">
+                        Dendrogram
+                    </h3>
+                    <div id="dendrogram-container" class="w-full h-full"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // --- 1. STATE & DATA ---
+        let points = [];
+        const N_POINTS = 40;
+
+        // Algorithm State
+        let mergeHistory = []; // Array of { step, clusterA, clusterB, newId, distance, height }
+        let maxStep = 0;
+        let currentStep = 0;
+        let isPlaying = false;
+        let playInterval = null;
+
+        // Dendrogram layout cache
+        let leafOrder = []; // To organize x-axis
+        let dendrogramShapes = [];
+
+        // Colors for clusters (fixed palette)
+        const COLORS = [
+            "#1f77b4",
+            "#ff7f0e",
+            "#2ca02c",
+            "#d62728",
+            "#9467bd",
+            "#8c564b",
+            "#e377c2",
+            "#7f7f7f",
+            "#bcbd22",
+            "#17becf",
+            "#393b79",
+            "#637939",
+            "#8c6d31",
+            "#843c39",
+            "#7b4173",
+            "#5254a3",
+            "#8ca252",
+            "#bd9e39",
+            "#ad494a",
+            "#a55194",
+        ];
+
+        function randn_bm() {
+            let u = 0,
+                v = 0;
+            while (u === 0) u = Math.random();
+            while (v === 0) v = Math.random();
+            return Math.sqrt(-2.0 * Math.log(u)) * Math.cos(2.0 * Math.PI * v);
+        }
+
+        function resetData() {
+            points = [];
+            const pattern = document.getElementById("data-pattern").value;
+
+            if (pattern === "blobs") {
+                const centers = [
+                    [-2, -2],
+                    [2, 2],
+                    [2, -2],
+                    [-2, 2],
+                ];
+                for (let i = 0; i < N_POINTS; i++) {
+                    const c = centers[i % 4];
+                    points.push({
+                        id: i,
+                        x: c[0] + randn_bm() * 0.6,
+                        y: c[1] + randn_bm() * 0.6,
+                    });
+                }
+            } else if (pattern === "circles") {
+                for (let i = 0; i < N_POINTS; i++) {
+                    const r = i % 2 === 0 ? 1.5 : 4.0;
+                    const noise = randn_bm() * 0.2;
+                    const theta = Math.random() * 2 * Math.PI;
+                    points.push({
+                        id: i,
+                        x: (r + noise) * Math.cos(theta),
+                        y: (r + noise) * Math.sin(theta),
+                    });
+                }
+            } else if (pattern === "moons") {
+                // Simplified two moons
+                for (let i = 0; i < N_POINTS / 2; i++) {
+                    const x = (i / (N_POINTS / 2)) * 4 - 2;
+                    const y = Math.sin(x) + randn_bm() * 0.2;
+                    points.push({
+                        id: i,
+                        x: x,
+                        y: y
+                    });
+                }
+                for (let i = 0; i < N_POINTS / 2; i++) {
+                    const x = (i / (N_POINTS / 2)) * 4 - 2;
+                    const y = -Math.sin(x) + 1 + randn_bm() * 0.2;
+                    points.push({
+                        id: i + N_POINTS / 2,
+                        x: x,
+                        y: y
+                    });
+                }
+            } else {
+                for (let i = 0; i < N_POINTS; i++) {
+                    points.push({
+                        id: i,
+                        x: Math.random() * 6 - 3,
+                        y: Math.random() * 6 - 3,
+                    });
+                }
+            }
+
+            runAlgorithm();
+        }
+
+        // --- 2. ALGORITHM ---
+
+        function distEuclidean(p1, p2) {
+            return Math.sqrt(Math.pow(p1.x - p2.x, 2) + Math.pow(p1.y - p2.y, 2));
+        }
+
+        // Distance between two clusters (arrays of point indices)
+        function getClusterDist(c1, c2, linkage) {
+            let dists = [];
+            for (let i of c1.indices) {
+                for (let j of c2.indices) {
+                    dists.push(distEuclidean(points[i], points[j]));
+                }
+            }
+
+            if (linkage === "min") return Math.min(...dists);
+            if (linkage === "max") return Math.max(...dists);
+            if (linkage === "avg")
+                return dists.reduce((a, b) => a + b, 0) / dists.length;
+            if (linkage === "centroid") {
+                // Calc centroids
+                let x1 = 0,
+                    y1 = 0;
+                c1.indices.forEach((idx) => {
+                    x1 += points[idx].x;
+                    y1 += points[idx].y;
+                });
+                x1 /= c1.indices.length;
+                y1 /= c1.indices.length;
+                let x2 = 0,
+                    y2 = 0;
+                c2.indices.forEach((idx) => {
+                    x2 += points[idx].x;
+                    y2 += points[idx].y;
+                });
+                x2 /= c2.indices.length;
+                y2 /= c2.indices.length;
+                return Math.sqrt(Math.pow(x1 - x2, 2) + Math.pow(y1 - y2, 2));
+            }
+            return 0;
+        }
+
+        function runAlgorithm() {
+            const linkage = document.getElementById("linkage-select").value;
+            // Desc update
+            const descs = {
+                min: "Single Linkage: Distance between Closest pair of points.",
+                max: "Complete Linkage: Distance between Farthest pair of points.",
+                avg: "Average Linkage: Average distance between all pairs.",
+                centroid: "Centroid Linkage: Distance between cluster centroids.",
+            };
+            document.getElementById("linkage-desc").innerText = descs[linkage];
+
+            // Initialize Clusters
+            let activeClusters = points.map((p) => ({
+                id: p.id.toString(), // Initially "0", "1"...
+                indices: [p.id],
+                height: 0,
+                xPos: p.id, // For dendrogram (will be recomputed)
+                isLeaf: true,
+            }));
+
+            mergeHistory = [];
+            // Dendrogram node registry to build full tree structure
+            let clusterRegistry = {};
+            activeClusters.forEach((c) => (clusterRegistry[c.id] = c));
+            let clusterIdCounter = N_POINTS;
+
+            // Loop N-1 times to merge
+            for (let step = 0; step < N_POINTS - 1; step++) {
+                let minD = Infinity;
+                let closestPair = [-1, -1];
+
+                // Find closest pair
+                for (let i = 0; i < activeClusters.length; i++) {
+                    for (let j = i + 1; j < activeClusters.length; j++) {
+                        const d = getClusterDist(
+                            activeClusters[i],
+                            activeClusters[j],
+                            linkage,
+                        );
+                        if (d < minD) {
+                            minD = d;
+                            closestPair = [i, j];
+                        }
+                    }
+                }
+
+                const [idx1, idx2] = closestPair;
+                const c1 = activeClusters[idx1];
+                const c2 = activeClusters[idx2];
+                const newId = (clusterIdCounter++).toString();
+
+                const newCluster = {
+                    id: newId,
+                    indices: [...c1.indices, ...c2.indices],
+                    height: minD,
+                    left: c1.id,
+                    right: c2.id,
+                };
+
+                // Store in registry
+                clusterRegistry[newId] = newCluster;
+
+                // Record History
+                mergeHistory.push({
+                    step: step + 1,
+                    clusterA: c1,
+                    clusterB: c2,
+                    newCluster: newCluster,
+                    distance: minD,
+                });
+
+                // Update Active Clusters (remove old, add new)
+                activeClusters.splice(Math.max(idx1, idx2), 1);
+                activeClusters.splice(Math.min(idx1, idx2), 1);
+                activeClusters.push(newCluster);
+            }
+
+            // Post-process for Dendrogram Layout (Leaf Ordering to minimize crossing)
+            // Perform distinct DFS traversal to order leaves x-pos
+            const rootId = mergeHistory[mergeHistory.length - 1].newCluster.id;
+            leafOrder = [];
+
+            function getLeaves(cid) {
+                const node = clusterRegistry[cid];
+                if (node.left === undefined) return [node]; // is leaf (initial point)
+                return [...getLeaves(node.left), ...getLeaves(node.right)];
+            }
+
+            // Re-order leafOrder based on simple traversal
+            // (Standard "Leaf ordering" algorithm is complex, simple traversal is usually OK for small N)
+            const leaves = getLeaves(rootId);
+            leaves.forEach((l, i) => {
+                l.dendroX = i;
+            });
+            leafOrder = leaves.map((l) => l.indices[0]); // map point ID to order index
+
+            // Calculate X positions for internal nodes
+            function calcDendroX(cid) {
+                const node = clusterRegistry[cid];
+                if (node.left === undefined) return node.dendroX;
+                const lx = calcDendroX(node.left);
+                const rx = calcDendroX(node.right);
+                node.dendroX = (lx + rx) / 2;
+                return node.dendroX;
+            }
+            calcDendroX(rootId);
+
+            // Pre-calculate Dendrogram Shapes (Lines)
+            dendrogramShapes = []; // Array of shapes for Plotly
+
+            Object.values(clusterRegistry).forEach((node) => {
+                if (node.left !== undefined) {
+                    const l = clusterRegistry[node.left];
+                    const r = clusterRegistry[node.right];
+                    const h = node.height;
+                    const lh = l.height;
+                    const rh = r.height;
+
+                    // Vertical line from left child up
+                    dendrogramShapes.push({
+                        type: "line",
+                        x0: l.dendroX,
+                        x1: l.dendroX,
+                        y0: lh,
+                        y1: h,
+                        line: {
+                            color: "#888",
+                            width: 2
+                        },
+                        mergeId: node.id,
+                    });
+                    // Vertical line from right child up
+                    dendrogramShapes.push({
+                        type: "line",
+                        x0: r.dendroX,
+                        x1: r.dendroX,
+                        y0: rh,
+                        y1: h,
+                        line: {
+                            color: "#888",
+                            width: 2
+                        },
+                        mergeId: node.id,
+                    });
+                    // Horizontal connector
+                    dendrogramShapes.push({
+                        type: "line",
+                        x0: l.dendroX,
+                        x1: r.dendroX,
+                        y0: h,
+                        y1: h,
+                        line: {
+                            color: "#888",
+                            width: 2
+                        },
+                        mergeId: node.id,
+                    });
+                }
+            });
+
+            // Init UI
+            maxStep = mergeHistory.length;
+            document.getElementById("step-slider").max = maxStep;
+            setStep(0);
+        }
+
+        // --- 3. VISUALIZATION CONTROS ---
+
+        function changeStep(delta) {
+            setStep(currentStep + delta);
+        }
+
+        function setStep(s) {
+            if (s < 0) s = 0;
+            if (s > maxStep) s = maxStep;
+            currentStep = s;
+            document.getElementById("step-slider").value = currentStep;
+            document.getElementById("step-display").innerText =
+                `${currentStep} / ${maxStep}`;
+
+            // Get state at this step
+            // Use MergeHistory to determine active clusters
+            // Naive approach: Re-simulate from points is fast enough for visualizer
+            // Efficient approach: Track "Active Clusters"
+
+            // Re-construct active clusters for scatter plot
+            // Start with all points
+            let currentClusters = points.map((p) => ({
+                indices: [p.id],
+                id: p.id.toString(),
+            }));
+
+            // Apply merges up to step s
+            let lastMergeInfo = null;
+            for (let i = 0; i < s; i++) {
+                const merge = mergeHistory[i];
+                lastMergeInfo = merge;
+                // Remove children, add parent
+                const idsToRemove = [merge.clusterA.id, merge.clusterB.id];
+                currentClusters = currentClusters.filter(
+                    (c) => !idsToRemove.includes(c.id),
+                );
+                currentClusters.push(merge.newCluster);
+            }
+
+            document.getElementById("cluster-count").innerText =
+                currentClusters.length;
+
+            if (lastMergeInfo) {
+                document.getElementById("info-height").innerText =
+                    lastMergeInfo.distance.toFixed(3);
+                document.getElementById("info-merge").innerText =
+                    `Cluster ${lastMergeInfo.clusterA.id} + ${lastMergeInfo.clusterB.id}`;
+            } else {
+                document.getElementById("info-height").innerText = "0.00";
+                document.getElementById("info-merge").innerText = "None";
+            }
+
+            updateScatter(currentClusters);
+            updateDendrogram(s, lastMergeInfo ? lastMergeInfo.distance : 0);
+        }
+
+        document.getElementById("step-slider").addEventListener("input", (e) => {
+            setStep(parseInt(e.target.value));
+        });
+
+        // --- 4. DRAWING ---
+
+        function updateScatter(activeClusters) {
+            const data = [];
+
+            // Create a trace for each active cluster
+            activeClusters.forEach((c, i) => {
+                const cIds = c.indices;
+                const cx = cIds.map((idx) => points[idx].x);
+                const cy = cIds.map((idx) => points[idx].y);
+
+                // Color assignment: Hash the cluster ID or just use index?
+                // Using index in activeClusters list causes color jumps when list changes order.
+                // Better: Use the ID of the "oldest ancestor" or just hash unique ID.
+                // Ideally, we want consistent colors.
+                // Let's use the 'id' (which is unique) to pick a color mod length.
+                const colorIdx = parseInt(c.id) % COLORS.length;
+
+                data.push({
+                    x: cx,
+                    y: cy,
+                    mode: "markers",
+                    type: "scatter",
+                    marker: {
+                        size: 10,
+                        color: COLORS[colorIdx],
+                        line: {
+                            color: "white",
+                            width: 1
+                        },
+                    },
+                    name: `Cluster ${c.id}`,
+                });
+            });
+
+            const layout = {
+                margin: {
+                    t: 10,
+                    r: 10,
+                    b: 20,
+                    l: 30
+                },
+                xaxis: {
+                    title: "X",
+                    zeroline: false
+                },
+                yaxis: {
+                    title: "Y",
+                    zeroline: false
+                },
+                showlegend: false,
+                plot_bgcolor: "#f8fafc",
+            };
+
+            Plotly.react("scatter-container", data, layout, {
+                displayModeBar: false,
+            });
+        }
+
+        function updateDendrogram(step, currentHeight) {
+            // Draw all lines, but color them or hide them based on step?
+            // Actually, we usually want to see the full tree, but indicate the "Cut" level.
+            // Or, we want to see the tree *building*?
+            // "Learn hierarchical" -> Seeing it build is nice.
+
+            // Strategy: Draw lines only if the merge has happened (step index <= merge index)
+            // AND draw a horizontal "Cut" line at currentHeight
+
+            const visibleShapes = [];
+            const activeMergeIds = new Set();
+            for (let i = 0; i < step; i++) {
+                activeMergeIds.add(mergeHistory[i].newCluster.id);
+            }
+
+            // Identify which merged nodes exist
+            dendrogramShapes.forEach((shape) => {
+                if (activeMergeIds.has(shape.mergeId)) {
+                    // This merge happened.
+                    const s = {
+                        ...shape
+                    };
+                    s.line = {
+                        ...s.line,
+                        color: "#444"
+                    }; // Darker for confirmed
+                    visibleShapes.push(s);
+                } else {
+                    // Future merge. Draw as faint or invisible?
+                    // Let's draw faint to see "what's coming" or just invisible.
+                    // Invisible is better for "step-by-step" feeling.
+                    const s = {
+                        ...shape
+                    };
+                    s.line = {
+                        ...s.line,
+                        color: "#eee"
+                    }; // Very faint
+                    visibleShapes.push(s);
+                }
+            });
+
+            // Add Cut Line
+            visibleShapes.push({
+                type: "line",
+                x0: -1,
+                x1: N_POINTS,
+                y0: currentHeight,
+                y1: currentHeight,
+                line: {
+                    color: "red",
+                    width: 2,
+                    dash: "dash"
+                },
+            });
+
+            // Leaf Labels (points)
+            // Just indices
+
+            const layout = {
+                margin: {
+                    t: 20,
+                    r: 10,
+                    b: 20,
+                    l: 30
+                },
+                xaxis: {
+                    range: [-1, N_POINTS],
+                    showgrid: false,
+                    tickvals: [], // Hide ticks or show point IDs?
+                    title: "Points",
+                },
+                yaxis: {
+                    title: "Distance",
+                    showgrid: true
+                },
+                shapes: visibleShapes,
+                showlegend: false,
+            };
+
+            // Dummy trace for axes
+            const trace = {
+                x: [-1],
+                y: [0],
+                type: "scatter",
+                mode: "markers",
+                marker: {
+                    opacity: 0
+                },
+            };
+
+            Plotly.react("dendrogram-container", [trace], layout, {
+                displayModeBar: false,
+            });
+        }
+
+        // --- 5. PLAYBACK ---
+        function togglePlay() {
+            if (isPlaying) {
+                clearInterval(playInterval);
+                isPlaying = false;
+                document.getElementById("btn-play").innerText = "Play";
+                document
+                    .getElementById("btn-play")
+                    .classList.remove("bg-red-600", "hover:bg-red-700");
+                document
+                    .getElementById("btn-play")
+                    .classList.add("bg-blue-600", "hover:bg-blue-700");
+            } else {
+                isPlaying = true;
+                document.getElementById("btn-play").innerText = "Pause";
+                document
+                    .getElementById("btn-play")
+                    .classList.remove("bg-blue-600", "hover:bg-blue-700");
+                document
+                    .getElementById("btn-play")
+                    .classList.add("bg-red-600", "hover:bg-red-700");
+
+                playInterval = setInterval(() => {
+                    if (currentStep < maxStep) {
+                        changeStep(1);
+                    } else {
+                        togglePlay(); // Stop at end
+                    }
+                }, 500);
+            }
+        }
+
+        // Init
+        resetData();
+    </script>
+</body>
+
+</html>

@@ -1,0 +1,614 @@
+<!doctype html>
+<!-- Brief: Visualization of neural-network classification and decision regions. -->
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Neural Network Classification Visualization</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        .node {
+            stroke: #fff;
+            stroke-width: 2px;
+            transition: r 0.3s ease;
+        }
+
+        .link {
+            stroke-opacity: 0.4;
+            transition: stroke-width 0.3s ease;
+        }
+
+        canvas {
+            border-radius: 8px;
+            cursor: crosshair;
+        }
+
+        .controls-panel {
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(4px);
+        }
+
+        .flower-card {
+            transition: all 0.3s ease;
+        }
+
+        .flower-card:hover {
+            transform: translateY(-2px);
+        }
+    </style>
+</head>
+
+<body class="bg-slate-50 min-h-screen text-slate-800 font-sans pb-12">
+    <div class="max-w-6xl mx-auto p-4 md:p-8">
+        <header class="mb-8 text-center">
+            <h1 class="text-4xl font-bold text-slate-900 mb-2">
+                Neural Network for Classification
+            </h1>
+            <p class="text-slate-600">
+                Visualizing Decision Boundaries for the Iris Dataset
+            </p>
+        </header>
+
+        <!-- Dataset Introduction Section -->
+        <div class="mb-12 grid grid-cols-1 md:grid-cols-3 gap-6">
+            <div class="md:col-span-1 bg-white p-6 rounded-2xl shadow-sm border border-slate-200 flex flex-col items-center justify-center text-center">
+                <h3 class="text-lg font-bold mb-4 text-slate-700">Iris Anatomy</h3>
+                <!-- Custom SVG Iris Diagram -->
+                <svg width="160" height="160" viewBox="0 0 100 100" class="mb-4">
+                    <!-- Stem -->
+                    <path d="M50 95 L50 70" stroke="#4ade80" stroke-width="3" fill="none" />
+                    <!-- Sepals (The "Falls") -->
+                    <path d="M50 70 Q20 80 15 50 Q20 30 50 40" fill="#818cf8" opacity="0.6" />
+                    <path d="M50 70 Q80 80 85 50 Q80 30 50 40" fill="#818cf8" opacity="0.6" />
+                    <path d="M50 70 Q50 100 70 90" fill="#818cf8" opacity="0.6" />
+                    <!-- Petals (The "Standards") -->
+                    <path d="M50 70 Q35 30 50 10 Q65 30 50 70" fill="#6366f1" />
+                    <path d="M50 70 Q60 40 80 30 Q70 60 50 70" fill="#6366f1" opacity="0.8" />
+                    <path d="M50 70 Q40 40 20 30 Q30 60 50 70" fill="#6366f1" opacity="0.8" />
+                    <!-- Labels -->
+                    <line x1="20" y1="40" x2="5" y2="40" stroke="#94a3b8" stroke-dasharray="2" />
+                    <text x="2" y="35" font-size="6" font-weight="bold" fill="#64748b">
+                        Petal
+                    </text>
+                    <line x1="80" y1="60" x2="95" y2="60" stroke="#94a3b8" stroke-dasharray="2" />
+                    <text x="85" y="68" font-size="6" font-weight="bold" fill="#64748b">
+                        Sepal
+                    </text>
+                </svg>
+                <p class="text-xs text-slate-500 leading-relaxed">
+                    The network learns to distinguish species based on the length and
+                    width of these two floral structures.
+                </p>
+            </div>
+
+            <div class="md:col-span-2 grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <div class="flower-card bg-white p-4 rounded-xl border-b-4 border-[#440154] shadow-sm">
+                    <div class="w-full h-24 bg-slate-100 rounded-lg mb-3 flex items-center justify-center">
+                        <span class="text-3xl">🌸</span>
+                    </div>
+                    <h4 class="font-bold text-sm">Iris Setosa</h4>
+                    <p class="text-[10px] text-slate-500">
+                        Typically has the smallest petals but wider sepals. Easily
+                        separable.
+                    </p>
+                </div>
+                <div class="flower-card bg-white p-4 rounded-xl border-b-4 border-[#21918c] shadow-sm">
+                    <div class="w-full h-24 bg-slate-100 rounded-lg mb-3 flex items-center justify-center">
+                        <span class="text-3xl">🌺</span>
+                    </div>
+                    <h4 class="font-bold text-sm">Iris Versicolor</h4>
+                    <p class="text-[10px] text-slate-500">
+                        Intermediate measurements. Often overlaps with Virginica in
+                        feature space.
+                    </p>
+                </div>
+                <div class="flower-card bg-white p-4 rounded-xl border-b-4 border-[#fde725] shadow-sm">
+                    <div class="w-full h-24 bg-slate-100 rounded-lg mb-3 flex items-center justify-center">
+                        <span class="text-3xl">🌻</span>
+                    </div>
+                    <h4 class="font-bold text-sm">Iris Virginica</h4>
+                    <p class="text-[10px] text-slate-500">
+                        Generally the largest species with the longest petals and sepals.
+                    </p>
+                </div>
+            </div>
+        </div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
+            <!-- Left Column: Decision Boundary Canvas -->
+            <div class="bg-white p-6 rounded-2xl shadow-xl border border-slate-200">
+                <div class="flex justify-between items-center mb-4">
+                    <h2 class="text-xl font-semibold">Decision Boundary Map</h2>
+                    <div id="accuracy-badge" class="px-3 py-1 bg-green-100 text-green-700 rounded-full text-sm font-bold">
+                        Accuracy: 0.00
+                    </div>
+                </div>
+
+                <div class="relative pt-4">
+                    <div class="absolute -left-12 top-1/2 -rotate-90 text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+                        Sepal Width (cm)
+                    </div>
+                    <canvas id="decisionCanvas" width="500" height="400" class="w-full bg-slate-100"></canvas>
+                    <div class="text-center mt-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+                        Sepal Length (cm)
+                    </div>
+                    <div id="tooltip" class="absolute hidden bg-black text-white text-xs p-2 rounded pointer-events-none z-10"></div>
+                </div>
+
+                <div class="mt-6 flex flex-wrap gap-4 text-xs justify-center font-bold">
+                    <div class="flex items-center gap-2">
+                        <span class="w-3 h-3 rounded-full" style="background: #440154"></span>
+                        Setosa
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <span class="w-3 h-3 rounded-full" style="background: #21918c"></span>
+                        Versicolor
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <span class="w-3 h-3 rounded-full" style="background: #fde725"></span>
+                        Virginica
+                    </div>
+                </div>
+            </div>
+
+            <!-- Right Column: Network Architecture & Controls -->
+            <div class="flex flex-col gap-6">
+                <!-- Network Diagram -->
+                <div class="bg-white p-6 rounded-2xl shadow-xl border border-slate-200">
+                    <div class="flex justify-between items-center mb-4">
+                        <h2 class="text-xl font-semibold">Architecture (MLP)</h2>
+                        <span class="text-[10px] bg-blue-50 text-blue-600 px-2 py-0.5 rounded border border-blue-100 uppercase font-bold">2 Inputs → Hidden → 3 Outputs</span>
+                    </div>
+                    <svg id="networkSvg" width="100%" height="220" viewBox="0 0 400 200"></svg>
+                    <div class="flex justify-between px-8 text-[10px] text-slate-400 font-bold uppercase">
+                        <span>Inputs</span>
+                        <span>Hidden Layer</span>
+                        <span>Outputs</span>
+                    </div>
+                </div>
+
+                <!-- Controls -->
+                <div class="bg-white p-6 rounded-2xl shadow-xl border border-slate-200 controls-panel">
+                    <h2 class="text-xl font-semibold mb-6 text-slate-900">
+                        Network Training
+                    </h2>
+
+                    <div class="space-y-6">
+                        <div>
+                            <label class="flex justify-between text-sm font-medium mb-2">
+                                Hidden Neurons
+                                <span id="hidden-val" class="text-blue-600">6</span>
+                            </label>
+                            <input type="range" id="hiddenRange" min="2" max="12" value="6" class="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer" />
+                        </div>
+
+                        <div>
+                            <label class="flex justify-between text-sm font-medium mb-2">
+                                Learning Rate
+                                <span id="lr-val" class="text-blue-600">0.1</span>
+                            </label>
+                            <input type="range" id="lrRange" min="0.01" max="0.5" step="0.01" value="0.1" class="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer" />
+                        </div>
+
+                        <div class="flex gap-3 pt-2">
+                            <button id="trainBtn" class="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-4 rounded-xl transition shadow-lg active:transform active:scale-95">
+                                Train Network
+                            </button>
+                            <button id="resetBtn" class="bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold py-3 px-6 rounded-xl transition">
+                                Reset
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // --- Iris Data (Simplified subset focusing on Sepal Length/Width) ---
+        const irisData = [
+            [5.1, 3.5, 0],
+            [4.9, 3.0, 0],
+            [4.7, 3.2, 0],
+            [4.6, 3.1, 0],
+            [5.0, 3.6, 0],
+            [5.4, 3.9, 0],
+            [4.6, 3.4, 0],
+            [5.0, 3.4, 0],
+            [4.4, 2.9, 0],
+            [4.9, 3.1, 0],
+            [7.0, 3.2, 1],
+            [6.4, 3.2, 1],
+            [6.9, 3.1, 1],
+            [5.5, 2.3, 1],
+            [6.5, 2.8, 1],
+            [5.7, 2.8, 1],
+            [6.3, 3.3, 1],
+            [4.9, 2.4, 1],
+            [6.6, 2.9, 1],
+            [5.2, 2.7, 1],
+            [6.3, 3.3, 2],
+            [5.8, 2.7, 2],
+            [7.1, 3.0, 2],
+            [6.3, 2.9, 2],
+            [6.5, 3.0, 2],
+            [7.6, 3.0, 2],
+            [4.9, 2.5, 2],
+            [7.3, 2.9, 2],
+            [6.7, 2.5, 2],
+            [7.2, 3.6, 2],
+            [5.4, 3.7, 0],
+            [4.8, 3.4, 0],
+            [4.3, 3.0, 0],
+            [5.8, 4.0, 0],
+            [5.7, 4.4, 0],
+            [5.4, 3.9, 0],
+            [5.1, 3.5, 0],
+            [5.7, 3.8, 0],
+            [5.1, 3.8, 0],
+            [5.4, 3.4, 0],
+            [6.1, 2.8, 1],
+            [6.3, 2.5, 1],
+            [6.1, 2.8, 1],
+            [6.4, 2.9, 1],
+            [6.6, 3.0, 1],
+            [6.8, 2.8, 1],
+            [6.7, 3.0, 1],
+            [6.0, 2.9, 1],
+            [5.7, 2.6, 1],
+            [5.5, 2.4, 1],
+            [6.7, 3.3, 2],
+            [6.3, 2.5, 2],
+            [6.5, 3.2, 2],
+            [6.2, 2.8, 2],
+            [5.9, 3.0, 2],
+            [6.4, 2.8, 2],
+            [6.0, 3.0, 2],
+            [6.9, 3.1, 2],
+            [6.7, 3.1, 2],
+            [6.9, 3.1, 2],
+        ];
+
+        class NeuralNetwork {
+            constructor(inputNodes, hiddenNodes, outputNodes) {
+                this.inputNodes = inputNodes;
+                this.hiddenNodes = hiddenNodes;
+                this.outputNodes = outputNodes;
+                this.weightsIH = Array.from({
+                        length: hiddenNodes
+                    }, () =>
+                    Array.from({
+                        length: inputNodes
+                    }, () => Math.random() * 2 - 1),
+                );
+                this.weightsHO = Array.from({
+                        length: outputNodes
+                    }, () =>
+                    Array.from({
+                        length: hiddenNodes
+                    }, () => Math.random() * 2 - 1),
+                );
+                this.biasH = Array.from({
+                        length: hiddenNodes
+                    },
+                    () => Math.random() * 2 - 1,
+                );
+                this.biasO = Array.from({
+                        length: outputNodes
+                    },
+                    () => Math.random() * 2 - 1,
+                );
+            }
+
+            sigmoid(x) {
+                return 1 / (1 + Math.exp(-x));
+            }
+            dsigmoid(y) {
+                return y * (1 - y);
+            }
+
+            predict(inputArray) {
+                let hidden = this.weightsIH.map((wRow, i) => {
+                    let sum = wRow.reduce((acc, w, j) => acc + w * inputArray[j], 0);
+                    return this.sigmoid(sum + this.biasH[i]);
+                });
+                let output = this.weightsHO.map((wRow, i) => {
+                    let sum = wRow.reduce((acc, w, j) => acc + w * hidden[j], 0);
+                    return this.sigmoid(sum + this.biasO[i]);
+                });
+                return {
+                    output,
+                    hidden
+                };
+            }
+
+            train(inputArray, targetArray, learningRate) {
+                const {
+                    output,
+                    hidden
+                } = this.predict(inputArray);
+                let outputErrors = targetArray.map((t, i) => t - output[i]);
+                let hiddenErrors = Array.from({
+                        length: this.hiddenNodes
+                    },
+                    (_, i) => {
+                        return this.weightsHO.reduce(
+                            (acc, wRow, j) => acc + wRow[i] * outputErrors[j],
+                            0,
+                        );
+                    },
+                );
+                this.weightsHO = this.weightsHO.map((wRow, i) => {
+                    let delta =
+                        outputErrors[i] * this.dsigmoid(output[i]) * learningRate;
+                    this.biasO[i] += delta;
+                    return wRow.map((w, j) => w + delta * hidden[j]);
+                });
+                this.weightsIH = this.weightsIH.map((wRow, i) => {
+                    let delta =
+                        hiddenErrors[i] * this.dsigmoid(hidden[i]) * learningRate;
+                    this.biasH[i] += delta;
+                    return wRow.map((w, j) => w + delta * inputArray[j]);
+                });
+            }
+        }
+
+        const canvas = document.getElementById("decisionCanvas");
+        const ctx = canvas.getContext("2d");
+        const netSvg = document.getElementById("networkSvg");
+        const badge = document.getElementById("accuracy-badge");
+
+        const xMin = 4,
+            xMax = 8;
+        const yMin = 2,
+            yMax = 4.5;
+        const colors = ["#440154", "#21918c", "#fde725"];
+        const fillColors = [
+            "rgba(68, 1, 84, 0.2)",
+            "rgba(33, 145, 140, 0.2)",
+            "rgba(253, 231, 37, 0.2)",
+        ];
+
+        let nn = new NeuralNetwork(2, 6, 3);
+        let currentLR = 0.1;
+
+        function normalize(val, min, max) {
+            return (val - min) / (max - min);
+        }
+
+        function denormalize(val, min, max) {
+            return val * (max - min) + min;
+        }
+
+        function drawBackground() {
+            const step = 5;
+            for (let x = 0; x < canvas.width; x += step) {
+                for (let y = 0; y < canvas.height; y += step) {
+                    const normX = normalize(x, 0, canvas.width);
+                    const normY = normalize(y, canvas.height, 0);
+                    const realX = denormalize(normX, xMin, xMax);
+                    const realY = denormalize(normY, yMin, yMax);
+                    const {
+                        output
+                    } = nn.predict([
+                        normalize(realX, xMin, xMax),
+                        normalize(realY, yMin, yMax),
+                    ]);
+                    const maxIdx = output.indexOf(Math.max(...output));
+                    ctx.fillStyle = fillColors[maxIdx];
+                    ctx.fillRect(x, y, step, step);
+                }
+            }
+        }
+
+        function drawPoints() {
+            irisData.forEach((p) => {
+                const px = normalize(p[0], xMin, xMax) * canvas.width;
+                const py =
+                    canvas.height - normalize(p[1], yMin, yMax) * canvas.height;
+                ctx.beginPath();
+                ctx.arc(px, py, 5, 0, Math.PI * 2);
+                ctx.fillStyle = colors[p[2]];
+                ctx.fill();
+                ctx.strokeStyle = "#fff";
+                ctx.stroke();
+            });
+        }
+
+        function calculateAccuracy() {
+            let correct = 0;
+            irisData.forEach((p) => {
+                const {
+                    output
+                } = nn.predict([
+                    normalize(p[0], xMin, xMax),
+                    normalize(p[1], yMin, yMax),
+                ]);
+                if (output.indexOf(Math.max(...output)) === p[2]) correct++;
+            });
+            const acc = (correct / irisData.length).toFixed(2);
+            badge.innerText = `Accuracy: ${acc}`;
+            badge.className =
+                acc > 0.8 ?
+                "px-3 py-1 bg-green-100 text-green-700 rounded-full text-sm font-bold" :
+                acc > 0.5 ?
+                "px-3 py-1 bg-yellow-100 text-yellow-700 rounded-full text-sm font-bold" :
+                "px-3 py-1 bg-red-100 text-red-700 rounded-full text-sm font-bold";
+        }
+
+        function updateViz() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            drawBackground();
+            drawPoints();
+            drawNetwork();
+        }
+
+        function drawNetwork() {
+            netSvg.innerHTML = "";
+            const layers = [nn.inputNodes, nn.hiddenNodes, nn.outputNodes];
+            const layerWidth = 400 / (layers.length + 1);
+            const nodes = [];
+
+            layers.forEach((count, l) => {
+                const x = (l + 1) * layerWidth;
+                for (let i = 0; i < count; i++) {
+                    const y = (i + 1) * (200 / (count + 1));
+                    nodes.push({
+                        x,
+                        y,
+                        l,
+                        i
+                    });
+                }
+            });
+
+            nodes.forEach((n1) => {
+                nodes.forEach((n2) => {
+                    if (n2.l === n1.l + 1) {
+                        let weight =
+                            n1.l === 0 ?
+                            nn.weightsIH[n2.i][n1.i] :
+                            nn.weightsHO[n2.i][n1.i];
+                        const line = document.createElementNS(
+                            "http://www.w3.org/2000/svg",
+                            "line",
+                        );
+                        line.setAttribute("x1", n1.x);
+                        line.setAttribute("y1", n1.y);
+                        line.setAttribute("x2", n2.x);
+                        line.setAttribute("y2", n2.y);
+                        line.setAttribute("stroke", weight > 0 ? "#3b82f6" : "#ef4444");
+                        line.setAttribute("stroke-width", Math.abs(weight) * 3);
+                        line.setAttribute("opacity", "0.4");
+                        netSvg.appendChild(line);
+                    }
+                });
+            });
+
+            nodes.forEach((n) => {
+                const circle = document.createElementNS(
+                    "http://www.w3.org/2000/svg",
+                    "circle",
+                );
+                circle.setAttribute("cx", n.x);
+                circle.setAttribute("cy", n.y);
+                circle.setAttribute("r", 8);
+                circle.setAttribute("class", "node");
+                circle.setAttribute(
+                    "fill",
+                    n.l === 0 ? "#64748b" : n.l === 2 ? colors[n.i] : "#cbd5e1",
+                );
+                netSvg.appendChild(circle);
+
+                if (n.l === 0 || n.l === 2) {
+                    const text = document.createElementNS(
+                        "http://www.w3.org/2000/svg",
+                        "text",
+                    );
+                    text.setAttribute("x", n.l === 0 ? n.x - 12 : n.x + 12);
+                    text.setAttribute("y", n.y + 3);
+                    text.setAttribute("font-size", "7");
+                    text.setAttribute("fill", "#64748b");
+                    text.setAttribute("font-weight", "bold");
+                    text.setAttribute("text-anchor", n.l === 0 ? "end" : "start");
+                    const labels = [
+                        ["S. Length", "S. Width"],
+                        ["Setosa", "Versicolor", "Virginica"],
+                    ];
+                    text.textContent = n.l === 0 ? labels[0][n.i] : labels[1][n.i];
+                    netSvg.appendChild(text);
+                }
+            });
+        }
+
+        document.getElementById("trainBtn").addEventListener("click", () => {
+            const btn = document.getElementById("trainBtn");
+            btn.disabled = true;
+            btn.innerText = "Training...";
+            let epoch = 0;
+
+            function trainStep() {
+                for (let i = 0; i < 5; i++) {
+                    irisData.forEach((p) => {
+                        const inputs = [
+                            normalize(p[0], xMin, xMax),
+                            normalize(p[1], yMin, yMax),
+                        ];
+                        const targets = [0, 0, 0];
+                        targets[p[2]] = 1;
+                        nn.train(inputs, targets, currentLR);
+                    });
+                }
+                epoch += 5;
+                updateViz();
+                calculateAccuracy();
+                if (epoch < 200) requestAnimationFrame(trainStep);
+                else {
+                    btn.disabled = false;
+                    btn.innerText = "Train More";
+                }
+            }
+            trainStep();
+        });
+
+        document.getElementById("resetBtn").addEventListener("click", () => {
+            const hiddenCount = parseInt(
+                document.getElementById("hiddenRange").value,
+            );
+            nn = new NeuralNetwork(2, hiddenCount, 3);
+            updateViz();
+            calculateAccuracy();
+        });
+
+        document.getElementById("lrRange").addEventListener("input", (e) => {
+            currentLR = parseFloat(e.target.value);
+            document.getElementById("lr-val").innerText = currentLR;
+        });
+
+        // Fixed: Added logic to reset the network architecture and update visuals immediately when the slider moves
+        document.getElementById("hiddenRange").addEventListener("input", (e) => {
+            const val = parseInt(e.target.value);
+            document.getElementById("hidden-val").innerText = val;
+
+            // Re-instantiate the network with the new hidden node count
+            nn = new NeuralNetwork(2, val, 3);
+
+            // Redraw everything to reflect the architectural change
+            updateViz();
+            calculateAccuracy();
+        });
+
+        canvas.addEventListener("mousemove", (e) => {
+            const rect = canvas.getBoundingClientRect();
+            const x = e.clientX - rect.left,
+                y = e.clientY - rect.top;
+            const realX = denormalize(normalize(x, 0, canvas.width), xMin, xMax);
+            const realY = denormalize(normalize(y, canvas.height, 0), yMin, yMax);
+            const {
+                output
+            } = nn.predict([
+                normalize(realX, xMin, xMax),
+                normalize(realY, yMin, yMax),
+            ]);
+            const labels = ["Setosa", "Versicolor", "Virginica"];
+            const maxIdx = output.indexOf(Math.max(...output));
+            const tooltip = document.getElementById("tooltip");
+            tooltip.style.left = `${e.pageX + 10}px`;
+            tooltip.style.top = `${e.pageY + 10}px`;
+            tooltip.style.display = "block";
+            tooltip.innerHTML = `<b>Length:</b> ${realX.toFixed(2)}cm<br><b>Width:</b> ${realY.toFixed(2)}cm<hr class="my-1 border-slate-700"><b>Prediction:</b> ${labels[maxIdx]}<br><b>Confidence:</b> ${(output[maxIdx] * 100).toFixed(1)}%`;
+        });
+
+        canvas.addEventListener(
+            "mouseleave",
+            () => (document.getElementById("tooltip").style.display = "none"),
+        );
+        window.onload = () => {
+            updateViz();
+            calculateAccuracy();
+        };
+    </script>
+</body>
+
+</html>

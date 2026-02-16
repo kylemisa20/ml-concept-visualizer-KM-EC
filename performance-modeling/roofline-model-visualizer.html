@@ -1,0 +1,348 @@
+<!doctype html>
+<!-- Brief: Visualization of the roofline model for arithmetic intensity and performance. -->
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Interactive Roofline Model Explorer</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        :root {
+            --primary: #2563eb;
+            --secondary: #dc2626;
+            --bg-dark: #0f172a;
+        }
+
+        canvas {
+            background: #ffffff;
+            border-radius: 8px;
+        }
+
+        .control-panel {
+            background: #f8fafc;
+            border: 1px solid #e2e8f0;
+        }
+
+        .info-card {
+            transition: all 0.3s ease;
+        }
+
+        .info-card:hover {
+            transform: translateY(-2px);
+        }
+    </style>
+</head>
+
+<body class="bg-gray-50 min-h-screen font-sans text-gray-900">
+    <header class="bg-slate-900 text-white py-6 px-4 shadow-lg">
+        <div class="max-w-6xl mx-auto flex flex-col md:flex-row justify-between items-center">
+            <div>
+                <h1 class="text-3xl font-bold tracking-tight">
+                    Roofline Model Explorer
+                </h1>
+                <p class="text-slate-400 mt-1">
+                    Understanding Hardware Performance Bounds
+                </p>
+            </div>
+            <div class="mt-4 md:mt-0 flex gap-4">
+                <button onclick="setPreset('a100')" class="bg-green-600 hover:bg-green-700 px-4 py-2 rounded-lg font-medium transition">
+                    Load NVIDIA A100 (SXM4)
+                </button>
+                <button onclick="setPreset('generic')" class="bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded-lg font-medium transition">
+                    Generic CPU
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <main class="max-w-6xl mx-auto p-4 md:p-8 grid grid-cols-1 lg:grid-cols-3 gap-8">
+        <!-- Controls Section -->
+        <section class="lg:col-span-1 space-y-6">
+            <div class="control-panel p-6 rounded-xl shadow-sm">
+                <h2 class="text-xl font-bold mb-4 flex items-center gap-2">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4"></path>
+                    </svg>
+                    Hardware Parameters
+                </h2>
+
+                <div class="space-y-4">
+                    <div>
+                        <label class="block text-sm font-semibold text-gray-700 mb-1 text-slate-500 uppercase">Architecture</label>
+                        <div class="grid grid-cols-2 gap-2 mb-4">
+                            <div>
+                                <label class="text-xs text-gray-400">Peak GFLOPS/s</label>
+                                <input type="number" id="peakGflops" value="1000" step="100" class="w-full p-2 border rounded-md focus:ring-2 focus:ring-blue-500 outline-none text-sm" />
+                            </div>
+                            <div>
+                                <label class="text-xs text-gray-400">Peak GB/s</label>
+                                <input type="number" id="peakBandwidth" value="100" step="10" class="w-full p-2 border rounded-md focus:ring-2 focus:ring-blue-500 outline-none text-sm" />
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="pt-4 border-t border-gray-200">
+                        <label class="block text-sm font-semibold text-gray-700 mb-1">Arithmetic Intensity (AI)</label>
+                        <input type="range" id="kernelAI" min="0.1" max="100" step="0.1" value="5" class="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer" />
+                        <div class="flex justify-between text-sm font-mono mt-1">
+                            <span id="aiValue" class="text-blue-600 font-bold">5.0 FLOP/Byte</span>
+                        </div>
+                    </div>
+
+                    <div class="pt-4 border-t border-gray-200">
+                        <label class="block text-sm font-semibold text-gray-700 mb-1">Kernel Efficiency (%)</label>
+                        <input type="range" id="efficiency" min="1" max="100" step="1" value="100" class="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer" />
+                        <div class="flex justify-between text-sm font-mono mt-1">
+                            <span id="efficiencyValue" class="text-orange-600 font-bold">100%</span>
+                        </div>
+                        <p class="text-[10px] text-gray-400 mt-2 italic">
+                            Why be below the line? Cache misses, branch mispredictions, or
+                            unvectorized code.
+                        </p>
+                    </div>
+                </div>
+            </div>
+
+            <div id="statusBox" class="p-6 rounded-xl border-l-8 transition-all">
+                <h3 id="regionTitle" class="text-lg font-bold">Calculating...</h3>
+                <p id="regionDescription" class="text-sm mt-2"></p>
+                <div class="mt-4 grid grid-cols-2 gap-2 text-center">
+                    <div class="bg-white/50 p-2 rounded">
+                        <p class="text-xs uppercase text-gray-500">Actual Performance</p>
+                        <p id="perfVal" class="text-xl font-mono font-bold">0</p>
+                    </div>
+                    <div class="bg-white/50 p-2 rounded">
+                        <p class="text-xs uppercase text-gray-500">Theoretical Max</p>
+                        <p id="maxVal" class="text-xl font-mono font-bold text-gray-600">
+                            0
+                        </p>
+                    </div>
+                </div>
+                <div class="mt-2 text-center">
+                    <p class="text-[10px] uppercase text-gray-500">Ridge Point AI</p>
+                    <p id="ridgeVal" class="text-sm font-mono font-bold">0</p>
+                </div>
+            </div>
+        </section>
+
+        <!-- Chart Section -->
+        <section class="lg:col-span-2 space-y-6">
+            <div class="bg-white p-6 rounded-xl shadow-md">
+                <div class="flex justify-between items-end mb-4">
+                    <h2 class="text-xl font-bold">Performance Visualization</h2>
+                    <span class="text-xs text-gray-400 bg-gray-100 px-2 py-1 rounded italic">Log-Log Scale</span>
+                </div>
+                <div class="relative h-[450px]">
+                    <canvas id="rooflineChart"></canvas>
+                </div>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div class="info-card p-4 bg-blue-50 border border-blue-100 rounded-lg">
+                    <h4 class="font-bold text-blue-800">Memory Bound</h4>
+                    <p class="text-sm text-blue-700">
+                        Performance is limited by the data transfer slope. Even with 100%
+                        efficiency, you can't exceed this line.
+                    </p>
+                </div>
+                <div class="info-card p-red-50 bg-red-50 border border-red-100 rounded-lg">
+                    <h4 class="font-bold text-red-800">Compute Bound</h4>
+                    <p class="text-sm text-red-700">
+                        Performance is limited by the execution roof. Moving right (more
+                        data reuse) doesn't help anymore.
+                    </p>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <script>
+        let chart;
+        const ctx = document.getElementById("rooflineChart").getContext("2d");
+
+        const presets = {
+            a100: {
+                compute: 19500,
+                bandwidth: 1555
+            },
+            generic: {
+                compute: 1000,
+                bandwidth: 50
+            },
+        };
+
+        const inputs = {
+            peakGflops: document.getElementById("peakGflops"),
+            peakBandwidth: document.getElementById("peakBandwidth"),
+            kernelAI: document.getElementById("kernelAI"),
+            efficiency: document.getElementById("efficiency"),
+            aiValue: document.getElementById("aiValue"),
+            efficiencyValue: document.getElementById("efficiencyValue"),
+        };
+
+        function calculateRoofline() {
+            const P = parseFloat(inputs.peakGflops.value);
+            const B = parseFloat(inputs.peakBandwidth.value);
+            const userAI = parseFloat(inputs.kernelAI.value);
+            const eff = parseFloat(inputs.efficiency.value) / 100;
+            const ridgePoint = P / B;
+
+            inputs.aiValue.innerText = userAI.toFixed(2) + " FLOP/Byte";
+            inputs.efficiencyValue.innerText = (eff * 100).toFixed(0) + "%";
+
+            // Generate Data Points for Chart
+            const dataPoints = [];
+            for (let i = 0.1; i <= 200; i *= 1.2) {
+                const perf = Math.min(P, i * B);
+                dataPoints.push({
+                    x: i,
+                    y: perf
+                });
+            }
+
+            const theoreticalMax = Math.min(P, userAI * B);
+            const actualPerf = theoreticalMax * eff;
+            const isComputeBound = userAI >= ridgePoint;
+
+            updateUI(actualPerf, theoreticalMax, ridgePoint, isComputeBound, eff);
+            updateChart(dataPoints, userAI, actualPerf, theoreticalMax, P, B);
+        }
+
+        function updateUI(perf, maxPerf, ridge, isCompute, efficiency) {
+            const statusBox = document.getElementById("statusBox");
+            const title = document.getElementById("regionTitle");
+            const desc = document.getElementById("regionDescription");
+
+            document.getElementById("perfVal").innerText = perf.toFixed(1) + " GF";
+            document.getElementById("maxVal").innerText =
+                maxPerf.toFixed(1) + " GF";
+            document.getElementById("ridgeVal").innerText = ridge.toFixed(2);
+
+            if (efficiency < 1) {
+                statusBox.className =
+                    "p-6 rounded-xl border-l-8 bg-orange-100 border-orange-500 text-orange-900";
+                title.innerText = "Performance: Sub-Optimal";
+                desc.innerText = `Your kernel is running at ${(efficiency * 100).toFixed(0)}% of the hardware potential. You are currently ${isCompute ? "Compute" : "Memory"} bound by the architecture, but internal inefficiencies are the primary bottleneck.`;
+            } else if (isCompute) {
+                statusBox.className =
+                    "p-6 rounded-xl border-l-8 bg-red-100 border-red-500 text-red-900";
+                title.innerText = "Region: Compute Bound";
+                desc.innerText = `Peak efficiency reached. The processor's execution units are the hard limit. Increasing AI further won't increase speed.`;
+            } else {
+                statusBox.className =
+                    "p-6 rounded-xl border-l-8 bg-blue-100 border-blue-500 text-blue-900";
+                title.innerText = "Region: Memory Bound";
+                desc.innerText = `Peak efficiency reached. Memory bandwidth is the hard limit. Improve data reuse (increase AI) to climb the slope.`;
+            }
+        }
+
+        function updateChart(
+            dataPoints,
+            userAI,
+            actualPerf,
+            theoreticalMax,
+            peak,
+            bw,
+        ) {
+            if (chart) chart.destroy();
+
+            chart = new Chart(ctx, {
+                type: "line",
+                data: {
+                    datasets: [{
+                            label: "Theoretical Roofline",
+                            data: dataPoints,
+                            borderColor: "#334155",
+                            borderWidth: 2,
+                            pointRadius: 0,
+                            fill: false,
+                            tension: 0,
+                        },
+                        {
+                            label: "Theoretical Max for Kernel",
+                            data: [{
+                                x: userAI,
+                                y: theoreticalMax
+                            }],
+                            backgroundColor: "rgba(51, 65, 85, 0.2)",
+                            borderColor: "#334155",
+                            borderDash: [5, 5],
+                            pointRadius: 6,
+                            pointStyle: "rectRot",
+                            showLine: false,
+                        },
+                        {
+                            label: "Your Actual Performance",
+                            data: [{
+                                x: userAI,
+                                y: actualPerf
+                            }],
+                            backgroundColor: actualPerf < theoreticalMax ? "#f97316" : "#22c55e",
+                            pointRadius: 10,
+                            pointHoverRadius: 12,
+                            showLine: false,
+                        },
+                    ],
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        x: {
+                            type: "logarithmic",
+                            title: {
+                                display: true,
+                                text: "Arithmetic Intensity (FLOPs / Byte)",
+                                font: {
+                                    weight: "bold"
+                                },
+                            },
+                            min: 0.1,
+                            max: 100,
+                        },
+                        y: {
+                            type: "logarithmic",
+                            title: {
+                                display: true,
+                                text: "Performance (GFLOPS/s)",
+                                font: {
+                                    weight: "bold"
+                                },
+                            },
+                            min: 1,
+                        },
+                    },
+                },
+            });
+        }
+
+        function setPreset(key) {
+            const p = presets[key];
+            inputs.peakGflops.value = p.compute;
+            inputs.peakBandwidth.value = p.bandwidth;
+
+            const ridge = p.compute / p.bandwidth;
+            inputs.kernelAI.min = (ridge * 0.1).toFixed(2);
+            inputs.kernelAI.max = (ridge * 10).toFixed(2);
+            inputs.kernelAI.value = ridge.toFixed(2);
+            inputs.efficiency.value = 100;
+
+            calculateRoofline();
+        }
+
+        [
+            inputs.peakGflops,
+            inputs.peakBandwidth,
+            inputs.kernelAI,
+            inputs.efficiency,
+        ].forEach((el) => {
+            el.addEventListener("input", calculateRoofline);
+        });
+
+        window.onload = () => setPreset("a100");
+    </script>
+</body>
+
+</html>

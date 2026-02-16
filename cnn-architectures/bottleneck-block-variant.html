@@ -1,0 +1,277 @@
+<!doctype html>
+<!-- Brief: Visualization of a CNN bottleneck-block variant and channel compression. -->
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>1x1 Convolution: Synchronized Logic</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        window.MathJax = {
+            tex: {
+                inlineMath: [
+                    ["$", "$"],
+                    ["\\(", "\\)"],
+                ],
+                displayMath: [
+                    ["$$", "$$"],
+                    ["\\[", "\\]"],
+                ],
+                processEscapes: true,
+            },
+        };
+    </script>
+    <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+    <style>
+        .scene {
+            perspective: 1200px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 320px;
+            width: 100%;
+        }
+
+        .stack {
+            position: relative;
+            width: 160px;
+            height: 160px;
+            transform: rotateX(55deg) rotateZ(-45deg);
+            transform-style: preserve-3d;
+        }
+
+        .layer {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 2px;
+            border: 1px solid rgba(255, 255, 255, 0.4);
+            background: rgba(255, 255, 255, 0.1);
+            transform-style: preserve-3d;
+        }
+
+        .pixel-unit {
+            aspect-ratio: 1;
+            border-radius: 1px;
+        }
+
+        /* Surface Scanners */
+        .scanner {
+            position: absolute;
+            top: 0;
+            left: 0;
+            border: 3px solid white;
+            box-shadow: 0 0 15px rgba(255, 255, 255, 0.6);
+            z-index: 9999;
+            pointer-events: none;
+            width: 75%;
+            /* 3x3 size in a 4x4 grid */
+            height: 75%;
+        }
+
+        /* Movement Animation */
+        @keyframes syncScan {
+
+            0%,
+            100% {
+                transform: translate3d(0, 0, 5px);
+            }
+
+            25% {
+                transform: translate3d(33.33%, 0, 5px);
+            }
+
+            50% {
+                transform: translate3d(33.33%, 33.33%, 5px);
+            }
+
+            75% {
+                transform: translate3d(0, 33.33%, 5px);
+            }
+        }
+
+        .sync-anim {
+            animation: syncScan 4s infinite linear;
+        }
+
+        .scanner-blue {
+            border-color: #3b82f6;
+            /* Blue-500 */
+            background-color: rgba(59, 130, 246, 0.3);
+        }
+
+        .scanner-red {
+            border-color: #f43f5e;
+            /* Rose-500 */
+            background-color: rgba(244, 63, 94, 0.3);
+        }
+    </style>
+</head>
+
+<body class="bg-slate-50 text-slate-900 p-4 md:p-8 font-sans">
+    <div class="max-w-6xl mx-auto">
+        <header class="mb-10 border-b border-slate-200 pb-6">
+            <h1 class="text-4xl font-extrabold text-slate-800 tracking-tight">
+                Heavy vs. Light Convolution
+            </h1>
+            <p class="text-lg text-slate-600 mt-2">
+                Visualizing why we reduce channels before applying $3 \times 3$
+                filters.
+            </p>
+        </header>
+
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-8 mb-12">
+            <!-- Step 1: Blue -->
+            <div class="bg-white p-6 rounded-3xl shadow-sm border border-slate-200">
+                <div class="mb-4">
+                    <span class="bg-blue-100 text-blue-700 px-3 py-1 rounded-full text-xs font-bold uppercase tracking-widest">Heavy Processing</span>
+                    <h3 class="text-xl font-bold mt-2 text-blue-600">
+                        Blue Stack ($C=6$)
+                    </h3>
+                </div>
+                <div class="scene">
+                    <div class="stack" id="stack1">
+                        <!-- Scanner will be appended to the top layer by JS -->
+                    </div>
+                </div>
+                <p class="mt-4 text-sm text-slate-600">
+                    A $3 \times 3$ filter applied here must penetrate **6 channels**.
+                    This is computationally expensive.
+                </p>
+            </div>
+
+            <!-- Step 2: Red -->
+            <div class="bg-white p-6 rounded-3xl shadow-sm border border-slate-200">
+                <div class="mb-4">
+                    <span class="bg-rose-100 text-rose-700 px-3 py-1 rounded-full text-xs font-bold uppercase tracking-widest">Efficient Processing</span>
+                    <h3 class="text-xl font-bold mt-2 text-rose-600">
+                        Red Stack ($C=3$)
+                    </h3>
+                </div>
+                <div class="scene">
+                    <div class="stack" id="stack2">
+                        <!-- Scanner will be appended to the top layer by JS -->
+                    </div>
+                </div>
+                <p class="mt-4 text-sm text-slate-600">
+                    The same $3 \times 3$ filter applied here only penetrates **3
+                    channels**. The work is halved.
+                </p>
+            </div>
+
+            <!-- Step 3: Result -->
+            <div class="bg-white p-6 rounded-3xl shadow-sm border border-slate-200 flex flex-col">
+                <div class="mb-4">
+                    <span class="bg-emerald-100 text-emerald-700 px-3 py-1 rounded-full text-xs font-bold uppercase tracking-widest">Final Output</span>
+                    <h3 class="text-xl font-bold mt-2 text-emerald-600">
+                        Green Result
+                    </h3>
+                </div>
+                <div class="scene mt-auto mb-auto">
+                    <div class="stack" id="stack3"></div>
+                </div>
+                <p class="mt-4 text-sm text-slate-600">
+                    The output volume after spatial features are extracted from the
+                    "thin" Red volume.
+                </p>
+            </div>
+        </div>
+
+        <!-- Explanation -->
+        <div class="bg-slate-900 rounded-3xl p-8 text-white">
+            <h2 class="text-2xl font-bold mb-4 text-indigo-300">
+                The "Bottleneck" Advantage
+            </h2>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-10">
+                <div class="text-slate-300 text-sm leading-relaxed">
+                    <p class="mb-4">
+                        By comparing the Blue and Red stacks, you can see the impact of
+                        dimensionality reduction. Both stacks are being scanned by a **$3
+                        \times 3$ spatial filter**.
+                    </p>
+                    <p>
+                        However, the filter on the Red stack is "shallower." In real-world
+                        networks like GoogLeNet, we might reduce 192 channels down to 16,
+                        making the spatial convolution **12x faster**.
+                    </p>
+                </div>
+                <div class="bg-slate-800 p-6 rounded-2xl border border-slate-700">
+                    <h4 class="text-indigo-300 font-bold mb-4 uppercase text-xs tracking-widest">
+                        The Multiplier Effect
+                    </h4>
+                    <div class="space-y-2 font-mono text-xs">
+                        <div class="text-blue-300">
+                            Blue Ops: $3 \times 3 \times 6 = \mathbf{54}$ per filter
+                        </div>
+                        <div class="text-rose-300">
+                            Red Ops: $3 \times 3 \times 3 = \mathbf{27}$ per filter
+                        </div>
+                        <div class="mt-4 pt-4 border-t border-slate-700 text-indigo-400">
+                            Conclusion: $1 \times 1$ filters "prepare" the data to make
+                            spatial processing efficient.
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const SPACING = 22;
+
+        function renderStack(id, count, hsl, scannerType) {
+            const container = document.getElementById(id);
+            container.innerHTML = "";
+
+            let topLayer;
+
+            for (let i = 0; i < count; i++) {
+                const layer = document.createElement("div");
+                layer.className = "layer";
+                layer.style.transform = `translateZ(${i * SPACING}px)`;
+
+                // Styling the top-most layer differently
+                if (i === count - 1) {
+                    layer.style.background = "rgba(255, 255, 255, 0.3)";
+                    layer.style.borderColor = "rgba(255, 255, 255, 0.8)";
+                    topLayer = layer;
+                }
+
+                for (let j = 0; j < 16; j++) {
+                    const px = document.createElement("div");
+                    const b = Math.floor(Math.random() * 40) + 40;
+                    px.className = "pixel-unit";
+                    px.style.backgroundColor = `hsl(${hsl}, 70%, ${b}%)`;
+                    layer.appendChild(px);
+                }
+                container.appendChild(layer);
+            }
+
+            // Append scanner to the top layer to ensure it's rendered correctly in 3D space
+            if (scannerType && topLayer) {
+                const scanner = document.createElement("div");
+                scanner.className = `scanner scanner-${scannerType} sync-anim`;
+                topLayer.appendChild(scanner);
+            }
+        }
+
+        // Initialize stacks
+        renderStack("stack1", 6, 210, "blue"); // Blue stack with 3x3 scanner
+        renderStack("stack2", 3, 0, "red"); // Red stack with 3x3 scanner
+        renderStack("stack3", 3, 150); // Green result (static)
+
+        // Ensure MathJax renders
+        window.addEventListener("load", () => {
+            if (window.MathJax && window.MathJax.typeset) {
+                window.MathJax.typeset();
+            }
+        });
+    </script>
+</body>
+
+</html>

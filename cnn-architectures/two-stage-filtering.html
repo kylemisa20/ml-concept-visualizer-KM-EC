@@ -1,0 +1,335 @@
+<!doctype html>
+<!-- Brief: Visualization of two-stage filtering and convolution decomposition. -->
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Spatially Separable Convolutions</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- MathJax for LaTeX rendering -->
+    <script>
+        window.MathJax = {
+            tex: {
+                inlineMath: [
+                    ["$", "$"],
+                    ["\\(", "\\)"],
+                ],
+                displayMath: [
+                    ["$$", "$$"],
+                    ["\\[", "\\]"],
+                ],
+                processEscapes: true,
+            },
+            options: {
+                skipHtmlTags: ["script", "noscript", "style", "textarea", "pre"],
+            },
+        };
+    </script>
+    <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+    <style>
+        .grid-container {
+            display: grid;
+            gap: 2px;
+            background-color: #e2e8f0;
+            padding: 2px;
+            border-radius: 4px;
+        }
+
+        .cell {
+            aspect-ratio: 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 10px;
+            font-weight: bold;
+            transition: all 0.15s ease-in-out;
+            background-color: white;
+            color: #94a3b8;
+        }
+
+        .highlight-active {
+            background-color: #3b82f6 !important;
+            color: white !important;
+            transform: scale(1.1);
+            z-index: 10;
+        }
+
+        .highlight-window {
+            background-color: #dbeafe;
+            border: 1px solid #3b82f6;
+            color: #1e40af;
+        }
+
+        .filled-step1 {
+            background-color: #fef9c3;
+            color: #854d0e;
+        }
+
+        .filled-step2 {
+            background-color: #dcfce7;
+            color: #166534;
+        }
+
+        .status-pill {
+            transition: all 0.3s ease;
+            min-height: 40px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        /* Fix MathJax font sizing in small containers */
+        .mjx-container {
+            margin: 0 !important;
+        }
+    </style>
+</head>
+
+<body class="bg-slate-50 text-slate-900 p-4 md:p-10 font-sans">
+    <div class="max-w-6xl mx-auto">
+        <header class="mb-6 text-center">
+            <h1 class="text-3xl font-bold text-slate-800">
+                Decomposing $5 \times 5$ Filters
+            </h1>
+            <p class="text-slate-600 mt-2">
+                Visualizing the Two-Step "Spatially Separable" Convolution
+            </p>
+        </header>
+
+        <!-- Status Bar -->
+        <div class="flex justify-center mb-8">
+            <div id="status-display" class="status-pill px-8 py-2 rounded-full bg-blue-600 text-white font-bold shadow-lg text-sm uppercase tracking-widest">
+                Step 1: Horizontal Scan ($1 \times 5$)
+            </div>
+        </div>
+
+        <!-- Main Interaction Area -->
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-8 mb-12">
+            <!-- Original Input -->
+            <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
+                <h2 class="text-sm font-bold uppercase text-slate-400 mb-4 tracking-widest">
+                    Input Image ($9 \times 9$)
+                </h2>
+                <div class="grid-container" style="grid-template-columns: repeat(9, 1fr)" id="input-grid"></div>
+                <div class="mt-4 text-[10px] text-slate-400 italic">
+                    Blue window = Current $1 \times 5$ filter position.
+                </div>
+            </div>
+
+            <!-- Step 1: Intermediate Result -->
+            <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
+                <div class="flex justify-between items-start mb-4">
+                    <h2 class="text-sm font-bold uppercase text-slate-400 tracking-widest">
+                        Step 1 Result ($9 \times 5$)
+                    </h2>
+                    <span class="bg-yellow-100 text-yellow-700 text-[10px] font-bold px-2 py-1 rounded">1D Horizontal</span>
+                </div>
+                <div class="grid-container" style="grid-template-columns: repeat(5, 1fr)" id="step1-grid"></div>
+                <div class="mt-4 text-[10px] text-slate-400 italic">
+                    Width is reduced by $F-1$ pixels.
+                </div>
+            </div>
+
+            <!-- Step 2: Final Result -->
+            <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
+                <div class="flex justify-between items-start mb-4">
+                    <h2 class="text-sm font-bold uppercase text-slate-400 tracking-widest">
+                        Step 2 Result ($5 \times 5$)
+                    </h2>
+                    <span class="bg-green-100 text-green-700 text-[10px] font-bold px-2 py-1 rounded">1D Vertical</span>
+                </div>
+                <div class="grid-container" style="grid-template-columns: repeat(5, 1fr)" id="step2-grid"></div>
+                <div class="mt-4 text-[10px] text-slate-400 italic">
+                    Height is reduced by $F-1$ pixels.
+                </div>
+            </div>
+        </div>
+
+        <!-- Logic Section -->
+        <div class="bg-slate-900 rounded-3xl p-8 text-white">
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-12">
+                <div>
+                    <h3 class="text-2xl font-bold mb-4 text-indigo-300">
+                        The Relationship
+                    </h3>
+                    <p class="text-slate-300 text-sm leading-relaxed mb-4">
+                        A $5 \times 5$ convolution can be factored into a sequence of $1
+                        \times 5$ and $5 \times 1$ operations:
+                    </p>
+                    <ul class="space-y-4 text-xs">
+                        <li class="flex items-start">
+                            <span class="text-blue-400 font-bold mr-3 mt-0.5">PHASE 1</span>
+                            <span>The $1 \times 5$ filter slides horizontally. It maps 5
+                                spatial pixels into **1 intermediate value** (yellow).</span>
+                        </li>
+                        <li class="flex items-start">
+                            <span class="text-green-400 font-bold mr-3 mt-0.5">PHASE 2</span>
+                            <span>The $5 \times 1$ filter slides vertically over the
+                                intermediate values to produce the **final output**
+                                (green).</span>
+                        </li>
+                    </ul>
+                </div>
+
+                <div class="bg-slate-800 p-6 rounded-2xl border border-slate-700">
+                    <h4 class="text-indigo-300 font-bold mb-4 uppercase text-xs tracking-widest">
+                        Output Size Logic
+                    </h4>
+                    <div class="space-y-6 font-serif text-sm">
+                        <div class="bg-black/20 p-4 rounded-lg">
+                            <p class="text-slate-400 mb-2 font-sans text-[10px] uppercase">
+                                General Formula
+                            </p>
+                            $$O = \frac{I - F + 2P}{S} + 1$$
+                        </div>
+                        <div class="bg-black/20 p-4 rounded-lg">
+                            <p class="text-slate-400 mb-2 font-sans text-[10px] uppercase">
+                                With $N=9, F=5, S=1, P=0$
+                            </p>
+                            $$O = (9 - 5) + 1 = 5$$
+                            <p class="text-[10px] mt-2 text-indigo-400 font-sans">
+                                Final Map: $5 \times 5$
+                            </p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        (function() {
+            const inputGrid = document.getElementById("input-grid");
+            const step1Grid = document.getElementById("step1-grid");
+            const step2Grid = document.getElementById("step2-grid");
+            const statusDisplay = document.getElementById("status-display");
+
+            const nIn = 9;
+            const filterSize = 5;
+            const nStep1W = nIn - filterSize + 1; // 5
+            const nStep1H = nIn; // 9
+            const nStep2Size = nStep1W; // 5
+
+            let phase = 1; // 1: Horizontal, 2: Vertical
+            let row = 0;
+            let col = 0;
+            let lastPhase = 0;
+
+            function init() {
+                for (let i = 0; i < nIn * nIn; i++) {
+                    const cell = document.createElement("div");
+                    cell.className = "cell";
+                    cell.innerText = Math.floor(Math.random() * 9);
+                    inputGrid.appendChild(cell);
+                }
+                for (let i = 0; i < nStep1H * nStep1W; i++) {
+                    const cell = document.createElement("div");
+                    cell.className = "cell";
+                    cell.innerText = "?";
+                    step1Grid.appendChild(cell);
+                }
+                for (let i = 0; i < nStep2Size * nStep2Size; i++) {
+                    const cell = document.createElement("div");
+                    cell.className = "cell";
+                    cell.innerText = "?";
+                    step2Grid.appendChild(cell);
+                }
+
+                setInterval(animate, 250);
+            }
+
+            function clearHighlights() {
+                [inputGrid, step1Grid, step2Grid].forEach((grid) => {
+                    Array.from(grid.children).forEach((c) => {
+                        c.classList.remove("highlight-window", "highlight-active");
+                    });
+                });
+            }
+
+            function animate() {
+                clearHighlights();
+
+                // Only trigger MathJax re-render when phase changes to save performance
+                if (phase !== lastPhase) {
+                    if (phase === 1) {
+                        statusDisplay.innerHTML =
+                            "Step 1: Horizontal Scan ($1 \\times 5$)";
+                        statusDisplay.className =
+                            "status-pill px-8 py-2 rounded-full bg-blue-600 text-white font-bold shadow-lg text-sm uppercase tracking-widest";
+                    } else {
+                        statusDisplay.innerHTML = "Step 2: Vertical Scan ($5 \\times 1$)";
+                        statusDisplay.className =
+                            "status-pill px-8 py-2 rounded-full bg-green-600 text-white font-bold shadow-lg text-sm uppercase tracking-widest";
+                    }
+                    if (window.MathJax && window.MathJax.typesetPromise) {
+                        window.MathJax.typesetPromise([statusDisplay]);
+                    }
+                    lastPhase = phase;
+                }
+
+                if (phase === 1) {
+                    const startIdx = row * nIn + col;
+                    for (let i = 0; i < filterSize; i++) {
+                        inputGrid.children[startIdx + i].classList.add(
+                            "highlight-window",
+                        );
+                    }
+
+                    const targetIdx = row * nStep1W + col;
+                    const targetCell = step1Grid.children[targetIdx];
+                    targetCell.classList.add("highlight-active");
+                    targetCell.classList.add("filled-step1");
+                    targetCell.innerText = Math.floor(Math.random() * 9);
+
+                    col++;
+                    if (col >= nStep1W) {
+                        col = 0;
+                        row++;
+                    }
+                    if (row >= nStep1H) {
+                        phase = 2;
+                        row = 0;
+                        col = 0;
+                    }
+                } else {
+                    for (let i = 0; i < filterSize; i++) {
+                        const step1Idx = (row + i) * nStep1W + col;
+                        step1Grid.children[step1Idx].classList.add("highlight-window");
+                    }
+
+                    const targetIdx = row * nStep2Size + col;
+                    const targetCell = step2Grid.children[targetIdx];
+                    targetCell.classList.add("highlight-active");
+                    targetCell.classList.add("filled-step2");
+                    targetCell.innerText = Math.floor(Math.random() * 9);
+
+                    col++;
+                    if (col >= nStep2Size) {
+                        col = 0;
+                        row++;
+                    }
+                    if (row >= nStep2Size) {
+                        setTimeout(() => {
+                            Array.from(step1Grid.children).forEach((c) => {
+                                c.classList.remove("filled-step1");
+                                c.innerText = "?";
+                            });
+                            Array.from(step2Grid.children).forEach((c) => {
+                                c.classList.remove("filled-step2");
+                                c.innerText = "?";
+                            });
+                            phase = 1;
+                            row = 0;
+                            col = 0;
+                        }, 1000);
+                    }
+                }
+            }
+
+            init();
+        })();
+    </script>
+</body>
+
+</html>

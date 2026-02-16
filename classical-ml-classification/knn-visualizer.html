@@ -1,0 +1,278 @@
+<!doctype html>
+<!-- Brief: Visualization of KNN nearest-neighbor voting behavior. -->
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>KNN Visual Explorer - Standalone</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body {
+            background-color: #f8fafc;
+        }
+
+        canvas {
+            cursor: crosshair;
+        }
+
+        .active-blue {
+            border-color: #3b82f6;
+            background-color: #eff6ff;
+            color: #1d4ed8;
+        }
+
+        .active-red {
+            border-color: #ef4444;
+            background-color: #fef2f2;
+            color: #b91c1c;
+        }
+    </style>
+</head>
+
+<body class="flex flex-col items-center min-h-screen p-8 font-sans">
+    <div class="max-w-4xl w-full bg-white rounded-2xl shadow-xl overflow-hidden border border-slate-200">
+        <div class="bg-slate-900 p-6 text-white flex justify-between items-center">
+            <div>
+                <h1 class="text-2xl font-bold">KNN Visual Explorer</h1>
+                <p class="text-slate-400 text-sm mt-1">
+                    Click to add points. Hover to classify.
+                </p>
+            </div>
+            <button onclick="resetPoints()" class="p-2 bg-slate-800 hover:bg-slate-700 rounded-lg text-sm">
+                Reset
+            </button>
+        </div>
+        <div class="flex flex-col md:flex-row">
+            <div class="p-6 bg-slate-50 border-r border-slate-200 md:w-72 space-y-8">
+                <div>
+                    <label class="text-xs font-bold uppercase text-slate-500 mb-3 block">Active Class</label>
+                    <div class="grid grid-cols-2 gap-2">
+                        <button id="btn-0" onclick="setClass(0)" class="p-3 rounded-lg border-2 active-blue flex flex-col items-center gap-1">
+                            <div class="w-4 h-4 rounded-full bg-blue-500"></div>
+                            <span class="text-xs font-bold">Blue</span>
+                        </button>
+                        <button id="btn-1" onclick="setClass(1)" class="p-3 rounded-lg border-2 bg-white flex flex-col items-center gap-1">
+                            <div class="w-4 h-4 rounded-full bg-red-500"></div>
+                            <span class="text-xs font-bold">Red</span>
+                        </button>
+                    </div>
+                </div>
+                <div>
+                    <div class="flex justify-between items-center mb-2">
+                        <label class="text-xs font-bold uppercase text-slate-500">Neighbors (k)</label>
+                        <span id="k-display" class="text-lg font-mono font-bold text-slate-700">3</span>
+                    </div>
+                    <input type="range" min="1" max="15" step="2" value="3" oninput="updateK(this.value)" class="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-slate-900" />
+                </div>
+                <div>
+                    <label class="text-xs font-bold uppercase text-slate-500 mb-3 block">Layers</label>
+                    <div class="flex items-center gap-3">
+                        <input type="checkbox" checked onchange="toggleBoundary(this.checked)" id="boundary" class="w-4 h-4" />
+                        <label for="boundary" class="text-sm font-medium text-slate-700 cursor-pointer">Decision Boundary</label>
+                    </div>
+                    <p class="text-xs text-slate-500 mt-2 leading-relaxed">
+                        The shaded background shows what the computer "thinks" a point
+                        would be based on its proximity to your data points.
+                    </p>
+                </div>
+            </div>
+            <div class="flex-1 p-8 bg-slate-100 flex justify-center items-center">
+                <div class="relative bg-white shadow-2xl rounded-lg overflow-hidden border border-slate-300">
+                    <canvas id="boundaryCanvas" width="600" height="500" class="absolute inset-0 opacity-60"></canvas>
+                    <canvas id="mainCanvas" width="600" height="500" class="relative z-10"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+    <script>
+        let points = [{
+                x: 150,
+                y: 150,
+                label: 0
+            },
+            {
+                x: 180,
+                y: 220,
+                label: 0
+            },
+            {
+                x: 120,
+                y: 280,
+                label: 0
+            },
+            {
+                x: 450,
+                y: 450,
+                label: 1
+            },
+            {
+                x: 480,
+                y: 380,
+                label: 1
+            },
+            {
+                x: 420,
+                y: 320,
+                label: 1
+            },
+        ];
+        let currentClass = 0;
+        let k = 3;
+        let showBoundary = true;
+        let hoverPos = null;
+
+        const mainCanvas = document.getElementById("mainCanvas");
+        const boundaryCanvas = document.getElementById("boundaryCanvas");
+        const mainCtx = mainCanvas.getContext("2d");
+        const boundCtx = boundaryCanvas.getContext("2d");
+
+        const colors = {
+            0: {
+                fill: "rgba(59, 130, 246, 0.8)",
+                light: "rgba(59, 130, 246, 0.2)",
+            },
+            1: {
+                fill: "rgba(239, 68, 68, 0.8)",
+                light: "rgba(239, 68, 68, 0.2)"
+            },
+        };
+
+        const getDistance = (p1, p2) =>
+            Math.sqrt(Math.pow(p1.x - p2.x, 2) + Math.pow(p1.y - p2.y, 2));
+
+        function classify(x, y, targetK, dataset) {
+            if (dataset.length === 0) return null;
+            const distances = dataset.map((p) => ({
+                ...p,
+                dist: getDistance({
+                    x,
+                    y
+                }, p),
+            }));
+            distances.sort((a, b) => a.dist - b.dist);
+            const neighbors = distances.slice(0, Math.min(targetK, dataset.length));
+            const votes = neighbors.reduce((acc, n) => {
+                acc[n.label] = (acc[n.label] || 0) + 1;
+                return acc;
+            }, {});
+            let winner = 0,
+                maxVotes = -1;
+            Object.keys(votes).forEach((l) => {
+                if (votes[l] > maxVotes) {
+                    maxVotes = votes[l];
+                    winner = parseInt(l);
+                }
+            });
+            return {
+                label: winner,
+                neighbors
+            };
+        }
+
+        function render() {
+            mainCtx.clearRect(0, 0, 600, 500);
+            points.forEach((p) => {
+                mainCtx.beginPath();
+                mainCtx.arc(p.x, p.y, 6, 0, Math.PI * 2);
+                mainCtx.fillStyle = colors[p.label].fill;
+                mainCtx.fill();
+                mainCtx.strokeStyle = "#fff";
+                mainCtx.lineWidth = 2;
+                mainCtx.stroke();
+            });
+
+            if (hoverPos) {
+                const res = classify(hoverPos.x, hoverPos.y, k, points);
+                if (res) {
+                    mainCtx.setLineDash([5, 5]);
+                    mainCtx.strokeStyle = "rgba(0,0,0,0.15)";
+                    res.neighbors.forEach((n) => {
+                        mainCtx.beginPath();
+                        mainCtx.moveTo(hoverPos.x, hoverPos.y);
+                        mainCtx.lineTo(n.x, n.y);
+                        mainCtx.stroke();
+                    });
+                    mainCtx.setLineDash([]);
+                    mainCtx.beginPath();
+                    mainCtx.arc(hoverPos.x, hoverPos.y, 8, 0, Math.PI * 2);
+                    mainCtx.fillStyle = colors[res.label].fill;
+                    mainCtx.fill();
+                    mainCtx.strokeStyle = "#34d399";
+                    mainCtx.lineWidth = 3;
+                    mainCtx.stroke();
+                }
+            }
+        }
+
+        function renderBoundary() {
+            boundCtx.clearRect(0, 0, 600, 500);
+            if (!showBoundary || points.length === 0) return;
+            const step = 8;
+            for (let x = 0; x < 600; x += step) {
+                for (let y = 0; y < 500; y += step) {
+                    const res = classify(x, y, k, points);
+                    if (res) {
+                        boundCtx.fillStyle = colors[res.label].light;
+                        boundCtx.fillRect(x, y, step, step);
+                    }
+                }
+            }
+        }
+
+        mainCanvas.addEventListener("mousedown", (e) => {
+            const rect = mainCanvas.getBoundingClientRect();
+            points.push({
+                x: e.clientX - rect.left,
+                y: e.clientY - rect.top,
+                label: currentClass,
+            });
+            renderBoundary();
+            render();
+        });
+
+        mainCanvas.addEventListener("mousemove", (e) => {
+            const rect = mainCanvas.getBoundingClientRect();
+            hoverPos = {
+                x: e.clientX - rect.left,
+                y: e.clientY - rect.top
+            };
+            render();
+        });
+
+        function setClass(c) {
+            currentClass = c;
+            document.getElementById("btn-0").className =
+                c === 0 ?
+                "p-3 rounded-lg border-2 active-blue flex flex-col items-center gap-1" :
+                "p-3 rounded-lg border-2 bg-white flex flex-col items-center gap-1";
+            document.getElementById("btn-1").className =
+                c === 1 ?
+                "p-3 rounded-lg border-2 active-red flex flex-col items-center gap-1" :
+                "p-3 rounded-lg border-2 bg-white flex flex-col items-center gap-1";
+        }
+
+        function updateK(val) {
+            k = parseInt(val);
+            document.getElementById("k-display").innerText = val;
+            renderBoundary();
+            render();
+        }
+
+        function toggleBoundary(val) {
+            showBoundary = val;
+            renderBoundary();
+        }
+
+        function resetPoints() {
+            points = [];
+            renderBoundary();
+            render();
+        }
+
+        renderBoundary();
+        render();
+    </script>
+</body>
+
+</html>

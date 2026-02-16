@@ -1,0 +1,419 @@
+<!doctype html>
+<!-- Brief: Visualization of tiled GEMM cache-miss formula derivation. -->
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Matrix Tiling Miss Formula Derivation</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://polyfill.io/v3/polyfill.min.js?features=es6"></script>
+    <script>
+        window.MathJax = {
+            tex: {
+                inlineMath: [
+                    ["$", "$"],
+                    ["\\(", "\\)"],
+                ],
+                displayMath: [
+                    ["$$", "$$"],
+                    ["\\[", "\\]"],
+                ],
+            },
+            options: {
+                skipHtmlTags: ["script", "noscript", "style", "textarea", "pre"],
+            },
+        };
+    </script>
+    <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+    <style>
+        body {
+            background-color: #f8fafc;
+            font-family:
+                "Inter",
+                system-ui,
+                -apple-system,
+                sans-serif;
+        }
+
+        .step-card {
+            transition: all 0.3s ease;
+            border: 2px solid transparent;
+        }
+
+        .step-card.active {
+            border-color: #3b82f6;
+            background-color: #eff6ff;
+        }
+
+        .canvas-container {
+            position: sticky;
+            top: 20px;
+        }
+
+        #derivationCanvas {
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1);
+        }
+
+        .math-text {
+            font-size: 1.1rem;
+            line-height: 1.6;
+        }
+
+        .highlight {
+            color: #2563eb;
+            font-weight: 700;
+        }
+    </style>
+</head>
+
+<body class="p-4 md:p-8">
+    <div class="max-w-6xl mx-auto">
+        <header class="mb-8">
+            <h1 class="text-3xl font-bold text-slate-900 mb-2">
+                Matrix Tiling: Miss Formula Derivation
+            </h1>
+            <p class="text-slate-600 mb-6">
+                Visualizing how $n^3$ operations become $\frac{n^3}{2T}$ cache misses.
+            </p>
+
+            <!-- Matrix Definition Diagram -->
+            <div class="bg-white p-6 rounded-xl border border-slate-200 shadow-sm flex flex-col md:flex-row items-center gap-8 mb-8">
+                <div class="w-full md:w-1/3">
+                    <svg viewBox="0 0 200 200" class="w-full h-auto drop-shadow-sm">
+                        <!-- Main Matrix n x n -->
+                        <rect x="20" y="20" width="160" height="160" fill="#f1f5f9" stroke="#94a3b8" stroke-width="2" />
+                        <!-- Tile T x T -->
+                        <rect x="20" y="20" width="40" height="40" fill="#bfdbfe" stroke="#3b82f6" stroke-width="2" />
+                        <!-- Dimensions -->
+                        <line x1="20" y1="190" x2="180" y2="190" stroke="#475569" stroke-width="1.5" marker-end="url(#arrow)" marker-start="url(#arrow)" />
+                        <text x="100" y="205" text-anchor="middle" fill="#475569" font-size="14" font-weight="bold">
+                            $n$
+                        </text>
+
+                        <line x1="10" y1="20" x2="10" y2="180" stroke="#475569" stroke-width="1.5" marker-end="url(#arrow)" marker-start="url(#arrow)" />
+                        <text x="5" y="100" text-anchor="middle" fill="#475569" font-size="14" font-weight="bold" transform="rotate(-90, 5, 100)">
+                            $n$
+                        </text>
+
+                        <line x1="20" y1="10" x2="60" y2="10" stroke="#2563eb" stroke-width="1.5" marker-end="url(#arrow)" marker-start="url(#arrow)" />
+                        <text x="40" y="5" text-anchor="middle" fill="#2563eb" font-size="12" font-weight="bold">
+                            $T$
+                        </text>
+
+                        <!-- Arrows -->
+                        <defs>
+                            <marker id="arrow" markerWidth="10" markerHeight="10" refX="5" refY="5" orient="auto">
+                                <path d="M0,0 L10,5 L0,10 L3,5 Z" fill="#475569" />
+                            </marker>
+                        </defs>
+                    </svg>
+                </div>
+                <div class="flex-1">
+                    <h3 class="text-lg font-bold text-slate-800 mb-2">
+                        Key Variable Definitions
+                    </h3>
+                    <ul class="space-y-2 text-slate-600">
+                        <li>
+                            <span class="font-bold text-slate-800">$n$:</span> The total
+                            dimension of the matrix rows and columns.
+                        </li>
+                        <li>
+                            <span class="font-bold text-blue-600">$T$:</span> The dimension
+                            of our software "tile" (the block we process at once).
+                        </li>
+                        <li>
+                            <span class="font-bold text-red-500">$L$:</span> The hardware
+                            cache line size (how many elements arrive per miss).
+                        </li>
+                    </ul>
+                </div>
+            </div>
+        </header>
+
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
+            <!-- Left Side: Interactive Steps -->
+            <div class="space-y-4">
+                <div id="step-1" class="step-card p-6 rounded-xl bg-white shadow-sm cursor-pointer active" onclick="setStep(1)">
+                    <h2 class="text-xl font-semibold mb-2">1. The Setup</h2>
+                    <div class="math-text">
+                        We divide an $n \times n$ matrix into tiles of size $T \times T$.
+                        The hardware loads data in lines of size $L$.
+                        <p class="mt-2 text-sm text-slate-500">
+                            Example Constants: $n=16, T=4, L=4$
+                        </p>
+                    </div>
+                </div>
+
+                <div id="step-2" class="step-card p-6 rounded-xl bg-white shadow-sm cursor-pointer" onclick="setStep(2)">
+                    <h2 class="text-xl font-semibold mb-2">2. Loading One Tile</h2>
+                    <div class="math-text">
+                        A tile has $T^2$ elements. Since we load $L$ elements per miss:
+                        <div class="bg-slate-50 p-3 rounded mt-2 font-mono text-center">
+                            Misses per tile = $\frac{T^2}{L}$
+                        </div>
+                        For a pair (A and B), misses =
+                        <span class="highlight">$\frac{2T^2}{L}$</span>.
+                    </div>
+                </div>
+
+                <div id="step-3" class="step-card p-6 rounded-xl bg-white shadow-sm cursor-pointer" onclick="setStep(3)">
+                    <h2 class="text-xl font-semibold mb-2">
+                        3. One Result Tile ($C_{tile}$)
+                    </h2>
+                    <div class="math-text">
+                        To compute one $T \times T$ output, we need to multiply a row of
+                        tiles by a column of tiles. There are $n/T$ pairs.
+                        <div class="bg-slate-50 p-3 rounded mt-2 font-mono text-center">
+                            $\frac{n}{T} \times \frac{2T^2}{L} = \frac{2nT}{L}$
+                        </div>
+                    </div>
+                </div>
+
+                <div id="step-4" class="step-card p-6 rounded-xl bg-white shadow-sm cursor-pointer" onclick="setStep(4)">
+                    <h2 class="text-xl font-semibold mb-2">4. Total Matrix Misses</h2>
+                    <div class="math-text">
+                        The matrix $C$ contains $(n/T)^2$ such tiles.
+                        <div class="bg-slate-50 p-3 rounded mt-2 font-mono text-center">
+                            $\frac{2nT}{L} \times \frac{n^2}{T^2} = \frac{2n^3}{LT}$
+                        </div>
+                    </div>
+                </div>
+
+                <div id="step-5" class="step-card p-6 rounded-xl bg-white shadow-sm cursor-pointer" onclick="setStep(5)">
+                    <h2 class="text-xl font-semibold mb-2">5. Final Simplification</h2>
+                    <div class="math-text">
+                        Plugging in $L=4$ (standard for 8-byte doubles in 32B cache
+                        lines):
+                        <div class="bg-blue-600 text-white p-4 rounded-lg mt-2 text-center text-xl font-bold">
+                            Total Misses = $\frac{n^3}{2T}$
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Right Side: Canvas Visualization -->
+            <div class="canvas-container">
+                <canvas id="derivationCanvas" width="500" height="500" class="w-full h-auto"></canvas>
+                <div class="mt-4 p-4 bg-slate-800 text-white rounded-lg shadow-inner">
+                    <h3 class="text-sm uppercase tracking-wider text-slate-400 font-bold mb-2">
+                        Legend
+                    </h3>
+                    <div id="legend-content" class="text-sm space-y-2">
+                        <!-- Legend changes based on step -->
+                    </div>
+                </div>
+                <div class="mt-4 flex justify-between">
+                    <button onclick="prevStep()" class="px-4 py-2 bg-slate-200 rounded hover:bg-slate-300 font-bold text-slate-700">
+                        Previous
+                    </button>
+                    <button onclick="nextStep()" class="px-4 py-2 bg-blue-500 rounded hover:bg-blue-600 font-bold text-white">
+                        Next Step
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        (function() {
+            const canvas = document.getElementById("derivationCanvas");
+            const ctx = canvas.getContext("2d");
+            let currentStep = 1;
+
+            const N = 16;
+            const T = 4;
+            const L = 4;
+            const PADDING = 40;
+            const GRID_SIZE = (canvas.width - PADDING * 2) / 3;
+            const CELL_SIZE = GRID_SIZE / N;
+
+            function drawMatrix(
+                x,
+                y,
+                label,
+                highlightTile = null,
+                highlightLine = false,
+            ) {
+                ctx.strokeStyle = "#cbd5e1";
+                ctx.lineWidth = 0.5;
+
+                for (let i = 0; i <= N; i++) {
+                    ctx.beginPath();
+                    ctx.moveTo(x + i * CELL_SIZE, y);
+                    ctx.lineTo(x + i * CELL_SIZE, y + GRID_SIZE);
+                    ctx.stroke();
+
+                    ctx.beginPath();
+                    ctx.moveTo(x, y + i * CELL_SIZE);
+                    ctx.lineTo(x + GRID_SIZE, y + i * CELL_SIZE);
+                    ctx.stroke();
+                }
+
+                ctx.fillStyle = "#64748b";
+                ctx.font = "14px Inter";
+                ctx.textAlign = "center";
+                ctx.fillText(label, x + GRID_SIZE / 2, y + GRID_SIZE + 25);
+
+                ctx.strokeStyle = "#94a3b8";
+                ctx.lineWidth = 1.5;
+                for (let i = 0; i <= N; i += T) {
+                    ctx.beginPath();
+                    ctx.moveTo(x + i * CELL_SIZE, y);
+                    ctx.lineTo(x + i * CELL_SIZE, y + GRID_SIZE);
+                    ctx.stroke();
+                    ctx.beginPath();
+                    ctx.moveTo(x, y + i * CELL_SIZE);
+                    ctx.lineTo(x + GRID_SIZE, y + i * CELL_SIZE);
+                    ctx.stroke();
+                }
+
+                if (highlightTile) {
+                    const tx = highlightTile.x * T * CELL_SIZE;
+                    const ty = highlightTile.y * T * CELL_SIZE;
+
+                    ctx.fillStyle = highlightTile.color || "rgba(59, 130, 246, 0.3)";
+                    ctx.fillRect(x + tx, y + ty, T * CELL_SIZE, T * CELL_SIZE);
+                    ctx.strokeStyle = highlightTile.border || "#2563eb";
+                    ctx.lineWidth = 2;
+                    ctx.strokeRect(x + tx, y + ty, T * CELL_SIZE, T * CELL_SIZE);
+
+                    if (highlightLine) {
+                        ctx.fillStyle = "rgba(239, 68, 68, 0.6)";
+                        for (let row = 0; row < T; row++) {
+                            ctx.fillRect(
+                                x + tx,
+                                y + ty + row * CELL_SIZE,
+                                L * CELL_SIZE,
+                                CELL_SIZE,
+                            );
+                        }
+                    }
+                }
+            }
+
+            function render() {
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                const legend = document.getElementById("legend-content");
+
+                switch (currentStep) {
+                    case 1:
+                        drawMatrix(40, 50, "Matrix A");
+                        drawMatrix(300, 50, "Matrix B");
+                        drawMatrix(170, 300, "Matrix C");
+                        legend.innerHTML =
+                            "• Grey lines: $n \times n$ total elements.<br>• Thick lines: Software tiles of size $T \times T$.";
+                        break;
+                    case 2:
+                        drawMatrix(
+                            40,
+                            50,
+                            "Matrix A", {
+                                x: 0,
+                                y: 0,
+                                color: "rgba(59, 130, 246, 0.2)"
+                            },
+                            true,
+                        );
+                        drawMatrix(
+                            300,
+                            50,
+                            "Matrix B", {
+                                x: 0,
+                                y: 0,
+                                color: "rgba(16, 185, 129, 0.2)"
+                            },
+                            true,
+                        );
+                        legend.innerHTML =
+                            "• Red highlights: Cache Lines ($L=4$).<br>• Loading 1 tile takes $T^2/L$ misses.<br>• Here: $4^2 / 4 = 4$ misses per tile.";
+                        break;
+                    case 3:
+                        for (let i = 0; i < N / T; i++) {
+                            drawMatrix(40, 50, "Matrix A", {
+                                x: i,
+                                y: 0,
+                                color: i == 1 ?
+                                    "rgba(59, 130, 246, 0.4)" :
+                                    "rgba(59, 130, 246, 0.1)",
+                            });
+                            drawMatrix(300, 50, "Matrix B", {
+                                x: 0,
+                                y: i,
+                                color: i == 1 ?
+                                    "rgba(16, 185, 129, 0.4)" :
+                                    "rgba(16, 185, 129, 0.1)",
+                            });
+                        }
+                        drawMatrix(170, 300, "Matrix C", {
+                            x: 0,
+                            y: 0,
+                            color: "rgba(245, 158, 11, 0.6)",
+                        });
+                        legend.innerHTML =
+                            "• To finish 1 yellow tile ($C_{tile}$), we slide across the whole width.<br>• Total $n/T$ pairs needed.";
+                        break;
+                    case 4:
+                        drawMatrix(170, 300, "Matrix C", {
+                            x: 1,
+                            y: 1,
+                            color: "rgba(245, 158, 11, 0.4)",
+                        });
+                        for (let i = 0; i < N / T; i++) {
+                            for (let j = 0; j < N / T; j++) {
+                                ctx.fillStyle = "rgba(245, 158, 11, 0.1)";
+                                ctx.fillRect(
+                                    170 + i * T * CELL_SIZE,
+                                    300 + j * T * CELL_SIZE,
+                                    T * CELL_SIZE,
+                                    T * CELL_SIZE,
+                                );
+                            }
+                        }
+                        legend.innerHTML =
+                            "• Matrix C has $(n/T)^2$ tiles.<br>• We multiply 'Misses per $C_{tile}$' by total $C$ tiles.";
+                        break;
+                    case 5:
+                        ctx.fillStyle = "#1e293b";
+                        ctx.font = "bold 24px Inter";
+                        ctx.textAlign = "center";
+                        ctx.fillText("Formula Result:", canvas.width / 2, 200);
+                        ctx.fillStyle = "#2563eb";
+                        ctx.font = "bold 48px Inter";
+                        ctx.fillText("n³ / 2T", canvas.width / 2, 280);
+                        legend.innerHTML =
+                            "• The '2' comes from $L/2$ (balancing 2 input matrices).<br>• $T$ is in denominator because larger tiles = more reuse!";
+                        break;
+                }
+
+                // Trigger MathJax re-render for new content
+                if (window.MathJax && window.MathJax.typesetPromise) {
+                    window.MathJax.typesetPromise();
+                }
+            }
+
+            window.setStep = function(s) {
+                currentStep = s;
+                document.querySelectorAll(".step-card").forEach((card, idx) => {
+                    card.classList.toggle("active", idx + 1 === s);
+                });
+                render();
+            };
+
+            window.nextStep = function() {
+                if (currentStep < 5) window.setStep(currentStep + 1);
+            };
+            window.prevStep = function() {
+                if (currentStep > 1) window.setStep(currentStep - 1);
+            };
+
+            window.addEventListener("load", () => {
+                render();
+            });
+        })();
+    </script>
+</body>
+
+</html>

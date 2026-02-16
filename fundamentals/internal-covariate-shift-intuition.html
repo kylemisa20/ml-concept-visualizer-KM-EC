@@ -1,0 +1,657 @@
+<!doctype html>
+<!-- Brief: Visualization of internal-covariate-shift intuition during NN training. -->
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Internal Covariate Shift & Batch Norm</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- MathJax Configuration for Inline and Display Math -->
+    <script>
+        window.MathJax = {
+            tex: {
+                inlineMath: [
+                    ["$", "$"],
+                    ["\\(", "\\)"],
+                ],
+                displayMath: [
+                    ["$$", "$$"],
+                    ["\\[", "\\]"],
+                ],
+                processEscapes: true,
+            },
+            options: {
+                enableMenu: false,
+            },
+        };
+    </script>
+    <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+    <style>
+        .gradient-bg {
+            background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+        }
+
+        .math-card {
+            background: rgba(255, 255, 255, 0.03);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            transition: all 0.3s ease;
+        }
+
+        .math-card:hover {
+            border-color: rgba(59, 130, 246, 0.4);
+        }
+
+        .highlight-text {
+            color: #60a5fa;
+            font-weight: 600;
+        }
+
+        #dart-canvas {
+            cursor: crosshair;
+            background: #0f172a;
+            border-radius: 1rem;
+        }
+
+        .cell {
+            width: 40px;
+            height: 30px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.7rem;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            transition: all 0.2s;
+        }
+
+        .cell-highlight {
+            background: rgba(59, 130, 246, 0.4);
+            border: 1px solid #3b82f6;
+        }
+
+        .cell-header {
+            font-weight: bold;
+            color: #94a3b8;
+        }
+    </style>
+</head>
+
+<body class="gradient-bg text-gray-200 min-h-screen font-sans">
+    <div class="max-w-6xl mx-auto px-4 py-8">
+        <!-- Header -->
+        <header class="text-center mb-10">
+            <h1 class="text-5xl font-extrabold mb-4 tracking-tight text-white">
+                Understanding
+                <span class="text-blue-500">Internal Covariate Shift</span>
+            </h1>
+            <p class="text-lg text-gray-400 max-w-2xl mx-auto">
+                Why deep neural networks struggle to learn and how Batch Normalization
+                acts as a "stabilizer."
+            </p>
+        </header>
+
+        <!-- The Normalization Axis Visualization -->
+        <section class="mb-10">
+            <div class="math-card p-8 rounded-3xl border-purple-500/20 bg-purple-500/5">
+                <h2 class="text-2xl font-bold mb-4 text-purple-400">
+                    WHAT exactly do we normalize?
+                </h2>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-8 items-center">
+                    <div>
+                        <p class="text-gray-300 mb-4">
+                            A common misconception is that we normalize all neurons in a
+                            layer together. <strong>We don't.</strong>
+                        </p>
+                        <p class="text-gray-300 mb-4 leading-relaxed">
+                            Instead, for <strong>each individual neuron</strong>, we look at
+                            its activations across the entire
+                            <span class="highlight-text">mini-batch</span>.
+                        </p>
+                        <div class="bg-blue-900/20 p-5 rounded-xl border border-blue-500/30 mb-6">
+                            <h4 class="text-xs font-bold text-blue-300 uppercase mb-2">
+                                The Neuron Calculation:
+                            </h4>
+                            <p class="text-sm leading-relaxed">
+                                In a layer with 100 neurons, we perform
+                                <strong>100 separate normalizations</strong>. Neuron #1 is
+                                normalized using the mean of Neuron #1's values across all 64
+                                images (examples) in your batch. Neuron #2 is normalized using
+                                Neuron #2's values, and so on.
+                            </p>
+                        </div>
+                        <div class="bg-black/30 p-4 rounded-xl border border-purple-500/30">
+                            <h4 class="text-xs font-bold text-purple-300 uppercase mb-2">
+                                Key Rule:
+                            </h4>
+                            <p class="text-sm italic">
+                                "One neuron is normalized against its own behavior across the
+                                batch, not against its neighbors in the layer."
+                            </p>
+                        </div>
+                    </div>
+
+                    <div class="flex flex-col items-center">
+                        <div class="text-xs text-gray-500 mb-2 uppercase tracking-widest font-bold">
+                            Activation Matrix (Feature Map)
+                        </div>
+                        <div class="bg-slate-900 p-4 rounded-lg shadow-2xl border border-white/10" id="matrix-container">
+                            <!-- Matrix generated by JS -->
+                        </div>
+                        <div class="mt-4 space-y-2 text-xs">
+                            <div class="flex items-center gap-2">
+                                <span class="font-bold text-blue-400">N1, N2...:</span>
+                                <span class="text-gray-400">Specific Neurons (Features) in the layer.</span>
+                            </div>
+                            <div class="flex items-center gap-2">
+                                <span class="font-bold text-purple-400">Ex1, Ex2...:</span>
+                                <span class="text-gray-400">Different <strong>Examples</strong> (images/data points) in
+                                    the current mini-batch.</span>
+                            </div>
+                            <div class="pt-2 flex gap-4">
+                                <div class="flex items-center gap-1">
+                                    <div class="w-3 h-3 bg-blue-500/40 border border-blue-500"></div>
+                                    Normalized Together
+                                </div>
+                                <div class="flex items-center gap-1">
+                                    <div class="w-3 h-3 border border-white/10"></div>
+                                    Independent
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- The Dart Analogy Section -->
+        <section class="mb-10">
+            <div class="math-card p-8 rounded-3xl border-blue-500/20 bg-blue-500/5">
+                <div class="flex flex-col lg:row gap-10">
+                    <div class="w-full">
+                        <h2 class="text-3xl font-bold mb-4 text-white">
+                            The Moving Dartboard Analogy
+                        </h2>
+                        <p class="text-gray-300 mb-6 leading-relaxed">
+                            Think of each layer as a person throwing a dart. In
+                            <strong>Vanilla Mode</strong>, the board moves because earlier
+                            players changed the rules. In <strong>Batch Norm Mode</strong>,
+                            we fix the board in place based on the "average" position.
+                        </p>
+
+                        <div class="flex flex-wrap gap-4 mb-8">
+                            <div class="bg-black/20 p-4 rounded-xl border border-white/10 flex-1 min-w-[140px]">
+                                <span class="text-xs text-gray-500 block mb-1">Bullseyes</span>
+                                <div id="bullseye-count" class="text-3xl font-bold text-green-400">
+                                    0
+                                </div>
+                            </div>
+                            <div class="bg-black/20 p-4 rounded-xl border border-white/10 flex-[2] min-w-[200px]">
+                                <span class="text-xs text-gray-500 block mb-1">System State</span>
+                                <div id="dart-status-text" class="text-lg font-bold text-red-400 uppercase tracking-wider">
+                                    Internal Covariate Shift
+                                </div>
+                            </div>
+                        </div>
+
+                        <button id="dart-toggle-bn" onclick="toggleDartBN()" class="w-full py-5 bg-blue-600 hover:bg-blue-500 rounded-2xl font-bold text-xl transition-all shadow-xl shadow-blue-900/40 transform active:scale-95">
+                            Enable Batch Normalization
+                        </button>
+                    </div>
+
+                    <div class="w-full relative aspect-video bg-black/40 rounded-3xl overflow-hidden border border-white/10 shadow-inner">
+                        <canvas id="dart-canvas" class="w-full h-full"></canvas>
+                        <div id="hit-msg" class="absolute inset-0 flex items-center justify-center pointer-events-none opacity-0 transition-opacity duration-200">
+                            <div class="bg-green-500 text-white px-6 py-2 rounded-full font-bold shadow-lg">
+                                Bullseye!
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Visualization Section -->
+        <div class="math-card p-8 rounded-3xl shadow-2xl border-white/5 bg-slate-900/50 mb-10">
+            <div class="flex flex-col md:flex-row justify-between items-center mb-8 gap-4 border-b border-white/10 pb-6">
+                <div>
+                    <h3 class="text-2xl font-bold text-white">Mathematical Proof</h3>
+                    <p class="text-sm text-gray-400">
+                        How real activations drift across Epochs 1-5.
+                    </p>
+                </div>
+                <div class="flex gap-4">
+                    <button id="toggleBtn" onclick="toggleMode()" class="px-8 py-3 bg-blue-600/20 text-blue-400 border border-blue-500/30 hover:bg-blue-600 hover:text-white rounded-xl transition-all font-bold">
+                        Toggle Distribution BN
+                    </button>
+                </div>
+            </div>
+
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-10">
+                <div class="lg:col-span-2 h-80">
+                    <canvas id="activationChart"></canvas>
+                </div>
+
+                <div class="space-y-4">
+                    <div class="p-4 rounded-xl bg-white/5 border border-white/10">
+                        <span class="text-xs text-gray-500 uppercase font-bold">Concept</span>
+                        <p class="text-sm text-gray-300 mt-1">
+                            Batch Norm fixes the <strong>mean</strong> and
+                            <strong>variance</strong> so later layers don't have to keep
+                            re-learning their inputs.
+                        </p>
+                    </div>
+                    <div class="p-4 rounded-xl bg-blue-500/10 border border-blue-500/20">
+                        <h4 class="text-xs font-bold text-blue-400 uppercase mb-2">
+                            The BN Formula
+                        </h4>
+                        <div id="mathDisplay" class="text-sm font-mono text-blue-100">
+                            $\hat{x} = \frac{x - \mu}{\sqrt{\sigma^2 + \epsilon}}$
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- NEW: Training Efficiency & Convergence Section -->
+        <section class="mb-10">
+            <div class="math-card p-8 rounded-3xl border-green-500/20 bg-green-500/5">
+                <div class="flex flex-col md:flex-row justify-between items-center mb-8 gap-4">
+                    <div>
+                        <h2 class="text-3xl font-bold text-white">Convergence Speed</h2>
+                        <p class="text-sm text-gray-400">
+                            BN allows for 14x faster training by stabilizing gradients.
+                        </p>
+                    </div>
+                    <button onclick="simulateTraining()" class="px-8 py-3 bg-green-600 hover:bg-green-500 rounded-xl font-bold shadow-lg shadow-green-900/40 transition-all active:scale-95">
+                        Simulate Training Run
+                    </button>
+                </div>
+
+                <div class="grid grid-cols-1 lg:grid-cols-4 gap-8">
+                    <div class="lg:col-span-3 h-96 bg-black/40 rounded-2xl p-6 border border-white/5 relative">
+                        <canvas id="convergenceChart"></canvas>
+                    </div>
+
+                    <div class="space-y-6">
+                        <div class="p-4 rounded-xl bg-white/5 border border-white/10">
+                            <h4 class="text-xs font-bold text-green-400 uppercase mb-2">
+                                With Batch Norm
+                            </h4>
+                            <p class="text-xs text-gray-400 leading-relaxed">
+                                The gradient path is smoother, allowing for a
+                                <strong>higher learning rate</strong>. The model converges in
+                                fewer steps.
+                            </p>
+                        </div>
+                        <div class="p-4 rounded-xl bg-white/5 border border-white/10">
+                            <h4 class="text-xs font-bold text-red-400 uppercase mb-2">
+                                Without Batch Norm
+                            </h4>
+                            <p class="text-xs text-gray-400 leading-relaxed">
+                                Constant shifts force a
+                                <strong>lower learning rate</strong> to prevent divergence,
+                                leading to a slow, shaky descent.
+                            </p>
+                        </div>
+                        <div class="bg-green-500/10 border border-green-500/20 p-4 rounded-xl">
+                            <span class="text-[10px] uppercase font-bold text-green-300">Observation</span>
+                            <p class="text-xs text-green-200 italic mt-1">
+                                "BN acts as a smoother for the loss landscape."
+                            </p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <footer class="mt-16 text-center text-gray-600 text-xs pb-10">
+            Educational Interactive • Stabilizing Neural Networks
+        </footer>
+    </div>
+
+    <script>
+        // --- MATRIX VISUALIZATION LOGIC ---
+        function renderMatrix() {
+            const container = document.getElementById("matrix-container");
+            container.innerHTML = "";
+
+            const grid = document.createElement("div");
+            grid.className = "grid grid-cols-5 gap-1";
+
+            const headers = ["", "N1", "N2", "N3", "N4"];
+            headers.forEach((h) => {
+                const d = document.createElement("div");
+                d.className = "cell cell-header";
+                d.innerText = h;
+                grid.appendChild(d);
+            });
+
+            for (let r = 1; r <= 6; r++) {
+                const rowLabel = document.createElement("div");
+                rowLabel.className = "cell cell-header";
+                rowLabel.innerText = "Ex" + r;
+                grid.appendChild(rowLabel);
+
+                for (let c = 1; c <= 4; c++) {
+                    const cell = document.createElement("div");
+                    cell.className = "cell";
+                    if (c === 2) cell.classList.add("cell-highlight");
+                    cell.innerText = (Math.random() * 2 - 1).toFixed(1);
+                    grid.appendChild(cell);
+                }
+            }
+            container.appendChild(grid);
+        }
+
+        // --- DART GAME LOGIC ---
+        const dCanvas = document.getElementById("dart-canvas");
+        const dCtx = dCanvas.getContext("2d");
+        let dBN = false;
+        let dCount = 0;
+        let bCount = 0;
+
+        let target = {
+            x: 0,
+            y: 0,
+            baseSize: 80
+        };
+        let darts = [];
+
+        function initDartBoard() {
+            dCanvas.width = dCanvas.parentElement.clientWidth;
+            dCanvas.height = dCanvas.parentElement.clientHeight;
+            moveTarget();
+        }
+
+        function moveTarget() {
+            if (dBN) {
+                target.x = dCanvas.width / 2;
+                target.y = dCanvas.height / 2;
+            } else {
+                target.x = Math.random() * (dCanvas.width - 200) + 100;
+                target.y = Math.random() * (dCanvas.height - 100) + 50;
+            }
+        }
+
+        function drawDartGame() {
+            dCtx.clearRect(0, 0, dCanvas.width, dCanvas.height);
+            const rings = [
+                target.baseSize,
+                target.baseSize * 0.75,
+                target.baseSize * 0.5,
+                target.baseSize * 0.25,
+            ];
+            const colors = ["#f8fafc", "#ef4444", "#f8fafc", "#ef4444"];
+            rings.forEach((r, i) => {
+                dCtx.beginPath();
+                dCtx.arc(target.x, target.y, r, 0, Math.PI * 2);
+                dCtx.fillStyle = colors[i];
+                dCtx.fill();
+                dCtx.strokeStyle = "#1e293b";
+                dCtx.stroke();
+            });
+            darts.forEach((d) => {
+                dCtx.beginPath();
+                dCtx.arc(d.x, d.y, 4, 0, Math.PI * 2);
+                dCtx.fillStyle = d.hit ? "#22c55e" : "#64748b";
+                dCtx.fill();
+            });
+            requestAnimationFrame(drawDartGame);
+        }
+
+        dCanvas.addEventListener("mousedown", (e) => {
+            const rect = dCanvas.getBoundingClientRect();
+            const mouseX = e.clientX - rect.left;
+            const mouseY = e.clientY - rect.top;
+            dCount++;
+            const dist = Math.hypot(mouseX - target.x, mouseY - target.y);
+            let hit = false;
+            if (dist < target.baseSize * 0.25) {
+                bCount++;
+                hit = true;
+                document.getElementById("bullseye-count").innerText = bCount;
+                showHitMsg();
+            }
+            darts.push({
+                x: mouseX,
+                y: mouseY,
+                hit: hit
+            });
+            if (darts.length > 20) darts.shift();
+            if (!dBN) moveTarget();
+        });
+
+        function showHitMsg() {
+            const msg = document.getElementById("hit-msg");
+            msg.style.opacity = "1";
+            setTimeout(() => (msg.style.opacity = "0"), 600);
+        }
+
+        function toggleDartBN() {
+            dBN = !dBN;
+            const btn = document.getElementById("dart-toggle-bn");
+            const status = document.getElementById("dart-status-text");
+            if (dBN) {
+                btn.innerText = "Disable Batch Normalization";
+                btn.className =
+                    "w-full py-5 bg-red-600 hover:bg-red-500 rounded-2xl font-bold text-xl transition-all shadow-xl shadow-red-900/40 transform active:scale-95";
+                status.innerText = "Stabilized (Batch-Wise Mean)";
+                status.className =
+                    "text-lg font-bold text-blue-400 uppercase tracking-wider";
+            } else {
+                btn.innerText = "Enable Batch Normalization";
+                btn.className =
+                    "w-full py-5 bg-blue-600 hover:bg-blue-500 rounded-2xl font-bold text-xl transition-all shadow-xl shadow-blue-900/40 transform active:scale-95";
+                status.innerText = "Internal Covariate Shift";
+                status.className =
+                    "text-lg font-bold text-red-400 uppercase tracking-wider";
+            }
+            darts = [];
+            moveTarget();
+        }
+
+        // --- CHART LOGIC ---
+        let isBatchNorm = false;
+        let activationChart;
+        let convergenceChart;
+
+        function initCharts() {
+            // Activation Distribution Chart
+            const ctxAct = document
+                .getElementById("activationChart")
+                .getContext("2d");
+            activationChart = new Chart(ctxAct, {
+                type: "bar",
+                data: {
+                    labels: Array.from({
+                            length: 40
+                        }, (_, i) =>
+                        ((i / 40) * 1.2).toFixed(2),
+                    ),
+                    datasets: [],
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        y: {
+                            display: false
+                        },
+                        x: {
+                            ticks: {
+                                color: "#64748b"
+                            }
+                        },
+                    },
+                    plugins: {
+                        legend: {
+                            labels: {
+                                color: "#94a3b8"
+                            }
+                        }
+                    },
+                },
+            });
+
+            // Convergence Speed Chart
+            const ctxConv = document
+                .getElementById("convergenceChart")
+                .getContext("2d");
+            convergenceChart = new Chart(ctxConv, {
+                type: "line",
+                data: {
+                    labels: Array.from({
+                        length: 50
+                    }, (_, i) => i),
+                    datasets: [{
+                            label: "With Batch Norm",
+                            borderColor: "#22c55e",
+                            backgroundColor: "rgba(34, 197, 94, 0.1)",
+                            data: [],
+                            borderWidth: 3,
+                            pointRadius: 0,
+                            tension: 0.3,
+                            fill: true,
+                        },
+                        {
+                            label: "Vanilla (No BN)",
+                            borderColor: "#ef4444",
+                            backgroundColor: "rgba(239, 68, 68, 0.05)",
+                            data: [],
+                            borderWidth: 2,
+                            pointRadius: 0,
+                            tension: 0.4,
+                            fill: true,
+                        },
+                    ],
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        y: {
+                            title: {
+                                display: true,
+                                text: "Loss",
+                                color: "#94a3b8"
+                            },
+                            grid: {
+                                color: "rgba(255,255,255,0.05)"
+                            },
+                            ticks: {
+                                color: "#475569"
+                            },
+                            beginAtZero: true,
+                        },
+                        x: {
+                            title: {
+                                display: true,
+                                text: "Training Steps",
+                                color: "#94a3b8",
+                            },
+                            grid: {
+                                display: false
+                            },
+                            ticks: {
+                                color: "#475569"
+                            },
+                        },
+                    },
+                    plugins: {
+                        legend: {
+                            labels: {
+                                color: "#94a3b8"
+                            }
+                        },
+                        tooltip: {
+                            enabled: false
+                        },
+                    },
+                },
+            });
+
+            updateSimulation();
+            simulateTraining(); // Auto-start convergence chart
+        }
+
+        function updateSimulation() {
+            activationChart.data.datasets = [];
+            for (let e = 1; e <= 5; e++) {
+                const count = 1000;
+                const mean = isBatchNorm ? 0.5 : 0.2 + (e - 1) * 0.15;
+                const histogram = new Array(40).fill(0);
+                for (let i = 0; i < count; i++) {
+                    let val =
+                        (Math.random() +
+                            Math.random() +
+                            Math.random() +
+                            Math.random() -
+                            2) *
+                        0.1 +
+                        mean;
+                    histogram[
+                        Math.floor((Math.max(0, Math.min(1.1, val)) / 1.2) * 39)
+                    ]++;
+                }
+                activationChart.data.datasets.push({
+                    label: `Epoch ${e}`,
+                    data: histogram,
+                    backgroundColor: `rgba(${50 + e * 40}, 100, 255, 0.6)`,
+                    barPercentage: 1,
+                    categoryPercentage: 1,
+                });
+            }
+            activationChart.update();
+        }
+
+        function simulateTraining() {
+            let bnData = [];
+            let vanillaData = [];
+            const steps = 50;
+
+            for (let i = 0; i < steps; i++) {
+                // BN Curve: Fast exponential decay
+                const bnLoss = 4 * Math.exp(-i / 8) + Math.random() * 0.1;
+                bnData.push(bnLoss);
+
+                // Vanilla Curve: Slow, noisy decay
+                const vanillaLoss = 4 * Math.exp(-i / 25) + Math.random() * 0.4;
+                vanillaData.push(vanillaLoss);
+            }
+
+            // Animate line drawing
+            convergenceChart.data.datasets[0].data = [];
+            convergenceChart.data.datasets[1].data = [];
+
+            let currentStep = 0;
+            const interval = setInterval(() => {
+                if (currentStep >= steps) {
+                    clearInterval(interval);
+                    return;
+                }
+                convergenceChart.data.datasets[0].data.push(bnData[currentStep]);
+                convergenceChart.data.datasets[1].data.push(vanillaData[currentStep]);
+                convergenceChart.update("none"); // Update without full re-render for speed
+                currentStep++;
+            }, 50);
+        }
+
+        function toggleMode() {
+            isBatchNorm = !isBatchNorm;
+            updateSimulation();
+        }
+
+        window.onload = () => {
+            renderMatrix();
+            setInterval(renderMatrix, 2000);
+            initDartBoard();
+            drawDartGame();
+            initCharts();
+        };
+        window.onresize = initDartBoard;
+    </script>
+</body>
+
+</html>

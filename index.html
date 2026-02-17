@@ -1,0 +1,431 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>ML Concept Visualizer</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        .category-card {
+            transition: all 0.3s ease;
+            border-left: 4px solid transparent;
+        }
+
+        .category-card:hover {
+            transform: translateY(-4px);
+            box-shadow: 0 12px 24px rgba(0, 0, 0, 0.15);
+            border-left-color: #3b82f6;
+        }
+
+        .viz-link {
+            transition: all 0.2s ease;
+            border-left: 3px solid transparent;
+        }
+
+        .viz-link:hover {
+            background: #f0f9ff;
+            border-left-color: #3b82f6;
+            padding-left: 1rem;
+        }
+
+        .hero-gradient {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        }
+
+        .badge {
+            display: inline-block;
+            padding: 0.25rem 0.75rem;
+            border-radius: 9999px;
+            font-size: 0.75rem;
+            font-weight: 600;
+        }
+    </style>
+</head>
+
+<body class="bg-gray-50 text-gray-900">
+    <!-- Hero Section -->
+    <header class="hero-gradient text-white py-16 px-4 shadow-lg">
+        <div class="max-w-6xl mx-auto text-center">
+            <h1 class="text-5xl font-bold tracking-tight mb-4">
+                🧠 ML Concept Visualizer
+            </h1>
+            <p class="text-xl text-purple-100 max-w-2xl mx-auto">
+                Interactive visualizations for machine learning, deep learning, and systems optimization concepts
+            </p>
+            <div class="mt-6 flex gap-4 justify-center flex-wrap">
+                <span class="badge bg-white text-purple-700">Interactive</span>
+                <span class="badge bg-white text-purple-700">Educational</span>
+                <span class="badge bg-white text-purple-700">Open Source</span>
+            </div>
+        </div>
+    </header>
+
+    <main class="max-w-7xl mx-auto p-6 md:p-12">
+        <!-- Classical ML & Classification -->
+        <section class="mb-12">
+            <div class="category-card bg-white rounded-xl shadow-md p-8">
+                <div class="flex items-center gap-3 mb-6">
+                    <div class="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center text-2xl">
+                        📊
+                    </div>
+                    <div>
+                        <h2 class="text-2xl font-bold text-gray-900">Classical ML & Classification</h2>
+                        <p class="text-gray-600 text-sm">Traditional machine learning algorithms and metrics</p>
+                    </div>
+                </div>
+                <ul class="space-y-3">
+                    <li>
+                        <a href="classical-ml-classification/classification-metrics-visualizer.html"
+                            class="viz-link block p-3 rounded-lg">
+                            <span class="font-semibold text-blue-600">Classification Metrics Explorer</span>
+                            <span class="text-gray-600 text-sm block mt-1">Explore accuracy, precision, recall, F1-score with interactive threshold adjustment</span>
+                        </a>
+                    </li>
+                    <li>
+                        <a href="classical-ml-classification/decision-tree-visualizer.html"
+                            class="viz-link block p-3 rounded-lg">
+                            <span class="font-semibold text-blue-600">Decision Tree Visualizer</span>
+                            <span class="text-gray-600 text-sm block mt-1">Visualize decision tree splitting and classification</span>
+                        </a>
+                    </li>
+                    <li>
+                        <a href="classical-ml-classification/knn-visualizer.html"
+                            class="viz-link block p-3 rounded-lg">
+                            <span class="font-semibold text-blue-600">K-Nearest Neighbors (KNN)</span>
+                            <span class="text-gray-600 text-sm block mt-1">Interactive KNN algorithm visualization</span>
+                        </a>
+                    </li>
+                    <li>
+                        <a href="classical-ml-classification/logistic-regression-visualizer.html"
+                            class="viz-link block p-3 rounded-lg">
+                            <span class="font-semibold text-blue-600">Logistic Regression</span>
+                            <span class="text-gray-600 text-sm block mt-1">Understand logistic regression and decision boundaries</span>
+                        </a>
+                    </li>
+                    <li>
+                        <a href="classical-ml-classification/svm-classification-visualizer.html"
+                            class="viz-link block p-3 rounded-lg">
+                            <span class="font-semibold text-blue-600">SVM Classification</span>
+                            <span class="text-gray-600 text-sm block mt-1">Support Vector Machine decision boundaries and margins</span>
+                        </a>
+                    </li>
+                    <li>
+                        <a href="classical-ml-classification/neural-network-classification-visualizer.html"
+                            class="viz-link block p-3 rounded-lg">
+                            <span class="font-semibold text-blue-600">Neural Network Classification</span>
+                            <span class="text-gray-600 text-sm block mt-1">Visualize neural network learning and decision boundaries</span>
+                        </a>
+                    </li>
+                    <li>
+                        <a href="classical-ml-classification/k-means-clustering-visualizer.html"
+                            class="viz-link block p-3 rounded-lg">
+                            <span class="font-semibold text-blue-600">K-Means Clustering</span>
+                            <span class="text-gray-600 text-sm block mt-1">Interactive K-means clustering algorithm</span>
+                        </a>
+                    </li>
+                    <li>
+                        <a href="classical-ml-classification/hierarchical-clustering-visualizer.html"
+                            class="viz-link block p-3 rounded-lg">
+                            <span class="font-semibold text-blue-600">Hierarchical Clustering</span>
+                            <span class="text-gray-600 text-sm block mt-1">Dendrograms and hierarchical clustering methods</span>
+                        </a>
+                    </li>
+                </ul>
+            </div>
+        </section>
+
+        <!-- CNN Architectures -->
+        <section class="mb-12">
+            <div class="category-card bg-white rounded-xl shadow-md p-8">
+                <div class="flex items-center gap-3 mb-6">
+                    <div class="w-12 h-12 bg-purple-100 rounded-lg flex items-center justify-center text-2xl">
+                        🧩
+                    </div>
+                    <div>
+                        <h2 class="text-2xl font-bold text-gray-900">CNN Architectures</h2>
+                        <p class="text-gray-600 text-sm">Convolutional neural networks and deep learning</p>
+                    </div>
+                </div>
+                <ul class="space-y-3">
+                    <li>
+                        <a href="cnn-architectures/convolution-basics.html"
+                            class="viz-link block p-3 rounded-lg">
+                            <span class="font-semibold text-purple-600">Convolution Basics</span>
+                            <span class="text-gray-600 text-sm block mt-1">Understand convolution operations fundamentally</span>
+                        </a>
+                    </li>
+                    <li>
+                        <a href="cnn-architectures/convolution-layer-tensor-computation.html"
+                            class="viz-link block p-3 rounded-lg">
+                            <span class="font-semibold text-purple-600">Convolution Layer Tensor Computation</span>
+                            <span class="text-gray-600 text-sm block mt-1">Tensor computations in convolutional layers</span>
+                        </a>
+                    </li>
+                    <li>
+                        <a href="cnn-architectures/convolution-output-formula.html"
+                            class="viz-link block p-3 rounded-lg">
+                            <span class="font-semibold text-purple-600">Convolution Output Formula</span>
+                            <span class="text-gray-600 text-sm block mt-1">Calculate output dimensions from convolutions</span>
+                        </a>
+                    </li>
+                    <li>
+                        <a href="cnn-architectures/pooling-visualizer.html"
+                            class="viz-link block p-3 rounded-lg">
+                            <span class="font-semibold text-purple-600">Pooling Operations</span>
+                            <span class="text-gray-600 text-sm block mt-1">Max pooling and average pooling visualizations</span>
+                        </a>
+                    </li>
+                    <li>
+                        <a href="cnn-architectures/one-by-one-convolution-bottleneck.html"
+                            class="viz-link block p-3 rounded-lg">
+                            <span class="font-semibold text-purple-600">1×1 Convolution Bottleneck</span>
+                            <span class="text-gray-600 text-sm block mt-1">Dimensionality reduction with 1×1 convolutions</span>
+                        </a>
+                    </li>
+                    <li>
+                        <a href="cnn-architectures/bottleneck-block-variant.html"
+                            class="viz-link block p-3 rounded-lg">
+                            <span class="font-semibold text-purple-600">Bottleneck Block Variant</span>
+                            <span class="text-gray-600 text-sm block mt-1">ResNet bottleneck block architecture</span>
+                        </a>
+                    </li>
+                    <li>
+                        <a href="cnn-architectures/resnet-architecture-visualizer.html"
+                            class="viz-link block p-3 rounded-lg">
+                            <span class="font-semibold text-purple-600">ResNet Architecture</span>
+                            <span class="text-gray-600 text-sm block mt-1">Residual networks and skip connections</span>
+                        </a>
+                    </li>
+                    <li>
+                        <a href="cnn-architectures/two-stage-filtering.html"
+                            class="viz-link block p-3 rounded-lg">
+                            <span class="font-semibold text-purple-600">Two-Stage Filtering</span>
+                            <span class="text-gray-600 text-sm block mt-1">Multi-stage convolution filtering</span>
+                        </a>
+                    </li>
+                </ul>
+            </div>
+        </section>
+
+        <!-- Fundamentals -->
+        <section class="mb-12">
+            <div class="category-card bg-white rounded-xl shadow-md p-8">
+                <div class="flex items-center gap-3 mb-6">
+                    <div class="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center text-2xl">
+                        📚
+                    </div>
+                    <div>
+                        <h2 class="text-2xl font-bold text-gray-900">ML Fundamentals</h2>
+                        <p class="text-gray-600 text-sm">Core concepts and building blocks</p>
+                    </div>
+                </div>
+                <ul class="space-y-3">
+                    <li>
+                        <a href="fundamentals/softmax-function-visualizer.html"
+                            class="viz-link block p-3 rounded-lg">
+                            <span class="font-semibold text-green-600">Softmax Function</span>
+                            <span class="text-gray-600 text-sm block mt-1">Understand the softmax activation function</span>
+                        </a>
+                    </li>
+                    <li>
+                        <a href="fundamentals/internal-covariate-shift-intuition.html"
+                            class="viz-link block p-3 rounded-lg">
+                            <span class="font-semibold text-green-600">Internal Covariate Shift Intuition</span>
+                            <span class="text-gray-600 text-sm block mt-1">Why batch normalization matters</span>
+                        </a>
+                    </li>
+                    <li>
+                        <a href="fundamentals/internal-covariate-shift-batchnorm.html"
+                            class="viz-link block p-3 rounded-lg">
+                            <span class="font-semibold text-green-600">BatchNorm in Action</span>
+                            <span class="text-gray-600 text-sm block mt-1">Batch normalization visualized</span>
+                        </a>
+                    </li>
+                </ul>
+            </div>
+        </section>
+
+        <!-- GEMM Optimization -->
+        <section class="mb-12">
+            <div class="category-card bg-white rounded-xl shadow-md p-8">
+                <div class="flex items-center gap-3 mb-6">
+                    <div class="w-12 h-12 bg-orange-100 rounded-lg flex items-center justify-center text-2xl">
+                        ⚡
+                    </div>
+                    <div>
+                        <h2 class="text-2xl font-bold text-gray-900">GEMM Optimization</h2>
+                        <p class="text-gray-600 text-sm">General matrix multiply optimization techniques</p>
+                    </div>
+                </div>
+                <ul class="space-y-3">
+                    <li>
+                        <a href="gemm-optimization/gemm-nested-loops-baseline.html"
+                            class="viz-link block p-3 rounded-lg">
+                            <span class="font-semibold text-orange-600">GEMM Nested Loops Baseline</span>
+                            <span class="text-gray-600 text-sm block mt-1">Basic matrix multiplication implementation</span>
+                        </a>
+                    </li>
+                    <li>
+                        <a href="gemm-optimization/gemm-nested-loops-tiled.html"
+                            class="viz-link block p-3 rounded-lg">
+                            <span class="font-semibold text-orange-600">GEMM Tiled Implementation</span>
+                            <span class="text-gray-600 text-sm block mt-1">Cache-optimized tiled matrix multiplication</span>
+                        </a>
+                    </li>
+                    <li>
+                        <a href="gemm-optimization/gemm-tiling-visualizer.html"
+                            class="viz-link block p-3 rounded-lg">
+                            <span class="font-semibold text-orange-600">GEMM Tiling Visualizer</span>
+                            <span class="text-gray-600 text-sm block mt-1">Interactive tiling strategy visualization</span>
+                        </a>
+                    </li>
+                    <li>
+                        <a href="gemm-optimization/cache-cliff-and-tiling.html"
+                            class="viz-link block p-3 rounded-lg">
+                            <span class="font-semibold text-orange-600">Cache Cliff and Tiling</span>
+                            <span class="text-gray-600 text-sm block mt-1">Understanding cache cliffs and how tiling helps</span>
+                        </a>
+                    </li>
+                    <li>
+                        <a href="gemm-optimization/non-tiled-cache-miss-derivation.html"
+                            class="viz-link block p-3 rounded-lg">
+                            <span class="font-semibold text-orange-600">Non-Tiled Cache Miss Analysis</span>
+                            <span class="text-gray-600 text-sm block mt-1">Mathematical derivation of cache misses</span>
+                        </a>
+                    </li>
+                    <li>
+                        <a href="gemm-optimization/tiled-cache-miss-formula-derivation.html"
+                            class="viz-link block p-3 rounded-lg">
+                            <span class="font-semibold text-orange-600">Tiled Cache Miss Formula</span>
+                            <span class="text-gray-600 text-sm block mt-1">Derivation for tiled implementations</span>
+                        </a>
+                    </li>
+                </ul>
+            </div>
+        </section>
+
+        <!-- Kernel Optimization -->
+        <section class="mb-12">
+            <div class="category-card bg-white rounded-xl shadow-md p-8">
+                <div class="flex items-center gap-3 mb-6">
+                    <div class="w-12 h-12 bg-red-100 rounded-lg flex items-center justify-center text-2xl">
+                        🔥
+                    </div>
+                    <div>
+                        <h2 class="text-2xl font-bold text-gray-900">Kernel Optimization</h2>
+                        <p class="text-gray-600 text-sm">Data reuse and computational efficiency</p>
+                    </div>
+                </div>
+                <ul class="space-y-3">
+                    <li>
+                        <a href="kernel-optimization/data-reuse-overview.html"
+                            class="viz-link block p-3 rounded-lg">
+                            <span class="font-semibold text-red-600">Data Reuse Overview</span>
+                            <span class="text-gray-600 text-sm block mt-1">Understanding data reuse patterns</span>
+                        </a>
+                    </li>
+                    <li>
+                        <a href="kernel-optimization/spatial-reuse.html"
+                            class="viz-link block p-3 rounded-lg">
+                            <span class="font-semibold text-red-600">Spatial Reuse</span>
+                            <span class="text-gray-600 text-sm block mt-1">Exploiting spatial locality in kernels</span>
+                        </a>
+                    </li>
+                    <li>
+                        <a href="kernel-optimization/temporal-tiling.html"
+                            class="viz-link block p-3 rounded-lg">
+                            <span class="font-semibold text-red-600">Temporal Tiling</span>
+                            <span class="text-gray-600 text-sm block mt-1">Temporal reuse through tiling</span>
+                        </a>
+                    </li>
+                </ul>
+            </div>
+        </section>
+
+        <!-- Cache & Memory -->
+        <section class="mb-12">
+            <div class="category-card bg-white rounded-xl shadow-md p-8">
+                <div class="flex items-center gap-3 mb-6">
+                    <div class="w-12 h-12 bg-indigo-100 rounded-lg flex items-center justify-center text-2xl">
+                        💾
+                    </div>
+                    <div>
+                        <h2 class="text-2xl font-bold text-gray-900">Cache & Memory Optimization</h2>
+                        <p class="text-gray-600 text-sm">Memory hierarchy and cache performance</p>
+                    </div>
+                </div>
+                <ul class="space-y-3">
+                    <li>
+                        <a href="cache-optimization/cache-hierarchy-concepts.html"
+                            class="viz-link block p-3 rounded-lg">
+                            <span class="font-semibold text-indigo-600">Cache Hierarchy Concepts</span>
+                            <span class="text-gray-600 text-sm block mt-1">Understanding the memory hierarchy</span>
+                        </a>
+                    </li>
+                </ul>
+            </div>
+        </section>
+
+        <!-- Dataflow & Architecture -->
+        <section class="mb-12">
+            <div class="category-card bg-white rounded-xl shadow-md p-8">
+                <div class="flex items-center gap-3 mb-6">
+                    <div class="w-12 h-12 bg-teal-100 rounded-lg flex items-center justify-center text-2xl">
+                        🔄
+                    </div>
+                    <div>
+                        <h2 class="text-2xl font-bold text-gray-900">Dataflow & Architecture</h2>
+                        <p class="text-gray-600 text-sm">Hardware dataflow patterns</p>
+                    </div>
+                </div>
+                <ul class="space-y-3">
+                    <li>
+                        <a href="dataflow-loop-nests/weight-stationary-dataflow.html"
+                            class="viz-link block p-3 rounded-lg">
+                            <span class="font-semibold text-teal-600">Weight Stationary Dataflow</span>
+                            <span class="text-gray-600 text-sm block mt-1">Weight-stationary architecture patterns</span>
+                        </a>
+                    </li>
+                </ul>
+            </div>
+        </section>
+
+        <!-- Performance Modeling -->
+        <section class="mb-12">
+            <div class="category-card bg-white rounded-xl shadow-md p-8">
+                <div class="flex items-center gap-3 mb-6">
+                    <div class="w-12 h-12 bg-pink-100 rounded-lg flex items-center justify-center text-2xl">
+                        📈
+                    </div>
+                    <div>
+                        <h2 class="text-2xl font-bold text-gray-900">Performance Modeling</h2>
+                        <p class="text-gray-600 text-sm">Analyzing and predicting system performance</p>
+                    </div>
+                </div>
+                <ul class="space-y-3">
+                    <li>
+                        <a href="performance-modeling/roofline-model-visualizer.html"
+                            class="viz-link block p-3 rounded-lg">
+                            <span class="font-semibold text-pink-600">Roofline Model</span>
+                            <span class="text-gray-600 text-sm block mt-1">Visualize performance bounds and bottlenecks</span>
+                        </a>
+                    </li>
+                </ul>
+            </div>
+        </section>
+    </main>
+
+    <footer class="bg-gray-900 text-gray-300 py-8 px-4 mt-16">
+        <div class="max-w-6xl mx-auto text-center">
+            <p class="text-sm">
+                Built with 💜 for learning and teaching ML concepts
+            </p>
+            <p class="text-xs text-gray-500 mt-2">
+                All visualizations are interactive and run entirely in your browser
+            </p>
+        </div>
+    </footer>
+</body>
+
+</html>

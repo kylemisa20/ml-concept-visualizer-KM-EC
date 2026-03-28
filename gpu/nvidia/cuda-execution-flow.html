@@ -1,0 +1,731 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CUDA Execution Flow Visualization</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            background-color: #0f172a; /* Slate 900 */
+            color: #e2e8f0; /* Slate 200 */
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+        }
+        
+        #canvas-container {
+            position: relative;
+            width: 100%;
+            height: 100%;
+            background: radial-gradient(circle at center, #1e293b 0%, #0f172a 100%);
+            cursor: crosshair;
+        }
+
+        canvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+        }
+
+        .step-item {
+            transition: all 0.3s ease;
+            opacity: 0.5;
+            border-left: 4px solid transparent;
+        }
+
+        .step-item.active {
+            opacity: 1;
+            background-color: rgba(30, 41, 59, 0.8);
+            border-left-color: #3b82f6; /* Blue 500 */
+            transform: translateX(8px);
+        }
+        
+        .step-item.completed {
+            opacity: 0.8;
+            border-left-color: #10b981; /* Emerald 500 */
+        }
+
+        .btn {
+            transition: all 0.2s;
+        }
+        .btn:hover:not(:disabled) {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
+        }
+        .btn:active:not(:disabled) {
+            transform: translateY(0);
+        }
+        .btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+    </style>
+</head>
+<body class="h-screen w-screen flex flex-col md:flex-row">
+
+    <!-- Sidebar / Controls -->
+    <div class="w-full md:w-[400px] h-auto md:h-full bg-slate-900 border-b md:border-b-0 md:border-r border-slate-700 p-6 flex flex-col shadow-2xl z-10">
+        <div class="mb-6">
+            <h1 class="text-2xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-blue-400 to-emerald-400 mb-2">CUDA Execution Flow</h1>
+            <p class="text-sm text-slate-400">How is a CUDA Program Run on GPU?</p>
+        </div>
+
+        <div class="flex-1 overflow-y-auto mb-4 pr-2">
+            <ul class="space-y-3" id="steps-list">
+                <li class="step-item active p-4 rounded-r-lg" id="step-desc-0">
+                    <div class="font-bold text-blue-400 mb-1">Step 1</div>
+                    <div class="text-sm">Load Data into CPU Memory</div>
+                </li>
+                <li class="step-item p-4 rounded-r-lg" id="step-desc-1">
+                    <div class="font-bold text-blue-400 mb-1">Step 2</div>
+                    <div class="text-sm">Copy and allocate Data to GPU Memory (Host-to-Device)</div>
+                </li>
+                <li class="step-item p-4 rounded-r-lg" id="step-desc-2">
+                    <div class="font-bold text-emerald-400 mb-1">Step 3</div>
+                    <div class="text-sm">Execute GPU Kernel (Parallel Processing)</div>
+                </li>
+                <li class="step-item p-4 rounded-r-lg" id="step-desc-3">
+                    <div class="font-bold text-blue-400 mb-1">Step 4</div>
+                    <div class="text-sm">Synchronize and copy Results to CPU Memory (Device-to-Host)</div>
+                </li>
+                <li class="step-item p-4 rounded-r-lg" id="step-desc-4">
+                    <div class="font-bold text-blue-400 mb-1">Step 5</div>
+                    <div class="text-sm">Use Results on CPU</div>
+                </li>
+            </ul>
+        </div>
+
+        <div class="flex flex-col gap-3 mt-auto">
+            <div class="bg-slate-800 p-4 rounded-lg border border-slate-700 mb-2">
+                <div class="flex justify-between items-center mb-2">
+                    <span class="text-xs font-bold text-slate-400 uppercase tracking-wider">Simulation Speed</span>
+                    <span id="speed-display" class="text-sm font-medium text-blue-400">1.0x</span>
+                </div>
+                <input type="range" id="speed-slider" min="0" max="3" step="0.25" value="1" class="w-full h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-blue-500">
+                <div class="flex justify-between text-[10px] text-slate-500 mt-1">
+                    <span>Paused</span>
+                    <span>Normal</span>
+                    <span>Fast</span>
+                </div>
+            </div>
+
+            <div class="flex gap-2">
+                <button id="btn-prev" class="btn flex-1 py-2 px-4 bg-slate-700 hover:bg-slate-600 text-white rounded-lg font-medium text-sm flex items-center justify-center gap-2" disabled>
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path></svg>
+                    Prev
+                </button>
+                <button id="btn-next" class="btn flex-1 py-2 px-4 bg-blue-600 hover:bg-blue-500 text-white rounded-lg font-medium text-sm flex items-center justify-center gap-2">
+                    Next
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path></svg>
+                </button>
+            </div>
+            <button id="btn-autoplay" class="btn w-full py-3 px-4 bg-gradient-to-r from-emerald-600 to-teal-500 hover:from-emerald-500 hover:to-teal-400 text-white rounded-lg font-bold text-sm shadow-lg shadow-emerald-500/20 flex items-center justify-center gap-2">
+                <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z" clip-rule="evenodd"></path></svg>
+                Auto Play Sequence
+            </button>
+            <button id="btn-reset" class="w-full py-2 px-4 text-slate-400 hover:text-white text-sm transition-colors">
+                Reset Simulation
+            </button>
+        </div>
+    </div>
+
+    <!-- Canvas Area -->
+    <div id="canvas-container" class="flex-1">
+        <canvas id="cudaCanvas"></canvas>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('cudaCanvas');
+        const ctx = canvas.getContext('2d');
+        const container = document.getElementById('canvas-container');
+
+        // State Machine
+        let currentStep = 0; 
+        let isAutoPlaying = false;
+        let animationTime = 0;
+        let lastTimestamp = 0;
+        let speedMultiplier = 1.0;
+        
+        // Colors
+        const colors = {
+            cpuTheme: '#3b82f6',
+            cpuThemeGlow: 'rgba(59, 130, 246, 0.5)',
+            gpuTheme: '#10b981',
+            gpuThemeGlow: 'rgba(16, 185, 129, 0.5)',
+            matrixRaw: '#fbbf24',
+            matrixProcessed: '#06b6d4',
+            bgBox: 'rgba(30, 41, 59, 0.7)',
+            bgBoxBorder: '#334155',
+            text: '#f8fafc'
+        };
+
+        // Layout Geometry
+        let geo = {
+            cpuCores: { x: 0, y: 0, w: 0, h: 0 },
+            cpuMem: { x: 0, y: 0, w: 0, h: 0 },
+            gpuMem: { x: 0, y: 0, w: 0, h: 0 },
+            gpuCores: { x: 0, y: 0, w: 0, h: 0 },
+            matrixSize: 5 
+        };
+
+        // Interaction State
+        let mouseX = -1000, mouseY = -1000;
+        let hoveredElement = null;
+
+        // Animation Sequence Controls
+        let stepSequence = [];
+        let sequenceIdx = 0;
+
+        // Animation Objects
+        let particles = [];
+        let cpuMatrixCells = [];
+        let gpuMatrixCells = [];
+        let gpuCoreStates = [];
+        
+        const numGpuCoresX = 8;
+        const numGpuCoresY = 12;
+
+        // Initialize Data
+        function initData() {
+            cpuMatrixCells = [];
+            gpuMatrixCells = [];
+            for (let i = 0; i < geo.matrixSize * geo.matrixSize; i++) {
+                cpuMatrixCells.push({ state: 'empty', alpha: 0, val: 0 }); 
+                gpuMatrixCells.push({ state: 'empty', alpha: 0, val: 0 });
+            }
+            gpuCoreStates = [];
+            for (let i = 0; i < numGpuCoresX * numGpuCoresY; i++) {
+                gpuCoreStates.push({ active: false, intensity: 0 });
+            }
+            generateSequence();
+        }
+
+        function generateSequence() {
+            stepSequence = [...Array(geo.matrixSize * geo.matrixSize).keys()].sort(() => Math.random() - 0.5);
+            sequenceIdx = 0;
+        }
+
+        initData();
+
+        canvas.addEventListener('mousemove', (e) => {
+            const rect = canvas.getBoundingClientRect();
+            mouseX = e.clientX - rect.left;
+            mouseY = e.clientY - rect.top;
+            
+            hoveredElement = null;
+            if (mouseY >= geo.cpuMem.y - 20 && mouseY <= geo.cpuMem.y + geo.cpuMem.h + 20) {
+                if (mouseX >= geo.cpuCores.x && mouseX <= geo.cpuCores.x + geo.cpuCores.w) hoveredElement = 'cpuCores';
+                else if (mouseX >= geo.cpuMem.x && mouseX <= geo.cpuMem.x + geo.cpuMem.w) hoveredElement = 'cpuMem';
+                else if (mouseX > geo.cpuMem.x + geo.cpuMem.w && mouseX < geo.gpuMem.x) hoveredElement = 'pcie';
+                else if (mouseX >= geo.gpuMem.x && mouseX <= geo.gpuMem.x + geo.gpuMem.w) hoveredElement = 'gpuMem';
+                else if (mouseX > geo.gpuMem.x + geo.gpuMem.w && mouseX < geo.gpuCores.x) hoveredElement = 'internalBus';
+                else if (mouseX >= geo.gpuCores.x && mouseX <= geo.gpuCores.x + geo.gpuCores.w) hoveredElement = 'gpuCores';
+            }
+        });
+
+        canvas.addEventListener('mouseleave', () => { hoveredElement = null; });
+
+        document.getElementById('speed-slider').addEventListener('input', (e) => {
+            speedMultiplier = parseFloat(e.target.value);
+            document.getElementById('speed-display').innerText = speedMultiplier.toFixed(2) + 'x';
+            if(speedMultiplier === 0) document.getElementById('speed-display').innerText = 'Paused';
+        });
+
+        function resizeCanvas() {
+            canvas.width = container.clientWidth;
+            canvas.height = container.clientHeight;
+            
+            const w = canvas.width;
+            const h = canvas.height;
+            
+            const padding = w * 0.05;
+            const yCenter = h / 2;
+            const boxHeight = Math.min(h * 0.5, 350);
+            
+            const totalAvailableWidth = w - (padding * 2);
+            const boxWidth = totalAvailableWidth * 0.16;
+            const internalGap = totalAvailableWidth * 0.04; 
+            const busGap = totalAvailableWidth * 0.28; 
+
+            geo.cpuCores = { x: padding, y: yCenter - boxHeight/2, w: boxWidth, h: boxHeight };
+            geo.cpuMem =   { x: padding + boxWidth + internalGap, y: yCenter - boxHeight/2, w: boxWidth, h: boxHeight };
+            
+            geo.gpuMem =   { x: padding + (boxWidth * 2) + internalGap + busGap, y: yCenter - boxHeight/2, w: boxWidth, h: boxHeight };
+            geo.gpuCores = { x: padding + (boxWidth * 3) + (internalGap * 2) + busGap, y: yCenter - boxHeight/2, w: boxWidth, h: boxHeight };
+        }
+
+        window.addEventListener('resize', resizeCanvas);
+
+        function drawRoundedRect(ctx, x, y, width, height, radius, fill, stroke, glowColor) {
+            ctx.beginPath();
+            ctx.moveTo(x + radius, y);
+            ctx.lineTo(x + width - radius, y);
+            ctx.quadraticCurveTo(x + width, y, x + width, y + radius);
+            ctx.lineTo(x + width, y + height - radius);
+            ctx.quadraticCurveTo(x + width, y + height, x + width - radius, y + height);
+            ctx.lineTo(x + radius, y + height);
+            ctx.quadraticCurveTo(x, y + height, x, y + height - radius);
+            ctx.lineTo(x, y + radius);
+            ctx.quadraticCurveTo(x, y, x + radius, y);
+            ctx.closePath();
+            
+            if (glowColor) {
+                ctx.shadowColor = glowColor;
+                ctx.shadowBlur = 15;
+            } else {
+                ctx.shadowBlur = 0;
+            }
+            if (fill) { ctx.fillStyle = fill; ctx.fill(); }
+            if (stroke) {
+                ctx.shadowBlur = 0; 
+                ctx.strokeStyle = stroke; ctx.lineWidth = 2; ctx.stroke();
+            }
+            ctx.shadowBlur = 0; 
+        }
+
+        function drawChipDetails(ctx, box, type) {
+            ctx.save();
+            ctx.beginPath();
+            ctx.rect(box.x, box.y, box.w, box.h);
+            ctx.clip();
+            if (type === 'cpu') {
+                ctx.fillStyle = 'rgba(255,255,255,0.03)';
+                for(let py = box.y + 20; py < box.y + box.h - 20; py += 12) {
+                    for(let px = box.x + 20; px < box.x + box.w - 20; px += 12) {
+                        ctx.beginPath(); ctx.arc(px, py, 2, 0, Math.PI*2); ctx.fill();
+                    }
+                }
+            } else if (type === 'vram') {
+                ctx.fillStyle = 'rgba(255,255,255,0.04)';
+                const bankWidth = 15;
+                const spacing = 25;
+                for(let px = box.x + 15; px < box.x + box.w - 15; px += spacing) {
+                    ctx.fillRect(px, box.y + 15, bankWidth, box.h - 30);
+                }
+            }
+            ctx.restore();
+        }
+
+        function drawMatrix(ctx, box, cells, label) {
+            const margin = box.w * 0.15;
+            const mw = box.w - (margin * 2);
+            const mh = mw; 
+            const mx = box.x + margin;
+            const my = box.y + (box.h / 2) - (mh / 2) + 20;
+
+            drawRoundedRect(ctx, mx - 5, my - 5, mw + 10, mh + 10, 4, 'rgba(0,0,0,0.6)', 'rgba(255,255,255,0.1)');
+            
+            ctx.fillStyle = colors.text;
+            ctx.font = '500 12px "Inter", sans-serif';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'alphabetic';
+            ctx.fillText(label, box.x + box.w / 2, my - 15);
+
+            const cellW = mw / geo.matrixSize;
+            const cellH = mh / geo.matrixSize;
+            const padding = 2;
+
+            for (let row = 0; row < geo.matrixSize; row++) {
+                for (let col = 0; col < geo.matrixSize; col++) {
+                    const idx = row * geo.matrixSize + col;
+                    const cell = cells[idx];
+                    
+                    if (cell.alpha > 0) {
+                        const cx = mx + col * cellW + padding;
+                        const cy = my + row * cellH + padding;
+                        const cw = cellW - padding * 2;
+                        const ch = cellH - padding * 2;
+                        
+                        let baseColor = cell.state === 'raw' ? colors.matrixRaw : colors.matrixProcessed;
+                        
+                        ctx.globalAlpha = cell.alpha;
+                        drawRoundedRect(ctx, cx, cy, cw, ch, 2, baseColor, null, baseColor);
+                        
+                        if (cell.val) {
+                            ctx.fillStyle = '#1e293b';
+                            ctx.font = 'bold 10px Inter';
+                            ctx.textAlign = 'center';
+                            ctx.textBaseline = 'middle';
+                            ctx.fillText(cell.val, cx + cw/2, cy + ch/2 + 1);
+                        }
+                        ctx.globalAlpha = 1.0;
+                    }
+                }
+            }
+        }
+
+        function drawConnection(ctx, startBox, endBox, arrowLabel, isReversed, yOffset, isInternal) {
+            const startX = isReversed ? startBox.x : startBox.x + startBox.w;
+            const endX = isReversed ? endBox.x + endBox.w : endBox.x;
+            const y = startBox.y + startBox.h / 2 + yOffset;
+            
+            const trackWidth = isInternal ? 16 : 4;
+            const trackColor = isInternal ? 'rgba(255,255,255,0.15)' : 'rgba(255,255,255,0.05)';
+            
+            ctx.beginPath();
+            ctx.moveTo(startX, y);
+            ctx.lineTo(endX, y);
+            ctx.strokeStyle = trackColor;
+            ctx.lineWidth = trackWidth;
+            ctx.lineCap = 'round';
+            ctx.stroke();
+
+            if (arrowLabel) {
+                ctx.fillStyle = colors.text;
+                ctx.font = '500 13px "Inter", sans-serif';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                const labelY = yOffset > 0 ? y + (isInternal? 22 : 16) : y - (isInternal? 22 : 16);
+                ctx.fillText(arrowLabel, startX + (endX - startX) / 2, labelY);
+            }
+        }
+
+        function drawGPUCoresGrid(ctx, box) {
+            const margin = 15;
+            const mw = box.w - (margin * 2);
+            const mh = box.h - (margin * 2) - 40; 
+            const mx = box.x + margin;
+            const my = box.y + 50;
+
+            const cellW = mw / numGpuCoresX;
+            const cellH = mh / numGpuCoresY;
+            const padding = 1.5;
+
+            drawRoundedRect(ctx, mx - 3, my - 3, mw + 6, mh + 6, 2, 'rgba(0,0,0,0.5)', 'rgba(148, 163, 184, 0.2)');
+
+            for (let row = 0; row < numGpuCoresY; row++) {
+                for (let col = 0; col < numGpuCoresX; col++) {
+                    const idx = row * numGpuCoresX + col;
+                    const state = gpuCoreStates[idx];
+                    
+                    const cx = mx + col * cellW + padding;
+                    const cy = my + row * cellH + padding;
+                    const cw = cellW - padding * 2;
+                    const ch = cellH - padding * 2;
+                    
+                    let fill = 'rgba(16, 185, 129, 0.1)'; 
+                    let glow = null;
+
+                    if (state.intensity > 0) {
+                        fill = `rgba(16, 185, 129, ${0.2 + state.intensity * 0.8})`;
+                        glow = colors.gpuTheme;
+                    }
+                    drawRoundedRect(ctx, cx, cy, cw, ch, 1, fill, null, glow);
+                }
+            }
+        }
+
+        function drawTooltip(ctx, x, y, title, desc) {
+            ctx.save();
+            ctx.font = 'bold 14px Inter';
+            let titleWidth = ctx.measureText(title).width;
+            ctx.font = '12px Inter';
+            const descLines = desc.split('\n');
+            let maxDesc = 0;
+            descLines.forEach(l => {
+                const w = ctx.measureText(l).width;
+                if(w > maxDesc) maxDesc = w;
+            });
+            const maxWidth = Math.max(titleWidth, maxDesc) + 30;
+            const h = 40 + descLines.length * 16;
+            
+            if (x + maxWidth > canvas.width) x = canvas.width - maxWidth - 10;
+            if (y + h > canvas.height) y = canvas.height - h - 10;
+
+            drawRoundedRect(ctx, x + 10, y + 10, maxWidth, h, 8, 'rgba(15, 23, 42, 0.95)', '#475569');
+            
+            ctx.fillStyle = '#f8fafc';
+            ctx.font = 'bold 14px Inter';
+            ctx.textAlign = 'left';
+            ctx.textBaseline = 'top';
+            ctx.fillText(title, x + 25, y + 25);
+            
+            ctx.fillStyle = '#94a3b8';
+            ctx.font = '12px Inter';
+            descLines.forEach((line, i) => {
+                ctx.fillText(line, x + 25, y + 45 + i * 16);
+            });
+            ctx.restore();
+        }
+
+        function spawnParticle(startX, startY, endX, endY, color, speed, size, onComplete) {
+            particles.push({
+                x: startX, y: startY,
+                startX, startY, endX, endY,
+                progress: 0, speed, color, size, onComplete
+            });
+        }
+
+        function updateAndDrawParticles(ctx, simDt) {
+            for (let i = particles.length - 1; i >= 0; i--) {
+                let p = particles[i];
+                p.progress += p.speed * speedMultiplier; 
+                
+                if (p.progress >= 1) {
+                    if (p.onComplete) p.onComplete();
+                    particles.splice(i, 1);
+                    continue;
+                }
+
+                const t = p.progress;
+                p.x = p.startX + (p.endX - p.startX) * t;
+                p.y = p.startY + (p.endY - p.startY) * t;
+
+                ctx.beginPath();
+                ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+                ctx.fillStyle = p.color;
+                ctx.shadowColor = p.color;
+                ctx.shadowBlur = p.size * 2;
+                ctx.fill();
+                ctx.shadowBlur = 0;
+            }
+        }
+
+        function flashThreadBlock() {
+            const bx = Math.floor(Math.random() * (numGpuCoresX / 2)) * 2;
+            const by = Math.floor(Math.random() * (numGpuCoresY / 2)) * 2;
+            for(let dy=0; dy<2; dy++) {
+                for(let dx=0; dx<2; dx++) {
+                    gpuCoreStates[(by+dy)*numGpuCoresX + (bx+dx)].intensity = 1;
+                }
+            }
+        }
+
+        function updateSimulation(simDt) {
+            animationTime += simDt;
+            gpuCoreStates.forEach(core => core.intensity = Math.max(0, core.intensity - simDt * 0.003));
+
+            const pcieSpeed = 0.015;
+            const internalSpeed = 0.05;
+
+            switch(currentStep) {
+                case 0: 
+                    if (sequenceIdx < stepSequence.length && animationTime > sequenceIdx * 80) {
+                        let id = stepSequence[sequenceIdx++];
+                        cpuMatrixCells[id].state = 'raw';
+                        cpuMatrixCells[id].alpha = 1;
+                        cpuMatrixCells[id].val = id + 1;
+                    }
+                    break;
+
+                case 1: 
+                    if (sequenceIdx < stepSequence.length && animationTime > sequenceIdx * 100) {
+                        let id = stepSequence[sequenceIdx++];
+                        const yOffset = -30;
+                        const startY = geo.cpuMem.y + geo.cpuMem.h/2 + yOffset + (Math.random() * 8 - 4);
+                        const endY = geo.gpuMem.y + geo.gpuMem.h/2 + yOffset + (Math.random() * 8 - 4);
+                        
+                        spawnParticle(geo.cpuMem.x + geo.cpuMem.w, startY, geo.gpuMem.x, endY, colors.matrixRaw, pcieSpeed, 4, () => {
+                            gpuMatrixCells[id].state = 'raw';
+                            gpuMatrixCells[id].alpha = 1;
+                            gpuMatrixCells[id].val = id + 1;
+                        });
+                    }
+                    break;
+
+                case 2: 
+                    if (sequenceIdx < stepSequence.length && animationTime > sequenceIdx * 120) {
+                        let id = stepSequence[sequenceIdx++];
+                        const startY = geo.gpuMem.y + geo.gpuMem.h/2 + (Math.random() * 20 - 10);
+                        const endY = geo.gpuCores.y + geo.gpuCores.h/2 + (Math.random() * 20 - 10);
+                        
+                        spawnParticle(geo.gpuMem.x + geo.gpuMem.w, startY, geo.gpuCores.x, endY, colors.matrixRaw, internalSpeed, 5, () => {
+                            flashThreadBlock();
+                            setTimeout(() => {
+                                const rStartY = geo.gpuCores.y + geo.gpuCores.h/2 + (Math.random() * 20 - 10);
+                                const rEndY = geo.gpuMem.y + geo.gpuMem.h/2 + (Math.random() * 20 - 10);
+                                spawnParticle(geo.gpuCores.x, rStartY, geo.gpuMem.x + geo.gpuMem.w, rEndY, colors.matrixProcessed, internalSpeed, 5, () => {
+                                    gpuMatrixCells[id].state = 'processed';
+                                    gpuMatrixCells[id].val = (id + 1) * 2;
+                                });
+                            }, 50); 
+                        });
+                    }
+                    break;
+
+                case 3: 
+                    if (sequenceIdx < stepSequence.length && animationTime > sequenceIdx * 100) {
+                        let id = stepSequence[sequenceIdx++];
+                        gpuMatrixCells[id].state = 'empty';
+                        gpuMatrixCells[id].alpha = 0;
+                        let carriedVal = (id + 1) * 2;
+
+                        const yOffset = 30;
+                        const startY = geo.gpuMem.y + geo.gpuMem.h/2 + yOffset + (Math.random() * 8 - 4);
+                        const endY = geo.cpuMem.y + geo.cpuMem.h/2 + yOffset + (Math.random() * 8 - 4);
+                        
+                        spawnParticle(geo.gpuMem.x, startY, geo.cpuMem.x + geo.cpuMem.w, endY, colors.matrixProcessed, pcieSpeed, 4, () => {
+                            cpuMatrixCells[id].state = 'processed';
+                            cpuMatrixCells[id].val = carriedVal;
+                        });
+                    }
+                    break;
+            }
+
+            if (isAutoPlaying && speedMultiplier > 0) {
+                let stepComplete = false;
+                const total = stepSequence.length;
+                if (currentStep === 0) stepComplete = sequenceIdx >= total && animationTime > total * 80 + 500;
+                else if (currentStep === 1) stepComplete = sequenceIdx >= total && particles.length === 0;
+                else if (currentStep === 2) stepComplete = sequenceIdx >= total && particles.length === 0 && gpuMatrixCells.every(c => c.state === 'processed');
+                else if (currentStep === 3) stepComplete = sequenceIdx >= total && particles.length === 0;
+                else if (currentStep === 4) stepComplete = animationTime > 2000;
+
+                if (stepComplete) {
+                    if (currentStep < 4) setStep(currentStep + 1);
+                    else { isAutoPlaying = false; updateUI(); }
+                }
+            }
+        }
+
+        function draw(timestamp) {
+            if (!lastTimestamp) lastTimestamp = timestamp;
+            const dt = timestamp - lastTimestamp;
+            lastTimestamp = timestamp;
+            const simDt = dt * speedMultiplier;
+
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            updateSimulation(simDt);
+
+            drawConnection(ctx, geo.cpuMem, geo.gpuMem, '1. Host to Device', false, -30, false);
+            drawConnection(ctx, geo.gpuMem, geo.cpuMem, '3. Device to Host', true, 30, false);
+            drawConnection(ctx, geo.gpuMem, geo.gpuCores, '2. Execute', false, 0, true);
+
+            let cpuGlow = (currentStep === 0 || currentStep === 4) ? colors.cpuThemeGlow : null;
+            if (currentStep === 4 && Math.sin(animationTime * 0.01) > 0.5) cpuGlow = 'rgba(59, 130, 246, 0.8)';
+            drawRoundedRect(ctx, geo.cpuCores.x, geo.cpuCores.y, geo.cpuCores.w, geo.cpuCores.h, 8, colors.bgBox, colors.cpuTheme, cpuGlow);
+            drawChipDetails(ctx, geo.cpuCores, 'cpu');
+            ctx.fillStyle = colors.text;
+            ctx.font = '600 16px "Inter", sans-serif';
+            ctx.textAlign = 'center'; ctx.textBaseline = 'alphabetic'; 
+            ctx.fillText('CPU Cores', geo.cpuCores.x + geo.cpuCores.w / 2, geo.cpuCores.y + 30);
+
+            drawRoundedRect(ctx, geo.cpuMem.x, geo.cpuMem.y, geo.cpuMem.w, geo.cpuMem.h, 8, colors.bgBox, colors.cpuTheme, currentStep === 0 || currentStep === 4 ? colors.cpuThemeGlow : null);
+            drawChipDetails(ctx, geo.cpuMem, 'vram'); 
+            ctx.fillStyle = colors.text;
+            ctx.fillText('CPU Memory', geo.cpuMem.x + geo.cpuMem.w / 2, geo.cpuMem.y + 30);
+            drawMatrix(ctx, geo.cpuMem, cpuMatrixCells, 'System Data');
+
+            drawRoundedRect(ctx, geo.gpuMem.x, geo.gpuMem.y, geo.gpuMem.w, geo.gpuMem.h, 8, colors.bgBox, colors.gpuTheme, currentStep === 1 || currentStep === 3 ? colors.gpuThemeGlow : null);
+            drawChipDetails(ctx, geo.gpuMem, 'vram');
+            ctx.fillStyle = colors.text;
+            ctx.fillText('GPU Memory', geo.gpuMem.x + geo.gpuMem.w / 2, geo.gpuMem.y + 30);
+            drawMatrix(ctx, geo.gpuMem, gpuMatrixCells, 'VRAM Data');
+
+            drawRoundedRect(ctx, geo.gpuCores.x, geo.gpuCores.y, geo.gpuCores.w, geo.gpuCores.h, 8, colors.bgBox, colors.gpuTheme, currentStep === 2 ? colors.gpuThemeGlow : null);
+            ctx.fillStyle = colors.text;
+            ctx.fillText('GPU Cores', geo.gpuCores.x + geo.gpuCores.w / 2, geo.gpuCores.y + 30);
+            drawGPUCoresGrid(ctx, geo.gpuCores);
+
+            if (currentStep === 2 && sequenceIdx < stepSequence.length) {
+                ctx.save();
+                ctx.fillStyle = `rgba(16, 185, 129, ${0.7 + Math.sin(animationTime*0.005)*0.3})`;
+                ctx.shadowColor = colors.gpuTheme;
+                ctx.shadowBlur = 10;
+                ctx.font = 'bold 12px "Courier New", monospace';
+                ctx.textAlign = 'center';
+                ctx.fillText("kernel<<<blocks, threads>>>(data)", geo.gpuCores.x + geo.gpuCores.w/2, geo.gpuCores.y - 15);
+                ctx.restore();
+            }
+
+            updateAndDrawParticles(ctx, simDt);
+
+            if (hoveredElement) {
+                switch(hoveredElement) {
+                    case 'cpuCores': drawTooltip(ctx, mouseX, mouseY, "CPU Cores (Host)", "Optimized for sequential processing.\nHandles OS, logic, and dispatching."); break;
+                    case 'cpuMem': drawTooltip(ctx, mouseX, mouseY, "System RAM (Host Memory)", "Capacity: High (e.g. 16GB - 128GB)\nBandwidth: Moderate (~50 GB/s)"); break;
+                    case 'pcie': drawTooltip(ctx, mouseX, mouseY, "PCIe Bus (Bottleneck)", "Transfers data between Host and Device.\nBandwidth: ~32-64 GB/s\nHigh latency, minimize transfers!"); break;
+                    case 'gpuMem': drawTooltip(ctx, mouseX, mouseY, "VRAM (Device Global Memory)", "Capacity: Medium (e.g. 8GB - 24GB)\nBandwidth: Very High (~1000 GB/s)"); break;
+                    case 'internalBus': drawTooltip(ctx, mouseX, mouseY, "Internal GPU Bus", "Connects VRAM directly to SMs.\nUltra-wide, extremely fast data pipeline."); break;
+                    case 'gpuCores': drawTooltip(ctx, mouseX, mouseY, "Streaming Multiprocessors", "Thousands of parallel arithmetic logic units.\nExecutes threads in groups (Blocks/Warps)."); break;
+                }
+            }
+
+            requestAnimationFrame(draw);
+        }
+
+        function updateUI() {
+            document.getElementById('btn-prev').disabled = currentStep === 0 || isAutoPlaying;
+            document.getElementById('btn-next').disabled = currentStep === 4 || isAutoPlaying;
+            
+            const autoBtn = document.getElementById('btn-autoplay');
+            if (isAutoPlaying) {
+                autoBtn.innerHTML = `
+                    <svg class="w-5 h-5 animate-pulse" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8 7a1 1 0 00-1 1v4a1 1 0 002 0V8a1 1 0 00-1-1zm4 0a1 1 0 00-1 1v4a1 1 0 002 0V8a1 1 0 00-1-1z" clip-rule="evenodd"></path></svg>
+                    Playing...
+                `;
+                autoBtn.classList.add('opacity-75');
+            } else {
+                autoBtn.innerHTML = `
+                    <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z" clip-rule="evenodd"></path></svg>
+                    Auto Play Sequence
+                `;
+                autoBtn.classList.remove('opacity-75');
+            }
+
+            for (let i = 0; i <= 4; i++) {
+                const el = document.getElementById(`step-desc-${i}`);
+                el.classList.remove('active', 'completed');
+                if (i < currentStep) el.classList.add('completed');
+                else if (i === currentStep) el.classList.add('active');
+            }
+        }
+
+        function setStep(step) {
+            if (step < 0 || step > 4) return;
+            currentStep = step;
+            animationTime = 0; 
+            particles = []; 
+            generateSequence(); 
+            resetDataStateForStep(step);
+            updateUI();
+        }
+
+        function resetDataStateForStep(step) {
+            for (let i = 0; i < geo.matrixSize * geo.matrixSize; i++) {
+                cpuMatrixCells[i].state = 'empty'; cpuMatrixCells[i].alpha = 0; cpuMatrixCells[i].val = i + 1;
+                gpuMatrixCells[i].state = 'empty'; gpuMatrixCells[i].alpha = 0; gpuMatrixCells[i].val = 0;
+            }
+
+            if (step >= 1) {
+                cpuMatrixCells.forEach((c) => { c.state = 'raw'; c.alpha = 1; });
+            }
+            if (step === 2) {
+                gpuMatrixCells.forEach((c, i) => { c.state = 'raw'; c.alpha = 1; c.val = i + 1; });
+            } else if (step === 3) {
+                gpuMatrixCells.forEach((c, i) => { c.state = 'processed'; c.alpha = 1; c.val = (i + 1) * 2; });
+            } else if (step === 4) {
+                cpuMatrixCells.forEach((c, i) => { c.state = 'processed'; c.alpha = 1; c.val = (i + 1) * 2; });
+                gpuMatrixCells.forEach(c => { c.state = 'empty'; c.alpha = 0; c.val = 0; });
+            }
+        }
+
+        document.getElementById('btn-prev').addEventListener('click', () => setStep(currentStep - 1));
+        document.getElementById('btn-next').addEventListener('click', () => setStep(currentStep + 1));
+        
+        document.getElementById('btn-autoplay').addEventListener('click', () => {
+            isAutoPlaying = !isAutoPlaying;
+            if (isAutoPlaying) {
+                if (currentStep === 4) setStep(0); 
+                animationTime = 0;
+            }
+            updateUI();
+        });
+
+        document.getElementById('btn-reset').addEventListener('click', () => {
+            isAutoPlaying = false;
+            speedMultiplier = 1.0;
+            document.getElementById('speed-slider').value = 1;
+            document.getElementById('speed-display').innerText = '1.00x';
+            setStep(0);
+        });
+
+        resizeCanvas();
+        updateUI();
+        requestAnimationFrame(draw);
+
+    </script>
+</body>
+</html>

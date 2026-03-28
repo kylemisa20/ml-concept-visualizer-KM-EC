@@ -1,0 +1,736 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Backpropagation & Chain Rule Visualizer</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        body {
+            background-color: #0f172a; /* slate-900 */
+            color: #f8fafc; /* slate-50 */
+            font-family: 'Inter', sans-serif;
+            overflow-x: hidden;
+        }
+        canvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+        }
+        .glass-panel {
+            background: rgba(30, 41, 59, 0.7); /* slate-800 with opacity */
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        input[type=range] {
+            accent-color: #3b82f6; /* blue-500 */
+        }
+        .math-font {
+            font-family: 'Cambria Math', 'Times New Roman', serif;
+        }
+    </style>
+</head>
+<body class="h-screen flex flex-col md:flex-row">
+
+    <!-- Left Controls Panel -->
+    <div class="w-full md:w-80 glass-panel p-6 flex flex-col gap-6 z-10 border-r border-slate-700 shadow-xl overflow-y-auto">
+        <div>
+            <h1 class="text-2xl font-bold text-blue-400 mb-2">Backpropagation</h1>
+            <p class="text-sm text-slate-400">Learn the Chain Rule through a simple computation graph: <br><span class="text-blue-300 math-font text-base">f = (x + y) · z</span></p>
+        </div>
+
+        <!-- Inputs -->
+        <div class="space-y-4 bg-slate-800/50 p-4 rounded-xl border border-slate-700">
+            <h2 class="text-sm font-semibold text-slate-300 uppercase tracking-wider">Inputs</h2>
+            
+            <div>
+                <div class="flex justify-between text-sm mb-1">
+                    <span class="math-font text-green-400 font-bold">x</span>
+                    <span id="x-val" class="text-slate-300">-2.0</span>
+                </div>
+                <input type="range" id="x-input" min="-10" max="10" step="0.1" value="-2" class="w-full">
+            </div>
+
+            <div>
+                <div class="flex justify-between text-sm mb-1">
+                    <span class="math-font text-green-400 font-bold">y</span>
+                    <span id="y-val" class="text-slate-300">5.0</span>
+                </div>
+                <input type="range" id="y-input" min="-10" max="10" step="0.1" value="5" class="w-full">
+            </div>
+
+            <div>
+                <div class="flex justify-between text-sm mb-1">
+                    <span class="math-font text-green-400 font-bold">z</span>
+                    <span id="z-val" class="text-slate-300">-4.0</span>
+                </div>
+                <input type="range" id="z-input" min="-10" max="10" step="0.1" value="-4" class="w-full">
+            </div>
+        </div>
+
+        <!-- Controls -->
+        <div class="space-y-3">
+            <h2 class="text-sm font-semibold text-slate-300 uppercase tracking-wider">Playback</h2>
+            <button id="btn-reset" class="w-full py-2 px-4 bg-slate-700 hover:bg-slate-600 rounded-lg transition text-sm font-medium flex items-center justify-center gap-2">
+                <i class="fas fa-undo"></i> Reset & Update Inputs
+            </button>
+            <div class="grid grid-cols-2 gap-2">
+                <button id="btn-prev" class="py-2 px-4 bg-slate-700 hover:bg-slate-600 rounded-lg transition text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed">
+                    <i class="fas fa-step-backward"></i> Prev
+                </button>
+                <button id="btn-next" class="py-2 px-4 bg-blue-600 hover:bg-blue-500 rounded-lg transition text-sm font-medium shadow-[0_0_15px_rgba(37,99,235,0.4)] disabled:opacity-50 disabled:cursor-not-allowed">
+                    Next <i class="fas fa-step-forward"></i>
+                </button>
+            </div>
+            <button id="btn-play" class="w-full py-2 px-4 bg-emerald-600 hover:bg-emerald-500 rounded-lg transition text-sm font-medium shadow-[0_0_15px_rgba(5,150,105,0.4)] flex items-center justify-center gap-2">
+                <i class="fas fa-play"></i> Auto Play Full Pass
+            </button>
+        </div>
+
+        <!-- Legend -->
+        <div class="mt-auto bg-slate-800/50 p-4 rounded-xl border border-slate-700 text-sm space-y-2">
+            <div class="flex items-center gap-2">
+                <div class="w-3 h-3 rounded-full bg-green-500"></div>
+                <span class="text-slate-300">Forward Pass (Values)</span>
+            </div>
+            <div class="flex items-center gap-2">
+                <div class="w-3 h-3 rounded-full bg-red-500"></div>
+                <span class="text-slate-300">Backward Pass (Gradients)</span>
+            </div>
+            <div class="flex items-center gap-2">
+                <div class="w-3 h-3 rounded-full bg-amber-400"></div>
+                <span class="text-slate-300">Local Derivatives</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Main Canvas Area -->
+    <div class="flex-1 relative">
+        <canvas id="graphCanvas"></canvas>
+        
+        <!-- Explanation Overlay -->
+        <div class="absolute bottom-6 left-1/2 -translate-x-1/2 w-[90%] max-w-2xl glass-panel rounded-2xl p-6 shadow-2xl border-t border-slate-600">
+            <h3 id="step-title" class="text-lg font-bold text-blue-400 mb-2">Step 0: Initialization</h3>
+            <p id="step-desc" class="text-slate-300 text-sm md:text-base leading-relaxed">
+                Set the inputs using the sliders on the left. Click "Next" to begin the forward pass and compute the final output.
+            </p>
+            <div id="math-formula" class="mt-4 p-3 bg-slate-900 rounded-lg font-mono text-sm text-center border border-slate-700 text-emerald-400 min-h-[3rem] flex items-center justify-center">
+                f(x, y, z) = (x + y) * z
+            </div>
+        </div>
+    </div>
+
+<script>
+    // Canvas Setup
+    const canvas = document.getElementById('graphCanvas');
+    const ctx = canvas.getContext('2d');
+    
+    // Virtual resolution for consistent drawing regardless of screen size
+    const VIRTUAL_WIDTH = 1000;
+    const VIRTUAL_HEIGHT = 600;
+    let scale = 1;
+
+    function resizeCanvas() {
+        const parent = canvas.parentElement;
+        canvas.width = parent.clientWidth;
+        canvas.height = parent.clientHeight;
+        
+        // Calculate scale to fit virtual dimensions into actual canvas while maintaining aspect ratio
+        const scaleX = canvas.width / VIRTUAL_WIDTH;
+        const scaleY = canvas.height / VIRTUAL_HEIGHT;
+        scale = Math.min(scaleX, scaleY) * 0.9; // 0.9 for some padding
+    }
+
+    window.addEventListener('resize', resizeCanvas);
+    resizeCanvas();
+
+    // UI Elements
+    const inputX = document.getElementById('x-input');
+    const inputY = document.getElementById('y-input');
+    const inputZ = document.getElementById('z-input');
+    const valX = document.getElementById('x-val');
+    const valY = document.getElementById('y-val');
+    const valZ = document.getElementById('z-val');
+    
+    const stepTitle = document.getElementById('step-title');
+    const stepDesc = document.getElementById('step-desc');
+    const mathFormula = document.getElementById('math-formula');
+
+    const btnNext = document.getElementById('btn-next');
+    const btnPrev = document.getElementById('btn-prev');
+    const btnReset = document.getElementById('btn-reset');
+    const btnPlay = document.getElementById('btn-play');
+
+    // Graph Data Structure
+    const nodes = {
+        x: { id: 'x', label: 'x', type: 'input', vx: 150, vy: 150, val: -2, grad: 0, eqX: 150, eqY: 55 },
+        y: { id: 'y', label: 'y', type: 'input', vx: 150, vy: 350, val: 5, grad: 0, eqX: 150, eqY: 450 },
+        z: { id: 'z', label: 'z', type: 'input', vx: 450, vy: 450, val: -4, grad: 0, eqX: 450, eqY: 550 },
+        q: { id: 'q', label: 'q (+)', type: 'add', vx: 450, vy: 250, val: 0, grad: 0, eqX: 450, eqY: 125 },
+        f: { id: 'f', label: 'f (*)', type: 'mul', vx: 750, vy: 350, val: 0, grad: 0, eqX: 750, eqY: 225 }
+    };
+
+    const edges = [
+        { from: 'x', to: 'q', labelOffsetX: -20, labelOffsetY: -25 },
+        { from: 'y', to: 'q', labelOffsetX: -20, labelOffsetY: 25 },
+        { from: 'q', to: 'f', labelOffsetX: 0, labelOffsetY: -25 },
+        { from: 'z', to: 'f', labelOffsetX: 10, labelOffsetY: 25 }
+    ];
+
+    // Animation State Machine
+    const STATES = [
+        { id: 'IDLE', title: 'Initialization', type: 'idle' },
+        { id: 'FWD_ADD', title: 'Forward Pass: Addition Gate', type: 'forward', from: ['x', 'y'], to: 'q' },
+        { id: 'FWD_ADD_DONE', title: 'Addition Computed', type: 'idle' },
+        { id: 'FWD_MUL', title: 'Forward Pass: Multiplication Gate', type: 'forward', from: ['q', 'z'], to: 'f' },
+        { id: 'FWD_MUL_DONE', title: 'Final Output Computed', type: 'idle' },
+        { id: 'BWD_START', title: 'Backward Pass: Initialization', type: 'backward_init' },
+        { id: 'BWD_MUL', title: 'Backward Pass: Chain Rule at (*)', type: 'backward', from: ['f'], to: ['q', 'z'] },
+        { id: 'BWD_MUL_DONE', title: 'Gradients of q and z computed', type: 'idle' },
+        { id: 'BWD_ADD', title: 'Backward Pass: Chain Rule at (+)', type: 'backward', from: ['q'], to: ['x', 'y'] },
+        { id: 'BWD_ADD_DONE', title: 'Input Gradients Computed! (Complete)', type: 'idle' }
+    ];
+
+    let currentStateIndex = 0;
+    let animationProgress = 0; // 0 to 1
+    let lastTime = 0;
+    const ANIMATION_DURATION = 1500; // ms
+    let autoPlaying = false;
+
+    // Update values from inputs
+    function updateInputs() {
+        nodes.x.val = parseFloat(inputX.value);
+        nodes.y.val = parseFloat(inputY.value);
+        nodes.z.val = parseFloat(inputZ.value);
+        
+        valX.innerText = nodes.x.val.toFixed(1);
+        valY.innerText = nodes.y.val.toFixed(1);
+        valZ.innerText = nodes.z.val.toFixed(1);
+        
+        if(currentStateIndex === 0) {
+            resetGradientsAndIntermediates();
+        }
+    }
+
+    inputX.addEventListener('input', () => { updateInputs(); resetToStart(); });
+    inputY.addEventListener('input', () => { updateInputs(); resetToStart(); });
+    inputZ.addEventListener('input', () => { updateInputs(); resetToStart(); });
+
+    function resetGradientsAndIntermediates() {
+        nodes.q.val = 0;
+        nodes.f.val = 0;
+        Object.values(nodes).forEach(n => n.grad = 0);
+    }
+
+    function resetToStart() {
+        currentStateIndex = 0;
+        animationProgress = 0;
+        autoPlaying = false;
+        resetGradientsAndIntermediates();
+        updateUI();
+    }
+
+    // Mathematical Operations applied precisely at state transitions
+    function applyStateLogic(stateId) {
+        if (stateId === 'FWD_ADD_DONE' || stateId === 'FWD_MUL') {
+            nodes.q.val = nodes.x.val + nodes.y.val;
+        }
+        if (stateId === 'FWD_MUL_DONE' || stateId === 'BWD_START') {
+            nodes.q.val = nodes.x.val + nodes.y.val;
+            nodes.f.val = nodes.q.val * nodes.z.val;
+        }
+        if (stateId === 'BWD_START') {
+            nodes.f.grad = 1.0; // Seed gradient
+        }
+        if (stateId === 'BWD_MUL_DONE' || stateId === 'BWD_ADD') {
+            nodes.f.grad = 1.0;
+            // q = x+y, f = q*z -> df/dq = z
+            nodes.q.grad = nodes.f.grad * nodes.z.val; 
+            // df/dz = q
+            nodes.z.grad = nodes.f.grad * nodes.q.val;
+        }
+        if (stateId === 'BWD_ADD_DONE') {
+            nodes.f.grad = 1.0;
+            nodes.q.grad = nodes.f.grad * nodes.z.val; 
+            nodes.z.grad = nodes.f.grad * nodes.q.val;
+            // df/dx = df/dq * dq/dx = df/dq * 1
+            nodes.x.grad = nodes.q.grad * 1.0;
+            // df/dy = df/dq * dq/dy = df/dq * 1
+            nodes.y.grad = nodes.q.grad * 1.0;
+        }
+        
+        // Ensure resets on moving backwards
+        if (stateId === 'IDLE') resetGradientsAndIntermediates();
+        if (stateId === 'FWD_ADD') { resetGradientsAndIntermediates(); }
+        if (stateId === 'FWD_MUL') { nodes.f.val = 0; Object.values(nodes).forEach(n => n.grad = 0); }
+        if (stateId === 'BWD_MUL') { nodes.q.grad = 0; nodes.z.grad = 0; nodes.x.grad = 0; nodes.y.grad = 0; nodes.f.grad = 1;}
+        if (stateId === 'BWD_ADD') { nodes.x.grad = 0; nodes.y.grad = 0; }
+    }
+
+    function updateExplanations(stateId) {
+        const x = nodes.x.val.toFixed(1);
+        const y = nodes.y.val.toFixed(1);
+        const z = nodes.z.val.toFixed(1);
+        const q = (nodes.x.val + nodes.y.val).toFixed(1);
+        const f = ((nodes.x.val + nodes.y.val) * nodes.z.val).toFixed(1);
+        
+        const gf = (1.0).toFixed(1);
+        const gq = (1.0 * nodes.z.val).toFixed(1);
+        const gz = (1.0 * (nodes.x.val + nodes.y.val)).toFixed(1);
+
+        switch(stateId) {
+            case 'IDLE':
+                stepTitle.innerText = "Step 0: Ready";
+                stepDesc.innerHTML = "We have our inputs: <span class='text-green-400 font-bold'>x</span>, <span class='text-green-400 font-bold'>y</span>, and <span class='text-green-400 font-bold'>z</span>. Click Next to flow data forward.";
+                mathFormula.innerHTML = `f(x, y, z) = (x + y) * z`;
+                break;
+            case 'FWD_ADD':
+            case 'FWD_ADD_DONE':
+                stepTitle.innerText = "Step 1: Forward Pass (Add)";
+                stepDesc.innerHTML = "The addition gate receives <span class='text-green-400 font-bold'>x</span> and <span class='text-green-400 font-bold'>y</span>. It computes the intermediate value <span class='text-blue-300 font-bold'>q</span>.";
+                mathFormula.innerHTML = `q = x + y = ${x} + ${y} = <span class="text-white">${q}</span>`;
+                break;
+            case 'FWD_MUL':
+            case 'FWD_MUL_DONE':
+                stepTitle.innerText = "Step 2: Forward Pass (Multiply)";
+                stepDesc.innerHTML = "The multiplication gate receives <span class='text-blue-300 font-bold'>q</span> and <span class='text-green-400 font-bold'>z</span>. It computes the final output <span class='text-blue-300 font-bold'>f</span>.";
+                mathFormula.innerHTML = `f = q * z = ${q} * ${z} = <span class="text-white">${f}</span>`;
+                break;
+            case 'BWD_START':
+                stepTitle.innerText = "Step 3: Base Gradient";
+                stepDesc.innerHTML = "To find how much each input affects the output, we start at the end. The derivative of <span class='text-blue-300 font-bold'>f</span> with respect to itself is exactly 1.";
+                mathFormula.innerHTML = `∂f / ∂f = <span class="text-red-400">1.0</span>`;
+                break;
+            case 'BWD_MUL':
+            case 'BWD_MUL_DONE':
+                stepTitle.innerText = "Step 4: Chain Rule at Multiply Gate";
+                stepDesc.innerHTML = "Local derivatives of f=q*z are: ∂f/∂q = z and ∂f/∂z = q. Multiply these by the incoming gradient from f (which is 1) to get the gradients for <span class='text-blue-300 font-bold'>q</span> and <span class='text-green-400 font-bold'>z</span>.";
+                mathFormula.innerHTML = `
+                    <div class="flex flex-col text-sm text-left gap-1">
+                        <span>g<sub>z</sub> = (∂f/∂f) · (∂f/∂z) = 1.0 · q = 1.0 · ${q} = <span class="text-red-400">${gz}</span></span>
+                        <span>g<sub>q</sub> = (∂f/∂f) · (∂f/∂q) = 1.0 · z = 1.0 · ${z} = <span class="text-red-400">${gq}</span></span>
+                    </div>`;
+                break;
+            case 'BWD_ADD':
+            case 'BWD_ADD_DONE':
+                stepTitle.innerText = "Step 5: Chain Rule at Add Gate";
+                stepDesc.innerHTML = "Local derivatives of q=x+y are: ∂q/∂x = 1 and ∂q/∂y = 1. Multiply the incoming gradient (g_q) by these local derivatives to get the final gradients for <span class='text-green-400 font-bold'>x</span> and <span class='text-green-400 font-bold'>y</span>. We now have the gradients for all inputs!";
+                mathFormula.innerHTML = `
+                    <div class="flex flex-col text-sm text-left gap-1">
+                        <span>g<sub>x</sub> = g<sub>q</sub> · (∂q/∂x) = ${gq} · 1 = <span class="text-red-400">${gq}</span></span>
+                        <span>g<sub>y</sub> = g<sub>q</sub> · (∂q/∂y) = ${gq} · 1 = <span class="text-red-400">${gq}</span></span>
+                        <span class="text-slate-400">g<sub>z</sub> (computed previously) = <span class="text-red-400">${gz}</span></span>
+                    </div>`;
+                break;
+        }
+    }
+
+    function updateUI() {
+        btnPrev.disabled = currentStateIndex === 0;
+        btnNext.disabled = currentStateIndex === STATES.length - 1;
+        
+        // Pre-calculate values up to current state
+        for(let i=0; i<=currentStateIndex; i++) {
+            applyStateLogic(STATES[i].id);
+        }
+        updateExplanations(STATES[currentStateIndex].id);
+    }
+
+    btnNext.addEventListener('click', () => {
+        if (currentStateIndex < STATES.length - 1) {
+            currentStateIndex++;
+            animationProgress = 0;
+            updateUI();
+        }
+    });
+
+    btnPrev.addEventListener('click', () => {
+        if (currentStateIndex > 0) {
+            currentStateIndex--;
+            animationProgress = 0; // If going back to an animation state, it restarts
+            updateUI();
+        }
+    });
+
+    btnReset.addEventListener('click', () => {
+        resetToStart();
+    });
+
+    btnPlay.addEventListener('click', () => {
+        if(currentStateIndex === STATES.length - 1) {
+            resetToStart();
+        }
+        autoPlaying = !autoPlaying;
+        btnPlay.innerHTML = autoPlaying ? '<i class="fas fa-pause"></i> Pause' : '<i class="fas fa-play"></i> Auto Play Full Pass';
+        if(autoPlaying && animationProgress === 0) animationProgress = 0.01; // Kickstart
+    });
+
+    // Drawing Functions
+
+    // Helper to parse and draw subscript math formulas directly on canvas
+    function parseMath(text) {
+        let tokens = [];
+        let current = "";
+        let i = 0;
+        while(i < text.length) {
+            if (text[i] === '_') {
+                if (current) tokens.push({text: current, type: 'normal'});
+                current = "";
+                i++;
+                if (i < text.length) tokens.push({text: text[i], type: 'sub'});
+                i++;
+            } else {
+                current += text[i];
+                i++;
+            }
+        }
+        if (current) tokens.push({text: current, type: 'normal'});
+        return tokens;
+    }
+
+    function measureMath(ctx, text, baseSize) {
+        const tokens = parseMath(text);
+        let width = 0;
+        ctx.save();
+        tokens.forEach(t => {
+            if (t.type === 'normal') {
+                ctx.font = `italic ${baseSize}px "Cambria Math", serif`;
+                width += ctx.measureText(t.text).width;
+            } else {
+                ctx.font = `italic ${baseSize * 0.65}px "Cambria Math", serif`;
+                width += ctx.measureText(t.text).width;
+            }
+        });
+        ctx.restore();
+        return width;
+    }
+
+    function drawMathCentered(ctx, text, x, y, baseSize, color) {
+        const totalWidth = measureMath(ctx, text, baseSize);
+        let currentX = x - totalWidth / 2;
+        
+        ctx.save();
+        ctx.fillStyle = color;
+        ctx.textAlign = 'left'; 
+        const tokens = parseMath(text);
+        
+        tokens.forEach(t => {
+            if (t.type === 'normal') {
+                ctx.font = `italic ${baseSize}px "Cambria Math", serif`;
+                ctx.fillText(t.text, currentX, y);
+                currentX += ctx.measureText(t.text).width;
+            } else {
+                ctx.font = `italic ${baseSize * 0.65}px "Cambria Math", serif`;
+                ctx.fillText(t.text, currentX, y + baseSize * 0.25);
+                currentX += ctx.measureText(t.text).width;
+            }
+        });
+        ctx.restore();
+    }
+
+    function roundedRect(ctx, x, y, width, height, radius) {
+        ctx.beginPath();
+        ctx.moveTo(x + radius, y);
+        ctx.lineTo(x + width - radius, y);
+        ctx.quadraticCurveTo(x + width, y, x + width, y + radius);
+        ctx.lineTo(x + width, y + height - radius);
+        ctx.quadraticCurveTo(x + width, y + height, x + width - radius, y + height);
+        ctx.lineTo(x + radius, y + height);
+        ctx.quadraticCurveTo(x, y + height, x, y + height - radius);
+        ctx.lineTo(x, y + radius);
+        ctx.quadraticCurveTo(x, y, x + radius, y);
+        ctx.closePath();
+    }
+
+    function drawArrow(ctx, fromX, fromY, toX, toY) {
+        const headlen = 12; // length of head in pixels
+        const dx = toX - fromX;
+        const dy = toY - fromY;
+        const angle = Math.atan2(dy, dx);
+        
+        // Draw line
+        ctx.beginPath();
+        ctx.moveTo(fromX, fromY);
+        ctx.lineTo(toX, toY);
+        ctx.strokeStyle = 'rgba(148, 163, 184, 0.4)'; // slate-400
+        ctx.lineWidth = 3;
+        ctx.stroke();
+        
+        // Draw arrow head
+        ctx.beginPath();
+        ctx.moveTo(toX, toY);
+        ctx.lineTo(toX - headlen * Math.cos(angle - Math.PI / 6), toY - headlen * Math.sin(angle - Math.PI / 6));
+        ctx.lineTo(toX - headlen * Math.cos(angle + Math.PI / 6), toY - headlen * Math.sin(angle + Math.PI / 6));
+        ctx.lineTo(toX, toY);
+        ctx.fillStyle = 'rgba(148, 163, 184, 0.6)';
+        ctx.fill();
+    }
+
+    function drawNode(ctx, node, isHighlighted) {
+        const radius = 55;
+        
+        // Outer glow if highlighted
+        if (isHighlighted) {
+            ctx.shadowColor = 'rgba(59, 130, 246, 0.8)';
+            ctx.shadowBlur = 20;
+        } else {
+            ctx.shadowBlur = 0;
+        }
+
+        // Background
+        ctx.beginPath();
+        ctx.arc(node.vx, node.vy, radius, 0, Math.PI * 2);
+        ctx.fillStyle = '#1e293b'; // slate-800
+        ctx.fill();
+        ctx.lineWidth = isHighlighted ? 4 : 2;
+        ctx.strokeStyle = isHighlighted ? '#60a5fa' : '#475569'; // blue-400 : slate-600
+        ctx.stroke();
+        ctx.shadowBlur = 0; // Reset shadow
+
+        // Label (x, y, q, etc.)
+        ctx.fillStyle = '#e2e8f0'; // slate-200
+        ctx.font = 'bold 24px "Cambria Math", serif';
+        ctx.textAlign = 'center';
+        ctx.fillText(node.label, node.vx, node.vy - 18);
+
+        // Value
+        let showVal = node.type === 'input' || currentStateIndex >= STATES.findIndex(s => s.id === (node.id==='q'?'FWD_ADD_DONE':'FWD_MUL_DONE'));
+        if (node.type === 'input') showVal = true;
+        
+        ctx.font = '16px Inter, sans-serif';
+        if (showVal) {
+            ctx.fillStyle = '#4ade80'; // green-400
+            ctx.fillText(`v: ${node.val.toFixed(2)}`, node.vx, node.vy + 6);
+        }
+
+        // Gradient
+        let showGrad = currentStateIndex >= STATES.findIndex(s => s.id === 'BWD_START');
+        if (showGrad) {
+            // Check specific node reveal timings
+            if (node.id === 'q' || node.id === 'z') showGrad = currentStateIndex >= STATES.findIndex(s => s.id === 'BWD_MUL_DONE');
+            if (node.id === 'x' || node.id === 'y') showGrad = currentStateIndex >= STATES.findIndex(s => s.id === 'BWD_ADD_DONE');
+            if (node.id === 'f') showGrad = currentStateIndex >= STATES.findIndex(s => s.id === 'BWD_START');
+        }
+
+        if (showGrad) {
+            ctx.fillStyle = '#f87171'; // red-400
+            ctx.fillText(`g: ${node.grad.toFixed(2)}`, node.vx, node.vy + 26);
+        }
+
+        // Draw symbolic/evaluated formulas outside the node
+        const drawFormula = (text, x, y, color) => {
+            const baseFontSize = 18; // Reduced slightly from 20 to fit longer chain rule formulas
+            const textWidth = measureMath(ctx, text, baseFontSize);
+            ctx.fillStyle = 'rgba(15, 23, 42, 0.85)'; // slate-900 background
+            roundedRect(ctx, x - textWidth/2 - 10, y - 16, textWidth + 20, 28, 6);
+            ctx.fill();
+            
+            drawMathCentered(ctx, text, x, y + 4, baseFontSize, color);
+        };
+
+        if (showVal) {
+            let eqV = null;
+            if (node.id === 'q') eqV = `q = x + y = ${(nodes.x.val + nodes.y.val).toFixed(1)}`;
+            if (node.id === 'f') eqV = `f = q · z = ${(nodes.q.val * nodes.z.val).toFixed(1)}`;
+            
+            if (eqV) drawFormula(eqV, node.eqX, node.eqY, '#4ade80');
+        }
+
+        if (showGrad) {
+            let eqG = null;
+            if (node.id === 'f') eqG = `g_f = ∂f/∂f = 1.0`;
+            if (node.id === 'q') eqG = `g_q = (∂f/∂f) · (∂f/∂q) = g_f · z = ${(nodes.f.grad * nodes.z.val).toFixed(1)}`;
+            if (node.id === 'z') eqG = `g_z = (∂f/∂f) · (∂f/∂z) = g_f · q = ${(nodes.f.grad * nodes.q.val).toFixed(1)}`;
+            if (node.id === 'x') eqG = `g_x = g_q · (∂q/∂x) = g_q · 1 = ${(nodes.q.grad * 1).toFixed(1)}`;
+            if (node.id === 'y') eqG = `g_y = g_q · (∂q/∂y) = g_q · 1 = ${(nodes.q.grad * 1).toFixed(1)}`;
+
+            if (eqG) {
+                let gY = node.eqY;
+                if (showVal && (node.id === 'q' || node.id === 'f')) gY += 34; // Adjusted spacing for new box height
+                drawFormula(eqG, node.eqX, gY, '#f87171');
+            }
+        }
+    }
+
+    function drawPulse(ctx, fromNode, toNode, progress, color, valueStr) {
+        const x = fromNode.vx + (toNode.vx - fromNode.vx) * progress;
+        const y = fromNode.vy + (toNode.vy - fromNode.vy) * progress;
+
+        ctx.shadowColor = color;
+        ctx.shadowBlur = 15;
+        
+        ctx.beginPath();
+        ctx.arc(x, y, 10, 0, Math.PI * 2);
+        ctx.fillStyle = color;
+        ctx.fill();
+
+        ctx.shadowBlur = 0;
+        
+        // Draw little value tag attached to pulse
+        ctx.fillStyle = 'rgba(15, 23, 42, 0.9)'; // slate-900
+        roundedRect(ctx, x - 30, y - 40, 60, 24, 6);
+        ctx.fill();
+        
+        ctx.fillStyle = '#fff';
+        ctx.font = '14px Inter';
+        ctx.textAlign = 'center';
+        ctx.fillText(valueStr, x, y - 23);
+    }
+
+    // Main Draw Loop
+    function render(time) {
+        const dt = time - lastTime;
+        lastTime = time;
+
+        // Auto play logic
+        if (autoPlaying) {
+            const state = STATES[currentStateIndex];
+            if (state.type === 'idle' || state.type === 'backward_init') {
+                animationProgress += dt / (ANIMATION_DURATION * 0.7); // Wait a bit on idle states
+                if (animationProgress >= 1) {
+                    if (currentStateIndex < STATES.length - 1) {
+                        currentStateIndex++;
+                        animationProgress = 0;
+                        updateUI();
+                    } else {
+                        autoPlaying = false;
+                        btnPlay.innerHTML = '<i class="fas fa-play"></i> Auto Play Full Pass';
+                    }
+                }
+            } else {
+                animationProgress += dt / ANIMATION_DURATION;
+                if (animationProgress >= 1) {
+                    currentStateIndex++;
+                    animationProgress = 0;
+                    updateUI();
+                }
+            }
+        }
+
+        // Ease in-out function for smooth animation
+        const easeProgress = animationProgress < 0.5 
+            ? 2 * animationProgress * animationProgress 
+            : 1 - Math.pow(-2 * animationProgress + 2, 2) / 2;
+
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+        // Calculate offset to center the virtual canvas horizontally, 
+        // but push it significantly higher vertically to remove top empty space
+        // and avoid the explanation overlay at the bottom.
+        const offsetX = (canvas.width - VIRTUAL_WIDTH * scale) / 2;
+        const offsetY = Math.max(20, (canvas.height - VIRTUAL_HEIGHT * scale) * 0.12);
+
+        ctx.save();
+        ctx.translate(offsetX, offsetY);
+        ctx.scale(scale, scale);
+
+        // Draw Main Formula at the top of the diagram
+        ctx.fillStyle = '#60a5fa'; // blue-400
+        ctx.font = 'bold 48px "Cambria Math", serif';
+        ctx.textAlign = 'center';
+        ctx.fillText('f(x, y, z) = (x + y) · z', VIRTUAL_WIDTH / 2, 35);
+
+        // Add clarifications for q and f
+        ctx.fillStyle = '#cbd5e1'; // slate-300
+        ctx.font = 'italic 28px "Cambria Math", serif';
+        ctx.fillText('where   q = x + y   and   f = q · z', VIRTUAL_WIDTH / 2, 75);
+
+        // 1. Draw Edges
+        edges.forEach(edge => {
+            const n1 = nodes[edge.from];
+            const n2 = nodes[edge.to];
+            
+            // Calculate intersection with node radius so arrow doesn't overlap circle
+            const dx = n2.vx - n1.vx;
+            const dy = n2.vy - n1.vy;
+            const dist = Math.sqrt(dx*dx + dy*dy);
+            const radius = 55;
+            
+            const startX = n1.vx + (dx/dist) * radius;
+            const startY = n1.vy + (dy/dist) * radius;
+            const endX = n2.vx - (dx/dist) * radius;
+            const endY = n2.vy - (dy/dist) * radius;
+
+            drawArrow(ctx, startX, startY, endX, endY);
+
+            // Draw Local Gradients on edges during backward pass
+            let showLocalGrad = false;
+            let evaluatedLabel = null;
+
+            if ((edge.from === 'q' || edge.from === 'z') && edge.to === 'f') {
+                showLocalGrad = currentStateIndex >= STATES.findIndex(s => s.id === 'BWD_MUL');
+                if (edge.from === 'q') evaluatedLabel = `∂f/∂q = z = ${nodes.z.val.toFixed(1)}`;
+                if (edge.from === 'z') evaluatedLabel = `∂f/∂z = q = ${nodes.q.val.toFixed(1)}`;
+            }
+            if ((edge.from === 'x' || edge.from === 'y') && edge.to === 'q') {
+                showLocalGrad = currentStateIndex >= STATES.findIndex(s => s.id === 'BWD_ADD');
+                if (edge.from === 'x') evaluatedLabel = `∂q/∂x = 1`;
+                if (edge.from === 'y') evaluatedLabel = `∂q/∂y = 1`;
+            }
+
+            if (showLocalGrad && evaluatedLabel) {
+                const midX = (startX + endX) / 2 + (edge.labelOffsetX || 0);
+                const midY = (startY + endY) / 2 + (edge.labelOffsetY || 0);
+                
+                const baseFontSize = 18;
+                const textWidth = measureMath(ctx, evaluatedLabel, baseFontSize);
+                
+                ctx.fillStyle = 'rgba(30, 41, 59, 0.9)';
+                roundedRect(ctx, midX - textWidth/2 - 8, midY - 16, textWidth + 16, 28, 6);
+                ctx.fill();
+
+                drawMathCentered(ctx, evaluatedLabel, midX, midY + 4, baseFontSize, '#fbbf24');
+            }
+        });
+
+        const currentState = STATES[currentStateIndex];
+
+        // 2. Draw Pulses (Animations)
+        if (currentState.type === 'forward' && animationProgress < 1) {
+            currentState.from.forEach(fromId => {
+                const valStr = nodes[fromId].val.toFixed(1);
+                drawPulse(ctx, nodes[fromId], nodes[currentState.to], easeProgress, '#4ade80', valStr); // green
+            });
+        }
+        else if (currentState.type === 'backward' && animationProgress < 1) {
+            currentState.to.forEach(toId => {
+                // Calculate gradient being passed back conceptually
+                let gradVal = 0;
+                if (currentState.id === 'BWD_MUL') {
+                    gradVal = nodes.f.grad * (toId === 'q' ? nodes.z.val : nodes.q.val);
+                } else if (currentState.id === 'BWD_ADD') {
+                    gradVal = nodes.q.grad * 1.0;
+                }
+                const gradStr = gradVal.toFixed(1);
+                drawPulse(ctx, nodes[currentState.from[0]], nodes[toId], easeProgress, '#f87171', gradStr); // red
+            });
+        }
+
+        // 3. Draw Nodes
+        Object.values(nodes).forEach(node => {
+            // Determine if highlighted
+            let isHighlighted = false;
+            if (currentState.type === 'forward') {
+                if (currentState.from.includes(node.id) || currentState.to === node.id) isHighlighted = true;
+            } else if (currentState.type === 'backward') {
+                if (currentState.to.includes(node.id) || currentState.from.includes(node.id)) isHighlighted = true;
+            } else if (currentState.id === 'BWD_START' && node.id === 'f') {
+                isHighlighted = true;
+            }
+            
+            drawNode(ctx, node, isHighlighted);
+        });
+
+        ctx.restore();
+        requestAnimationFrame(render);
+    }
+
+    // Initialize
+    updateInputs();
+    updateUI();
+    requestAnimationFrame(render);
+
+</script>
+</body>
+</html>

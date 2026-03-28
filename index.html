@@ -114,9 +114,57 @@
                         </a>
                     </li>
                     <li>
-                        <a href="tpu/branch-divergence.html" class="viz-link block p-3 rounded-lg">
+                        <a href="gpu/branch-divergence.html" class="viz-link block p-3 rounded-lg">
                             <span class="font-semibold text-purple-600">Branch Divergence Profiler</span>
                             <span class="text-gray-600 text-sm block mt-1">Simulator to measure throughput and utilization losses in divergent kernels</span>
+                        </a>
+                    </li>
+                    <li>
+                        <a href="gpu/branch-divergence-optimization.html" class="viz-link block p-3 rounded-lg">
+                            <span class="font-semibold text-purple-600">CUDA Branch Divergence Hardware Masking</span>
+                            <span class="text-gray-600 text-sm block mt-1">Track active masks, program counters, and SIMT efficiency during divergence</span>
+                        </a>
+                    </li>
+                    <li>
+                        <a href="gpu/dynamic-warp-formation.html" class="viz-link block p-3 rounded-lg">
+                            <span class="font-semibold text-purple-600">Dynamic Warp Formation</span>
+                            <span class="text-gray-600 text-sm block mt-1">Compare baseline SIMT scheduling with post-divergence warp regrouping</span>
+                        </a>
+                    </li>
+                    <li>
+                        <a href="gpu/nvidia/nvidia-multithreading.html" class="viz-link block p-3 rounded-lg">
+                            <span class="font-semibold text-purple-600">NVIDIA SM Multithreading</span>
+                            <span class="text-gray-600 text-sm block mt-1">Visual overview of host memory, warp scheduling, and streaming multiprocessor structure</span>
+                        </a>
+                    </li>
+                    <li>
+                        <a href="gpu/nvidia/cuda-architecture.html" class="viz-link block p-3 rounded-lg">
+                            <span class="font-semibold text-purple-600">CUDA Execution Architecture</span>
+                            <span class="text-gray-600 text-sm block mt-1">Explore the logical grid, block, thread, and shared-memory hierarchy</span>
+                        </a>
+                    </li>
+                    <li>
+                        <a href="gpu/nvidia/cuda-thread-hierarchy.html" class="viz-link block p-3 rounded-lg">
+                            <span class="font-semibold text-purple-600">CUDA Hardware & Memory Architecture</span>
+                            <span class="text-gray-600 text-sm block mt-1">Connect the CUDA programming model to SMs, registers, caches, and device memory</span>
+                        </a>
+                    </li>
+                    <li>
+                        <a href="gpu/nvidia/cuda-execution-flow.html" class="viz-link block p-3 rounded-lg">
+                            <span class="font-semibold text-purple-600">CUDA Execution Flow</span>
+                            <span class="text-gray-600 text-sm block mt-1">Step through host-to-device copies, kernel launch, synchronization, and result handling</span>
+                        </a>
+                    </li>
+                    <li>
+                        <a href="gpu/nvidia/bank-conflicts.html" class="viz-link block p-3 rounded-lg">
+                            <span class="font-semibold text-purple-600">Shared Memory Bank Conflicts</span>
+                            <span class="text-gray-600 text-sm block mt-1">Visualize stride patterns, broadcasts, and padding tricks for shared memory</span>
+                        </a>
+                    </li>
+                    <li>
+                        <a href="gpu/nvidia/cuda-snippets/cuda-streams.html" class="viz-link block p-3 rounded-lg">
+                            <span class="font-semibold text-purple-600">CUDA Streams Visualizer</span>
+                            <span class="text-gray-600 text-sm block mt-1">See how asynchronous transfers and kernels overlap across multiple streams</span>
                         </a>
                     </li>
                     <li>
@@ -333,6 +381,13 @@
                             class="viz-link block p-3 rounded-lg">
                             <span class="font-semibold text-green-600">BatchNorm in Action</span>
                             <span class="text-gray-600 text-sm block mt-1">Batch normalization visualized</span>
+                        </a>
+                    </li>
+                    <li>
+                        <a href="gradient-descent/back-propagation.html"
+                            class="viz-link block p-3 rounded-lg">
+                            <span class="font-semibold text-green-600">Backpropagation & Chain Rule</span>
+                            <span class="text-gray-600 text-sm block mt-1">Trace forward values and backward gradients through a simple computation graph</span>
                         </a>
                     </li>
                 </ul>

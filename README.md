@@ -46,6 +46,7 @@ Core concepts essential for understanding modern ML
 
 - Softmax activation function
 - Internal covariate shift and batch normalization
+- Backpropagation and the chain rule
 - Mathematical foundations
 
 ### ⚡ GEMM Optimization
@@ -72,6 +73,11 @@ Deep dive into hardware design for machine learning
 - **Vector ILP:** Accumulation of vector chunks and pipeline throughput
 - **SIMT & GPU Warps:** Visualizing SPMD execution on hardware lanes
 - **Branch Divergence Profiler:** Measuring throughput and utilization in divergent kernels
+- **CUDA Branch Divergence Hardware Masking:** Active-mask, program-counter, and efficiency tracking
+- **Dynamic Warp Formation:** Comparing baseline SIMT execution against warp regrouping
+- **CUDA Architecture & Execution Flow:** Thread hierarchy, hardware layout, and host/device orchestration
+- **Shared Memory Bank Conflicts:** Strides, broadcasts, multicast, and padding fixes
+- **CUDA Streams:** Overlapping transfers and kernel execution across streams
 
 ### 🔥 Kernel Optimization
 
@@ -117,6 +123,21 @@ ml-concept-visualizer/
 ├── gemm-optimization/                  # Matrix multiplication optimization
 │   ├── strassen.html
 │   ├── systolic_array.html
+│   └── ...
+├── gpu/                                # GPU, SIMT, and CUDA architecture visualizations
+│   ├── branch-divergence.html
+│   ├── branch-divergence-optimization.html
+│   ├── dynamic-warp-formation.html
+│   ├── nvidia/
+│   │   ├── bank-conflicts.html
+│   │   ├── cuda-architecture.html
+│   │   ├── cuda-execution-flow.html
+│   │   ├── cuda-thread-hierarchy.html
+│   │   ├── nvidia-multithreading.html
+│   │   └── cuda-snippets/
+│   └── ...
+├── gradient-descent/                   # Optimization and training dynamics
+│   ├── back-propagation.html
 │   └── ...
 ├── tpu/                                # AI Accelerators
 │   ├── tpu1.html                       # TPU Block Diagram

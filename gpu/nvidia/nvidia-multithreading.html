@@ -1,0 +1,336 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Accurate NVIDIA GPU Architecture Visualization</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            background-color: #f3f4f6; /* Tailwind gray-100 */
+            margin: 0;
+            font-family: Arial, sans-serif;
+        }
+        canvas {
+            background-color: #fef5f5; /* Very light pink background to match slide */
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
+            max-width: 100%;
+            height: auto;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="p-4 bg-white rounded-lg shadow-xl overflow-x-auto border border-gray-200">
+        <canvas id="architectureCanvas" width="1000" height="720"></canvas>
+    </div>
+
+    <script>
+        window.onload = function() {
+            const canvas = document.getElementById('architectureCanvas');
+            const ctx = canvas.getContext('2d');
+
+            // Handle high-DPI displays for crisp rendering
+            const dpr = window.devicePixelRatio || 1;
+            canvas.width = 1000 * dpr;
+            canvas.height = 720 * dpr;
+            
+            // Normalize coordinate system
+            ctx.scale(dpr, dpr);
+            
+            // Set default styles
+            ctx.lineJoin = 'round';
+
+            // --- DRAWING UTILITIES ---
+
+            function drawRoundedRect(x, y, width, height, radius, fill, stroke) {
+                ctx.beginPath();
+                ctx.moveTo(x + radius, y);
+                ctx.lineTo(x + width - radius, y);
+                ctx.quadraticCurveTo(x + width, y, x + width, y + radius);
+                ctx.lineTo(x + width, y + height - radius);
+                ctx.quadraticCurveTo(x + width, y + height, x + width - radius, y + height);
+                ctx.lineTo(x + radius, y + height);
+                ctx.quadraticCurveTo(x, y + height, x, y + height - radius);
+                ctx.lineTo(x, y + radius);
+                ctx.quadraticCurveTo(x, y, x + radius, y);
+                ctx.closePath();
+                if (fill) {
+                    ctx.fillStyle = fill;
+                    ctx.fill();
+                }
+                if (stroke) {
+                    ctx.lineWidth = 2;
+                    ctx.strokeStyle = stroke;
+                    ctx.stroke();
+                }
+            }
+
+            function drawCenteredText(text, x, y, font, color) {
+                ctx.save();
+                ctx.font = font;
+                ctx.fillStyle = color;
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillText(text, x, y);
+                ctx.restore();
+            }
+
+            function drawDoubleArrow(x1, y1, x2, y2, color = '#333') {
+                ctx.beginPath();
+                ctx.moveTo(x1, y1);
+                ctx.lineTo(x2, y2);
+                ctx.strokeStyle = color;
+                ctx.lineWidth = 3;
+                ctx.stroke();
+                drawArrowHead(x1, y1, Math.atan2(y2 - y1, x2 - x1) + Math.PI, color);
+                drawArrowHead(x2, y2, Math.atan2(y2 - y1, x2 - x1), color);
+            }
+
+            function drawArrow(x1, y1, x2, y2, color = '#333') {
+                ctx.beginPath();
+                ctx.moveTo(x1, y1);
+                ctx.lineTo(x2, y2);
+                ctx.strokeStyle = color;
+                ctx.lineWidth = 3;
+                ctx.stroke();
+                drawArrowHead(x2, y2, Math.atan2(y2 - y1, x2 - x1), color);
+            }
+
+            function drawArrowHead(x, y, angle, color) {
+                ctx.save();
+                ctx.translate(x, y);
+                ctx.rotate(angle);
+                ctx.beginPath();
+                ctx.moveTo(0, 0);
+                ctx.lineTo(-12, 6);
+                ctx.lineTo(-12, -6);
+                ctx.closePath();
+                ctx.fillStyle = color;
+                ctx.fill();
+                ctx.restore();
+            }
+
+            function drawSquigglyArrow(startX, startY, endX, endY, color='#ff0000') {
+                ctx.beginPath();
+                ctx.moveTo(startX, startY);
+                let midY1 = startY + (endY - startY) * 0.3;
+                let midY2 = startY + (endY - startY) * 0.7;
+                ctx.bezierCurveTo(startX - 20, midY1, startX + 20, midY1 + 10, startX, midY2);
+                ctx.bezierCurveTo(startX - 15, midY2 + 20, endX + 10, endY - 20, endX, endY);
+                ctx.strokeStyle = color;
+                ctx.lineWidth = 2.5;
+                ctx.stroke();
+                
+                ctx.save();
+                ctx.translate(endX, endY);
+                ctx.beginPath();
+                ctx.moveTo(0, 0);
+                ctx.lineTo(-7, -12);
+                ctx.lineTo(7, -12);
+                ctx.closePath();
+                ctx.fillStyle = color;
+                ctx.fill();
+                ctx.restore();
+            }
+
+            // --- DRAWING THE SCENE ---
+            
+            // Clear background
+            ctx.fillStyle = '#ffffff';
+            ctx.fillRect(0, 0, 1000, 720);
+            
+            // Draw faint dot grid for modern tech look
+            ctx.fillStyle = '#e5e7eb';
+            for(let i = 10; i < 1000; i += 20) {
+                for(let j = 10; j < 720; j += 20) {
+                    ctx.beginPath();
+                    ctx.arc(i, j, 1.2, 0, Math.PI*2);
+                    ctx.fill();
+                }
+            }
+
+            // 2. Draw Host Side (Left)
+            let hostX = 60;
+            let hostY = 200;
+            let hostW = 140;
+
+            // X86 Host
+            let x86Y = hostY;
+            let hostGradient = ctx.createLinearGradient(hostX, x86Y, hostX, x86Y + 80);
+            hostGradient.addColorStop(0, '#f3f4f6');
+            hostGradient.addColorStop(1, '#d1d5db');
+            drawRoundedRect(hostX, x86Y, hostW, 80, 12, hostGradient, '#9ca3af');
+            drawCenteredText('X86 Host CPU', hostX + hostW/2, x86Y + 40, 'bold 16px Arial', '#1f2937');
+
+            // Host Memory
+            let memY = 360;
+            let memGradient = ctx.createLinearGradient(hostX, memY, hostX, memY + 120);
+            memGradient.addColorStop(0, '#ffedd5');
+            memGradient.addColorStop(1, '#fdba74');
+            drawRoundedRect(hostX, memY, hostW, 120, 12, memGradient, '#f97316');
+            drawCenteredText('Host Memory', hostX + hostW/2, memY + 50, 'bold 18px Arial', '#7c2d12');
+            drawCenteredText('(RAM)', hostX + hostW/2, memY + 75, '16px Arial', '#7c2d12');
+
+            // Arrow CPU <-> RAM
+            drawDoubleArrow(hostX + hostW/2, x86Y + 80, hostX + hostW/2, memY, '#6b7280');
+
+            // 3. Draw GPU Side (Right)
+            let gpuX = 320;
+            let gpuY = 140;
+            let gpuW = 620;
+            let gpuH = 400;
+
+            // Streaming Multiprocessor (SM) Box
+            ctx.strokeStyle = '#ef4444';
+            ctx.lineWidth = 3;
+            ctx.setLineDash([8, 4]); // Dashed line for SM boundary
+            ctx.strokeRect(gpuX, gpuY, gpuW, gpuH);
+            ctx.setLineDash([]); // Reset line dash
+            
+            // SM Background (very faint red)
+            ctx.fillStyle = 'rgba(239, 68, 68, 0.02)';
+            ctx.fillRect(gpuX, gpuY, gpuW, gpuH);
+
+            ctx.save();
+            ctx.textAlign = 'left';
+            ctx.textBaseline = 'middle';
+            ctx.font = 'bold 22px Arial';
+            ctx.fillStyle = '#dc2626';
+            ctx.fillText('Streaming Multiprocessor (SM)', gpuX, gpuY - 20);
+            ctx.restore();
+
+            // Warp Scheduler
+            let schedX = gpuX + 40;
+            let schedY = gpuY + 30;
+            let schedW = gpuW - 80;
+            let schedH = 50;
+            let schedGrad = ctx.createLinearGradient(schedX, schedY, schedX, schedY + schedH);
+            schedGrad.addColorStop(0, '#fef08a');
+            schedGrad.addColorStop(1, '#eab308');
+            drawRoundedRect(schedX, schedY, schedW, schedH, 10, schedGrad, '#ca8a04');
+            drawCenteredText('Warp Scheduler & Instruction Dispatch', schedX + schedW/2, schedY + schedH/2, 'bold 18px Arial', '#713f12');
+
+            // Register File
+            let regX = gpuX + 40;
+            let regY = gpuY + 120;
+            let regW = gpuW - 80;
+            let regH = 60;
+            let regGrad = ctx.createLinearGradient(regX, regY, regX, regY + regH);
+            regGrad.addColorStop(0, '#e9d5ff');
+            regGrad.addColorStop(1, '#c084fc');
+            drawRoundedRect(regX, regY, regW, regH, 10, regGrad, '#9333ea');
+            drawCenteredText('Massive Register File', regX + regW/2, regY + 20, 'bold 18px Arial', '#4c1d95');
+            drawCenteredText('(Stores thread state for all active Warps - Zero-cost context switching)', regX + regW/2, regY + 42, '14px Arial', '#4c1d95');
+
+            // Broadcast Arrow
+            drawArrow(schedX + schedW/2, schedY + schedH, schedX + schedW/2, regY, '#4b5563');
+            
+            // Text next to the arrow (Left aligned so it doesn't overlap the arrow)
+            ctx.textAlign = 'left';
+            ctx.textBaseline = 'middle';
+            ctx.font = 'bold 14px Arial';
+            ctx.fillStyle = '#374151';
+            ctx.fillText('Fetches 1 Instruction', schedX + schedW/2 + 15, schedY + schedH + (regY - (schedY + schedH))/2 - 10);
+            ctx.fillText('Broadcasts to all Cores', schedX + schedW/2 + 15, schedY + schedH + (regY - (schedY + schedH))/2 + 10);
+
+            // CUDA Cores (ALUs)
+            let coreAreaY = gpuY + 230;
+            
+            let numCores = 8;
+            let coreW = 55;
+            let coreH = 65;
+            let coreSpacing = (gpuW - 80 - (numCores * coreW)) / (numCores - 1);
+            
+            for(let i=0; i<numCores; i++) {
+                let cx = gpuX + 40 + (i * (coreW + coreSpacing));
+                let cy = coreAreaY;
+                
+                // Connection from registers to core
+                drawArrow(cx + coreW/2, regY + regH, cx + coreW/2, cy, '#60a5fa');
+                
+                let coreGrad = ctx.createLinearGradient(cx, cy, cx, cy + coreH);
+                coreGrad.addColorStop(0, '#bfdbfe');
+                coreGrad.addColorStop(1, '#3b82f6');
+                drawRoundedRect(cx, cy, coreW, coreH, 8, coreGrad, '#2563eb');
+                
+                drawCenteredText('ALU', cx + coreW/2, cy + coreH/2, 'bold 15px Arial', '#eff6ff');
+            }
+
+            // Draw text on top (z-index) of the blue arrows with a background to prevent visual overlap
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.95)';
+            ctx.fillRect(gpuX + gpuW/2 - 275, coreAreaY - 30, 550, 20);
+            drawCenteredText('CUDA Cores (ALUs) - Executing the exact same instruction in parallel', gpuX + gpuW/2, coreAreaY - 20, 'bold 16px Arial', '#1e40af');
+
+            // Shared Memory / L1 Cache
+            let l1X = gpuX + 40;
+            let l1Y = gpuY + 330;
+            let l1W = gpuW - 80;
+            let l1H = 50;
+            let l1Grad = ctx.createLinearGradient(l1X, l1Y, l1X, l1Y + l1H);
+            l1Grad.addColorStop(0, '#bbf7d0');
+            l1Grad.addColorStop(1, '#4ade80');
+            drawRoundedRect(l1X, l1Y, l1W, l1H, 10, l1Grad, '#16a34a');
+            drawCenteredText('Shared Memory / L1 Cache (On-Chip)', l1X + l1W/2, l1Y + l1H/2, 'bold 16px Arial', '#14532d');
+
+            // Arrows between cores and Shared Memory
+            for(let i=0; i<numCores; i++) {
+                let cx = gpuX + 40 + (i * (coreW + coreSpacing)) + coreW/2;
+                drawDoubleArrow(cx, coreAreaY + coreH, cx, l1Y, '#60a5fa');
+            }
+
+            // 4. Draw Threads bundling into a Warp (Top)
+            let warpCenter = gpuX + gpuW - 140; // Shifted right to prevent overlap
+            let warpY = gpuY - 90;
+            
+            // Draw a bundle of squiggles representing threads
+            for(let i = -3; i <= 3; i++) {
+                let color = (i === 0) ? '#dc2626' : '#f87171'; // Center thread darker
+                let xOffset = i * 15;
+                drawSquigglyArrow(warpCenter + xOffset, warpY + 20, warpCenter + (xOffset * 0.4), gpuY + 30, color);
+            }
+            
+            drawRoundedRect(warpCenter - 110, warpY - 20, 220, 36, 18, '#fee2e2', '#ef4444');
+            drawCenteredText('1 Warp = 32 Threads', warpCenter, warpY - 2, 'bold 16px Arial', '#991b1b');
+
+            // 5. Draw Global Memory (Bottom)
+            let gMemX = gpuX;
+            let gMemY = gpuY + 450;
+            let gMemW = gpuW;
+            let gMemH = 70;
+            let gMemGrad = ctx.createLinearGradient(gMemX, gMemY, gMemX, gMemY + gMemH);
+            gMemGrad.addColorStop(0, '#a7f3d0');
+            gMemGrad.addColorStop(1, '#10b981');
+            drawRoundedRect(gMemX, gMemY, gMemW, gMemH, 12, gMemGrad, '#047857');
+            
+            drawCenteredText('Global Memory (VRAM)', gMemX + gMemW/2, gMemY + 25, 'bold 20px Arial', '#064e3b');
+            drawCenteredText('High capacity, off-chip memory shared by all SMs', gMemX + gMemW/2, gMemY + 50, '15px Arial', '#064e3b');
+
+            // Connection SM <-> Global Memory
+            drawDoubleArrow(gpuX + gpuW/2, gpuY + gpuH, gpuX + gpuW/2, gMemY, '#059669');
+            
+            // Text next to the SM <-> Global Memory arrow
+            ctx.textAlign = 'left';
+            ctx.textBaseline = 'middle';
+            ctx.fillStyle = '#065f46';
+            ctx.font = 'bold 14px Arial';
+            ctx.fillText('Memory Bus', gpuX + gpuW/2 + 15, gpuY + gpuH + (gMemY - (gpuY + gpuH))/2);
+
+            // 6. Draw DMA Arrow (Host RAM <-> VRAM)
+            let pcieY = memY + 60;
+            drawDoubleArrow(hostX + hostW, pcieY, gMemX, pcieY, '#6b7280');
+            
+            drawCenteredText('PCIe Bus (DMA)', hostX + hostW + (gMemX - (hostX + hostW))/2, pcieY - 15, 'bold 16px Arial', '#4b5563');
+
+            // 7. Draw Bottom Note
+            drawCenteredText('Note: Multiple Warps reside on the SM. The scheduler swaps between them instantly to hide memory latency.', 
+                             1000/2, 690, 'italic 15px Arial', '#4b5563');
+
+        };
+    </script>
+</body>
+</html>

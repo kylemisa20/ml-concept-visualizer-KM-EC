@@ -1,0 +1,296 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Embedding Full Sentences Visualization</title>
+  
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  
+  <!-- React & ReactDOM -->
+  <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  
+  <!-- Babel for JSX -->
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+</head>
+<body class="bg-gray-100 min-h-screen flex items-center justify-center p-8">
+  <div id="root" class="w-full max-w-6xl"></div>
+
+  <script type="text/babel">
+    const { useState } = React;
+
+    // --- Data Definitions ---
+    const sentences = [
+      { id: 's1', text: "The weather is so nice!", vector: [0.85, 0.31, -0.27, 0.61, -0.52] },
+      { id: 's2', text: "It's so sunny outside!", vector: [0.84, 0.30, -0.29, 0.59, -0.54] },
+      { id: 's3', text: "He drove to the stadium.", vector: [0.34, -0.51, 0.74, 0.89, 0.41] }
+    ];
+
+    const similarities = {
+      'sim1': { left: 's1', right: 's2', score: 0.99 },
+      'sim2': { left: 's2', right: 's3', score: 0.13 }
+    };
+
+    // Helper arrow SVG component
+    const ArrowDown = ({ opacityClass = "opacity-100" }) => (
+      <div className={`flex justify-center my-2 transition-opacity duration-300 ${opacityClass}`}>
+        <svg width="24" height="32" viewBox="0 0 24 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <path d="M12 0L12 28M12 28L6 22M12 28L18 22" stroke="#7f8c8d" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"/>
+        </svg>
+      </div>
+    );
+
+    function App() {
+      // 's1', 's2', 's3', 'sim1', 'sim2', or null
+      const [hoveredId, setHoveredId] = useState(null);
+
+      const activeSim = hoveredId && hoveredId.startsWith('sim') ? similarities[hoveredId] : null;
+
+      // --- Logic to determine states based on hover ---
+      const isDimmed = (type, id) => {
+        if (!hoveredId) return false;
+        
+        if (type === 'sentence' || type === 'vector') {
+          if (hoveredId === 'sim1') return id !== 's1' && id !== 's2';
+          if (hoveredId === 'sim2') return id !== 's2' && id !== 's3';
+          return hoveredId !== id;
+        }
+        
+        if (type === 'similarity') {
+          if (hoveredId === 's1' || hoveredId === 's3') return true;
+          if (hoveredId === 's2') return false; 
+          return hoveredId !== id;
+        }
+        return false;
+      };
+
+      const getHighlightClass = (type, id) => {
+        const dimmed = isDimmed(type, id);
+        if (dimmed) return "opacity-30 grayscale saturate-50 scale-95";
+        if (hoveredId === id) return "opacity-100 scale-[1.03] shadow-xl ring-4 ring-orange-400 z-30";
+        if (activeSim && (id === activeSim.left || id === activeSim.right)) return "opacity-100 scale-[1.01] shadow-lg ring-2 ring-blue-400 z-20";
+        return "opacity-100 shadow-md";
+      };
+
+      const getVectorCellColor = (val, sId, cellIndex) => {
+        if (!activeSim) return 'bg-[#a9d997]'; // Default green
+        
+        // If this vector is part of the active comparison
+        if (sId === activeSim.left || sId === activeSim.right) {
+          const otherId = sId === activeSim.left ? activeSim.right : activeSim.left;
+          const otherVal = sentences.find(s => s.id === otherId).vector[cellIndex];
+          const diff = Math.abs(val - otherVal);
+          
+          if (diff < 0.1) return 'bg-green-400'; // Very similar
+          if (diff < 0.3) return 'bg-yellow-200'; // Somewhat similar
+          return 'bg-red-300'; // Different
+        }
+        
+        return 'bg-[#a9d997]';
+      };
+
+      // --- Explainer Content ---
+      let explainerTitle = "Semantic Similarity & Sentence Embeddings";
+      let explainerBody = "Hover over the sentences or the similarity blocks to explore how the model mathematically compares their underlying meanings.";
+      let explainerBg = "bg-white border-blue-200";
+      let explainerTitleColor = "text-blue-800";
+
+      if (activeSim) {
+        const isHigh = activeSim.score > 0.5;
+        explainerTitle = `${isHigh ? 'High' : 'Low'} Alignment: ${activeSim.score}`;
+        explainerBody = isHigh 
+          ? "Notice how the numbers in both vectors are almost identical (highlighted in bright green). In high-dimensional space, these two vectors point in almost the same direction."
+          : "Notice the mismatch in the numbers (highlighted in red). These vectors point in very different directions because their semantic content—driving vs. weather—is unrelated.";
+        explainerBg = isHigh ? "bg-green-50 border-green-300" : "bg-red-50 border-red-300";
+        explainerTitleColor = isHigh ? "text-green-800" : "text-red-800";
+      } else if (hoveredId && hoveredId.startsWith('s')) {
+        explainerTitle = "Feature Extraction";
+        explainerBody = `The model projects the sentence into a 512+ dimensional space. Each number represents a learned 'feature' or concept. Similar concepts produce similar numbers at the same index across different sentences.`;
+        explainerBg = "bg-orange-50 border-orange-300";
+        explainerTitleColor = "text-orange-800";
+      }
+
+      return (
+        <div className="w-full bg-white rounded-3xl shadow-2xl overflow-hidden font-sans border border-gray-200">
+          
+          {/* Header */}
+          <div className="bg-gray-900 text-white p-8">
+            <h1 className="text-4xl font-light tracking-wide">Embedding <span className="font-bold">Full Sentences</span></h1>
+            <p className="mt-2 text-gray-400 text-lg">Comparing mathematical representations of meaning.</p>
+          </div>
+
+          <div className="p-10 pb-16 bg-[#fafafa] relative overflow-x-auto">
+            <div className="min-w-[950px] max-w-5xl mx-auto relative">
+              
+              {/* Row 1: Sentences */}
+              <div className="grid grid-cols-3 gap-12 relative z-20">
+                {sentences.map((s) => (
+                  <div key={s.id} className="flex justify-center relative">
+                    <div 
+                      onMouseEnter={() => setHoveredId(s.id)}
+                      onMouseLeave={() => setHoveredId(null)}
+                      className={`bg-[#e2e2e2] text-gray-800 font-medium px-6 py-4 w-full text-center rounded text-lg transition-all duration-300 cursor-pointer border border-gray-300 ${getHighlightClass('sentence', s.id)}`}
+                    >
+                      {s.text}
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              <div className="grid grid-cols-3 gap-12 relative z-10 -mt-2">
+                {sentences.map(s => (
+                  <ArrowDown key={`arrow1-${s.id}`} opacityClass={isDimmed('sentence', s.id) ? 'opacity-20' : 'opacity-100'} />
+                ))}
+              </div>
+
+              {/* Row 3: Embedding Model */}
+              <div className={`bg-[#f4cd8e] py-6 w-full text-center rounded-xl shadow-md border border-[#e6b871] relative z-20 transition-all duration-300 ${(hoveredId && !hoveredId.startsWith('sim')) ? 'ring-2 ring-orange-400 scale-[1.01]' : ''}`}>
+                <h2 className="text-2xl font-bold text-gray-900">Embedding model</h2>
+              </div>
+
+              <div className="grid grid-cols-3 gap-12 relative z-10 -mt-1">
+                {sentences.map(s => (
+                  <ArrowDown key={`arrow2-${s.id}`} opacityClass={isDimmed('vector', s.id) ? 'opacity-20' : 'opacity-100'} />
+                ))}
+              </div>
+
+              {/* Row 5: Vectors with Heatmap */}
+              <div className="grid grid-cols-3 gap-12 relative z-20">
+                {sentences.map((s) => (
+                  <div key={`vec-${s.id}`} className="flex justify-center">
+                    <div 
+                      onMouseEnter={() => setHoveredId(s.id)}
+                      onMouseLeave={() => setHoveredId(null)}
+                      className={`flex border-2 border-gray-800 transition-all duration-300 cursor-pointer overflow-hidden rounded-sm ${getHighlightClass('vector', s.id)}`}
+                    >
+                      {s.vector.map((val, i) => (
+                        <div 
+                          key={i} 
+                          className={`px-2 py-2 text-sm font-bold font-mono border-r-2 border-gray-800 text-gray-900 w-12 text-center transition-colors duration-500 ${getVectorCellColor(val, s.id, i)}`}
+                        >
+                          {val > 0 ? val.toFixed(2).replace('0.', '.') : val.toFixed(2)}
+                        </div>
+                      ))}
+                      <div className="px-2 py-2 text-sm font-bold font-mono text-gray-900 w-10 text-center tracking-widest bg-white/50">
+                        ...
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              {/* Row 6 & 7: Similarity Connections & Blocks */}
+              <div className="relative h-48 mt-4 w-full">
+                
+                {/* Connection 1 */}
+                <div className={`absolute left-[16.66%] w-[33.33%] h-16 transition-opacity duration-300 ${isDimmed('similarity', 'sim1') ? 'opacity-20' : 'opacity-100'}`}>
+                   <div className={`absolute top-4 left-0 w-full h-[3px] transition-colors duration-300 ${hoveredId === 'sim1' ? 'bg-orange-400 h-[5px]' : 'bg-[#7f8c8d]'}`}></div>
+                   <div className="absolute top-0 left-0 w-[3px] h-4 bg-[#7f8c8d]"></div>
+                   <div className="absolute top-0 right-0 w-[3px] h-4 bg-[#7f8c8d]"></div>
+                   <div className={`absolute top-4 left-1/2 w-[3px] h-6 bg-[#7f8c8d] transform -translate-x-1/2`}>
+                      <div className="absolute bottom-[-2px] left-1/2 transform -translate-x-1/2 translate-y-full border-solid border-t-[#7f8c8d] border-t-[8px] border-x-transparent border-x-[8px] border-b-0"></div>
+                   </div>
+                </div>
+
+                {/* Similarity Box 1 */}
+                <div 
+                  className="absolute left-[33.33%] transform -translate-x-1/2 top-14 flex flex-col items-center w-full max-w-[220px]"
+                  onMouseEnter={() => setHoveredId('sim1')}
+                  onMouseLeave={() => setHoveredId(null)}
+                >
+                  <div className={`bg-[#ebc482] py-4 w-full text-center rounded-2xl border border-[#d6a95c] font-bold text-gray-900 text-lg cursor-pointer transition-all duration-300 ${getHighlightClass('similarity', 'sim1')}`}>
+                    Cosine Similarity
+                  </div>
+                  <ArrowDown opacityClass={isDimmed('similarity', 'sim1') ? 'opacity-20' : 'opacity-100'} />
+                  <div className={`bg-[#a9d997] border-2 border-gray-800 px-5 py-2 font-mono font-bold text-xl text-gray-900 transition-all duration-300 shadow-lg ${getHighlightClass('similarity', 'sim1')}`}>
+                    0.99
+                  </div>
+                </div>
+
+                {/* Connection 2 */}
+                <div className={`absolute left-[50%] w-[33.33%] h-16 transition-opacity duration-300 ${isDimmed('similarity', 'sim2') ? 'opacity-20' : 'opacity-100'}`}>
+                   <div className={`absolute top-4 left-0 w-full h-[3px] transition-colors duration-300 ${hoveredId === 'sim2' ? 'bg-orange-400 h-[5px]' : 'bg-[#7f8c8d]'}`}></div>
+                   <div className="absolute top-0 left-0 w-[3px] h-4 bg-[#7f8c8d]"></div>
+                   <div className="absolute top-0 right-0 w-[3px] h-4 bg-[#7f8c8d]"></div>
+                   <div className="absolute top-4 left-1/2 w-[3px] h-6 bg-[#7f8c8d] transform -translate-x-1/2">
+                      <div className="absolute bottom-[-2px] left-1/2 transform -translate-x-1/2 translate-y-full border-solid border-t-[#7f8c8d] border-t-[8px] border-x-transparent border-x-[8px] border-b-0"></div>
+                   </div>
+                </div>
+
+                {/* Similarity Box 2 */}
+                <div 
+                  className="absolute left-[66.66%] transform -translate-x-1/2 top-14 flex flex-col items-center w-full max-w-[220px]"
+                  onMouseEnter={() => setHoveredId('sim2')}
+                  onMouseLeave={() => setHoveredId(null)}
+                >
+                  <div className={`bg-[#ebc482] py-4 w-full text-center rounded-2xl border border-[#d6a95c] font-bold text-gray-900 text-lg cursor-pointer transition-all duration-300 ${getHighlightClass('similarity', 'sim2')}`}>
+                    Cosine Similarity
+                  </div>
+                  <ArrowDown opacityClass={isDimmed('similarity', 'sim2') ? 'opacity-20' : 'opacity-100'} />
+                  <div className={`bg-[#a9d997] border-2 border-gray-800 px-5 py-2 font-mono font-bold text-xl text-gray-900 transition-all duration-300 shadow-lg ${getHighlightClass('similarity', 'sim2')}`}>
+                    0.13
+                  </div>
+                </div>
+
+              </div>
+            </div>
+          </div>
+
+          {/* Interactive Info Panel */}
+          <div className="p-8 bg-gray-50 border-t border-gray-200">
+            <div className={`p-6 rounded-2xl border-2 transition-all duration-500 shadow-sm flex flex-col md:flex-row gap-6 items-center ${explainerBg}`}>
+              
+              <div className="flex-1">
+                <h3 className={`text-xl font-bold mb-2 transition-colors duration-500 ${explainerTitleColor}`}>
+                  {explainerTitle}
+                </h3>
+                <p className="text-gray-700 text-lg leading-relaxed">
+                  {explainerBody}
+                </p>
+              </div>
+
+              {activeSim && (
+                <div className="bg-white p-4 rounded-xl border-2 border-gray-100 shadow-inner min-w-[300px]">
+                  <h4 className="text-xs font-bold text-gray-400 uppercase mb-3">Vector Alignment View</h4>
+                  <div className="space-y-3">
+                    {[activeSim.left, activeSim.right].map(sId => {
+                      const s = sentences.find(item => item.id === sId);
+                      return (
+                        <div key={sId} className="flex items-center gap-2">
+                          <span className="text-[10px] w-4 text-gray-400">{sId.toUpperCase()}</span>
+                          <div className="flex border border-gray-200 rounded overflow-hidden">
+                            {s.vector.map((v, i) => (
+                              <div 
+                                key={i} 
+                                className={`w-8 h-6 text-[10px] flex items-center justify-center font-mono ${getVectorCellColor(v, sId, i)}`}
+                              >
+                                {v > 0 ? v.toFixed(1).replace('0.', '.') : v.toFixed(1)}
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      );
+                    })}
+                    <div className="pt-2 mt-2 border-t flex justify-between items-center">
+                       <span className="text-sm font-bold text-gray-600">Comparison Result:</span>
+                       <span className={`text-xl font-black font-mono ${activeSim.score > 0.5 ? 'text-green-600' : 'text-red-600'}`}>
+                         {activeSim.score.toFixed(2)}
+                       </span>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+
+        </div>
+      );
+    }
+
+    const root = ReactDOM.createRoot(document.getElementById('root'));
+    root.render(<App />);
+  </script>
+</body>
+</html>

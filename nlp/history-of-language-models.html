@@ -1,0 +1,353 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>History of Language Models Timeline</title>
+  
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  
+  <!-- React & ReactDOM -->
+  <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  
+  <!-- Babel for JSX -->
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+  <style>
+    .timeline-line {
+      width: 4px;
+      background: linear-gradient(to bottom, #e5e7eb, #fb923c, #ec4899, #8b5cf6, #3b82f6);
+    }
+    .visual-lab {
+      transition: all 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+  </style>
+</head>
+<body class="bg-gray-100 min-h-screen">
+  <div id="root"></div>
+
+  <script type="text/babel">
+    const { useState, useEffect } = React;
+
+    // --- Visual Components for each model ---
+
+    const NGramVisual = () => (
+      <div className="flex flex-col items-center gap-2 p-4 bg-white rounded-lg border border-orange-200">
+        <div className="text-xs font-bold text-gray-400 uppercase">2-Gram Sliding Window</div>
+        <div className="flex gap-2 font-mono text-sm">
+          <span className="bg-orange-500 text-white px-2 py-1 rounded">The</span>
+          <span className="bg-orange-500 text-white px-2 py-1 rounded">cat</span>
+          <span className="text-gray-300 px-2 py-1">sat</span>
+          <span className="text-gray-300 px-2 py-1">on</span>
+        </div>
+        <div className="text-[10px] text-gray-500">Pairs: (The, cat), (cat, sat)...</div>
+      </div>
+    );
+
+    const BoWVisual = () => (
+      <div className="p-4 bg-white rounded-lg border border-orange-200 flex flex-col items-center">
+        <div className="text-xs font-bold text-gray-400 uppercase mb-2">Word Frequency Dictionary</div>
+        <div className="grid grid-cols-2 gap-x-4 text-xs font-mono">
+          <div className="text-orange-600">"the": 42</div>
+          <div className="text-orange-600">"cat": 12</div>
+          <div className="text-orange-600">"sat": 08</div>
+          <div className="text-orange-600">"mat": 05</div>
+        </div>
+      </div>
+    );
+
+    const RNNVisual = () => (
+      <div className="p-4 bg-white rounded-lg border border-pink-200 flex flex-col items-center">
+        <div className="text-xs font-bold text-gray-400 uppercase mb-2">Hidden State Recurrence</div>
+        <div className="flex items-center gap-2">
+          <div className="w-8 h-8 rounded border-2 border-pink-400 flex items-center justify-center font-mono text-xs">hₜ₋₁</div>
+          <div className="text-pink-400">→</div>
+          <div className="w-10 h-10 rounded-full bg-pink-500 text-white flex items-center justify-center font-bold">f</div>
+          <div className="text-pink-400">→</div>
+          <div className="w-8 h-8 rounded border-2 border-pink-400 flex items-center justify-center font-mono text-xs">hₜ</div>
+        </div>
+        <div className="text-[10px] text-gray-400 mt-2">Memory flows through time</div>
+      </div>
+    );
+
+    const EmbeddingVisual = () => (
+      <div className="p-4 bg-white rounded-lg border border-pink-200">
+        <div className="text-xs font-bold text-gray-400 uppercase mb-2 text-center">Semantic Space (2D)</div>
+        <div className="relative w-32 h-24 border border-gray-100 rounded bg-gray-50">
+           <div className="absolute top-4 left-4 w-2 h-2 bg-pink-500 rounded-full group">
+             <span className="absolute -top-4 left-0 text-[10px] font-bold">King</span>
+           </div>
+           <div className="absolute top-6 left-8 w-2 h-2 bg-pink-500 rounded-full">
+             <span className="absolute top-2 left-0 text-[10px] font-bold">Man</span>
+           </div>
+           <div className="absolute bottom-4 right-4 w-2 h-2 bg-pink-500 rounded-full">
+             <span className="absolute -top-4 left-0 text-[10px] font-bold">Queen</span>
+           </div>
+        </div>
+      </div>
+    );
+
+    const LSTMVisual = () => (
+      <div className="p-4 bg-white rounded-lg border border-pink-200 flex flex-col items-center">
+        <div className="text-xs font-bold text-gray-400 uppercase mb-2">Gating Mechanism</div>
+        <div className="flex gap-1">
+          <div className="w-6 h-6 rounded bg-red-400 text-white text-[8px] flex items-center justify-center">Forget</div>
+          <div className="w-6 h-6 rounded bg-green-400 text-white text-[8px] flex items-center justify-center">Input</div>
+          <div className="w-6 h-6 rounded bg-blue-400 text-white text-[8px] flex items-center justify-center">Output</div>
+        </div>
+        <div className="text-[10px] text-gray-400 mt-1">Controls memory persistence</div>
+      </div>
+    );
+
+    const AttentionVisual = () => (
+      <div className="p-4 bg-white rounded-lg border border-indigo-200 flex flex-col items-center">
+        <div className="text-xs font-bold text-gray-400 uppercase mb-2">Context Weights</div>
+        <div className="flex flex-col gap-1 w-full">
+          <div className="flex justify-between items-center px-1">
+            <span className="text-[10px] font-mono">The</span>
+            <div className="h-1 bg-indigo-200 w-16 rounded"></div>
+          </div>
+          <div className="flex justify-between items-center px-1">
+            <span className="text-[10px] font-mono font-bold">cat</span>
+            <div className="h-2 bg-indigo-500 w-24 rounded"></div>
+          </div>
+          <div className="flex justify-between items-center px-1">
+            <span className="text-[10px] font-mono">sat</span>
+            <div className="h-1 bg-indigo-300 w-12 rounded"></div>
+          </div>
+        </div>
+      </div>
+    );
+
+    const TransformerVisual = () => (
+      <div className="p-4 bg-white rounded-lg border border-indigo-200 flex flex-col items-center">
+        <div className="text-xs font-bold text-gray-400 uppercase mb-2">Parallel Processing</div>
+        <div className="flex gap-2">
+          {[1,2,3].map(i => (
+            <div key={i} className="flex flex-col gap-1">
+              <div className="w-4 h-4 bg-indigo-400 rounded-sm"></div>
+              <div className="w-4 h-4 bg-indigo-600 rounded-sm"></div>
+            </div>
+          ))}
+        </div>
+        <div className="text-[10px] mt-1">Multi-Head Self-Attention</div>
+      </div>
+    );
+
+    const BERTVisual = () => (
+      <div className="p-4 bg-white rounded-lg border border-blue-200 flex flex-col items-center">
+        <div className="text-xs font-bold text-gray-400 uppercase mb-2">Bidirectional Context</div>
+        <div className="flex items-center gap-1 font-mono text-[10px]">
+          <span className="text-blue-400">←</span>
+          <span className="bg-blue-600 text-white px-1 rounded">[MASK]</span>
+          <span className="text-blue-400">→</span>
+        </div>
+        <div className="text-[10px] text-gray-400 mt-1">Learns from both sides</div>
+      </div>
+    );
+
+    const GPTVisual = () => (
+      <div className="p-4 bg-white rounded-lg border border-blue-200 flex flex-col items-center">
+        <div className="text-xs font-bold text-gray-400 uppercase mb-2">Autoregressive Generation</div>
+        <div className="flex gap-1 font-mono text-[10px]">
+          <span>Once</span>
+          <span>upon</span>
+          <span>a</span>
+          <span className="bg-blue-100 text-blue-700 animate-pulse">...</span>
+        </div>
+        <div className="text-[10px] text-gray-400 mt-1">Predicts next token</div>
+      </div>
+    );
+
+    const historyData = [
+      {
+        model: "N-Grams",
+        period: "1990s - Early 2000s",
+        era: "Traditional",
+        description: "Breaking text into fixed chunks of 'n' items to predict the next word.",
+        color: "bg-orange-50 border-orange-200 text-orange-900",
+        dotColor: "bg-orange-400",
+        visual: <NGramVisual />
+      },
+      {
+        model: "Bag of Words (BoW)",
+        period: "1990s - Early 2000s",
+        era: "Traditional",
+        description: "A statistical method that counts how often words appear, ignoring order.",
+        color: "bg-orange-50 border-orange-200 text-orange-900",
+        dotColor: "bg-orange-400",
+        visual: <BoWVisual />
+      },
+      {
+        model: "RNNs",
+        period: "Early 2010s",
+        era: "Early Neural",
+        description: "Neural networks with a 'loop' to process sequences, capturing short-term context.",
+        color: "bg-pink-50 border-pink-200 text-pink-900",
+        dotColor: "bg-pink-500",
+        visual: <RNNVisual />
+      },
+      {
+        model: "Word Embeddings",
+        period: "Early-Mid 2010s",
+        era: "Early Neural",
+        description: "Mapping words into dense vectors where similar words cluster together.",
+        color: "bg-pink-50 border-pink-200 text-pink-900",
+        dotColor: "bg-pink-500",
+        visual: <EmbeddingVisual />
+      },
+      {
+        model: "LSTMs",
+        period: "Mid 2010s",
+        era: "Early Neural",
+        description: "Advanced RNNs with 'gates' that decide what to remember long-term.",
+        color: "bg-pink-50 border-pink-200 text-pink-900",
+        dotColor: "bg-pink-500",
+        visual: <LSTMVisual />
+      },
+      {
+        model: "Attention Mechanism",
+        period: "Mid 2017",
+        era: "Transformer Revolution",
+        description: "Allows models to focus on specific, relevant words anywhere in a sentence.",
+        color: "bg-indigo-50 border-indigo-200 text-indigo-900",
+        dotColor: "bg-indigo-500",
+        visual: <AttentionVisual />
+      },
+      {
+        model: "Transformers",
+        period: "2017",
+        era: "Transformer Revolution",
+        description: "Parallelized self-attention layers that process long sequences efficiently.",
+        color: "bg-indigo-50 border-indigo-200 text-indigo-900",
+        dotColor: "bg-indigo-500",
+        visual: <TransformerVisual />
+      },
+      {
+        model: "BERT",
+        period: "2018",
+        era: "Modern Era",
+        description: "A model that reads sentences both ways to understand context perfectly.",
+        color: "bg-blue-50 border-blue-200 text-blue-900",
+        dotColor: "bg-blue-500",
+        visual: <BERTVisual />
+      },
+      {
+        model: "GPT Series",
+        period: "2018 - Present",
+        era: "Modern Era",
+        description: "Massive generative models that predict the next token to create human-like text.",
+        color: "bg-blue-50 border-blue-200 text-blue-900",
+        dotColor: "bg-blue-500",
+        visual: <GPTVisual />
+      }
+    ];
+
+    function App() {
+      const [hoveredIndex, setHoveredIndex] = useState(null);
+
+      return (
+        <div className="py-12 px-4 sm:px-6 lg:px-8 max-w-5xl mx-auto">
+          <header className="text-center mb-16">
+            <h1 className="text-5xl font-extrabold text-gray-900 tracking-tight">
+              History of <span className="text-transparent bg-clip-text bg-gradient-to-r from-orange-500 via-pink-500 to-blue-600">Language Models</span>
+            </h1>
+            <p className="mt-4 text-xl text-gray-500 font-medium">
+              Hover over a milestone to see a live sample of the model's logic.
+            </p>
+          </header>
+
+          <div className="relative">
+            {/* Vertical Line */}
+            <div className="absolute left-4 md:left-1/2 transform -translate-x-1/2 h-full timeline-line rounded-full opacity-20"></div>
+
+            <div className="space-y-16">
+              {historyData.map((item, index) => {
+                const isEven = index % 2 === 0;
+                const isHovered = hoveredIndex === index;
+
+                return (
+                  <div 
+                    key={index} 
+                    className={`relative flex items-center justify-between w-full transition-all duration-500`}
+                    onMouseEnter={() => setHoveredIndex(index)}
+                    onMouseLeave={() => setHoveredIndex(null)}
+                  >
+                    {/* Desktop Layout (Alternating) */}
+                    <div className="hidden md:flex w-full items-center">
+                      <div className={`w-5/12 ${isEven ? 'text-right pr-12' : 'order-last text-left pl-12'}`}>
+                        <span className="text-xs font-black text-gray-400 uppercase tracking-[0.2em]">{item.period}</span>
+                        <h3 className="text-2xl font-black text-gray-900 mt-1 mb-2">{item.model}</h3>
+                        <div className={`p-5 rounded-2xl border-2 transition-all duration-300 ${item.color} ${isHovered ? 'shadow-2xl border-current ring-4 ring-white' : 'shadow-sm opacity-60'}`}>
+                          <p className="text-sm font-medium leading-relaxed">{item.description}</p>
+                          
+                          {/* Visual Lab Container */}
+                          <div className={`mt-4 visual-lab overflow-hidden ${isHovered ? 'max-h-64 opacity-100 translate-y-0' : 'max-h-0 opacity-0 translate-y-4'}`}>
+                            {item.visual}
+                          </div>
+                        </div>
+                      </div>
+                      
+                      <div className="w-2/12 flex justify-center z-10">
+                        <div className={`w-10 h-10 rounded-full border-4 border-white shadow-xl transition-all duration-500 cursor-help ${item.dotColor} ${isHovered ? 'scale-150 rotate-45' : ''}`}>
+                          <div className="w-full h-full flex items-center justify-center text-white font-bold text-xs">
+                             {index + 1}
+                          </div>
+                        </div>
+                      </div>
+                      
+                      <div className="w-5/12"></div>
+                    </div>
+
+                    {/* Mobile Layout (Left Aligned) */}
+                    <div className="flex md:hidden items-start w-full">
+                      <div className="flex-shrink-0 z-10 mt-1">
+                        <div className={`w-10 h-10 rounded-full border-4 border-white shadow-lg ${item.dotColor} flex items-center justify-center text-white text-xs font-bold`}>
+                          {index + 1}
+                        </div>
+                      </div>
+                      <div className="ml-6 flex-grow">
+                        <span className="text-xs font-black text-gray-400 uppercase tracking-widest">{item.period}</span>
+                        <h3 className="text-xl font-black text-gray-900 mt-1">{item.model}</h3>
+                        <div className={`mt-2 p-5 rounded-2xl border-2 ${item.color} shadow-sm`}>
+                          <p className="text-sm font-medium">{item.description}</p>
+                          <div className="mt-4">
+                            {item.visual}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          <footer className="mt-24 pt-10 border-t border-gray-200 text-center">
+            <div className="flex flex-wrap justify-center gap-6 mb-6">
+              <div className="flex items-center gap-3 px-4 py-2 bg-white rounded-full shadow-sm border">
+                <span className="w-3 h-3 rounded-full bg-orange-400 shadow-[0_0_8px_rgba(251,146,60,0.5)]"></span>
+                <span className="text-xs font-bold text-gray-600 uppercase">Traditional (Count-based)</span>
+              </div>
+              <div className="flex items-center gap-3 px-4 py-2 bg-white rounded-full shadow-sm border">
+                <span className="w-3 h-3 rounded-full bg-pink-500 shadow-[0_0_8px_rgba(236,72,153,0.5)]"></span>
+                <span className="text-xs font-bold text-gray-600 uppercase">Neural (Dense Vectors)</span>
+              </div>
+              <div className="flex items-center gap-3 px-4 py-2 bg-white rounded-full shadow-sm border">
+                <span className="w-3 h-3 rounded-full bg-indigo-500 shadow-[0_0_8px_rgba(99,102,241,0.5)]"></span>
+                <span className="text-xs font-bold text-gray-600 uppercase">Transformer (Attention-based)</span>
+              </div>
+            </div>
+            <p className="text-gray-400 text-sm italic">"The progress of language models is the history of machines learning to contextually understand humans."</p>
+          </footer>
+        </div>
+      );
+    }
+
+    const root = ReactDOM.createRoot(document.getElementById('root'));
+    root.render(<App />);
+  </script>
+</body>
+</html>

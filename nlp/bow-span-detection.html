@@ -1,0 +1,409 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Bag of Words (BoW) - Spam Detection & Classification</title>
+  
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  
+  <!-- React & ReactDOM -->
+  <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  
+  <!-- Babel for JSX -->
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+  <style>
+    @keyframes pulse-ring {
+      0% { transform: scale(0.8); opacity: 0.5; }
+      50% { transform: scale(1.2); opacity: 0.3; }
+      100% { transform: scale(0.8); opacity: 0.5; }
+    }
+    .active-node {
+      animation: pulse-ring 2s infinite;
+    }
+  </style>
+</head>
+<body class="bg-slate-50 min-h-screen">
+  <div id="root"></div>
+
+  <script type="text/babel">
+    const { useState, useMemo } = React;
+
+    const vocabulary = [
+      "win", "money", "prizes", "now", "project", 
+      "meeting", "noon", "call", "free", "prize", "today"
+    ];
+
+    const weights = [0.8, 0.7, 0.9, 0.4, -0.6, -0.7, -0.5, 0.5, 0.8, 0.8, -0.4];
+    const bias = -0.5;
+
+    const emails = [
+      {
+        id: 1,
+        type: "Spam",
+        original: "Win money win prizes now",
+        // Cleaned now preserves duplicates for counting mode
+        cleaned: ["win", "money", "win", "prizes", "now"],
+      },
+      {
+        id: 2,
+        type: "Ham",
+        original: "Project meeting at noon",
+        cleaned: ["project", "meeting", "noon"],
+      },
+      {
+        id: 3,
+        type: "Spam",
+        original: "Call now for a free prize",
+        cleaned: ["call", "now", "free", "prize"],
+      },
+      {
+        id: 4,
+        type: "Ham",
+        original: "Are we meeting today?",
+        cleaned: ["meeting", "today"],
+      },
+      {
+        id: 5,
+        type: "Spam",
+        original: "Call call now now for a free free prize prize",
+        cleaned: ["call", "call", "now", "now", "free", "free", "prize", "prize"],
+        note: "Demonstrates duplicates"
+      }
+    ];
+
+    const stopWords = ["for", "a", "at", "are", "we"];
+    const sigmoid = (z) => 1 / (1 + Math.exp(-z));
+
+    function App() {
+      const [hoveredEmailId, setHoveredEmailId] = useState(null);
+      const [hoveredWord, setHoveredWord] = useState(null);
+      const [shuffledSentence, setShuffledSentence] = useState(["win", "win", "money", "now", "prizes"]);
+      const [bowMode, setBowMode] = useState('binary'); // 'binary' or 'count'
+
+      // Helper to compute vector based on mode
+      const getVector = (tokens, mode) => {
+        const vec = Array(vocabulary.length).fill(0);
+        tokens.forEach(token => {
+          const idx = vocabulary.indexOf(token.toLowerCase());
+          if (idx !== -1) {
+            if (mode === 'binary') {
+              vec[idx] = 1;
+            } else {
+              vec[idx] += 1;
+            }
+          }
+        });
+        return vec;
+      };
+
+      const activeEmail = hoveredEmailId ? emails.find(e => e.id === hoveredEmailId) : null;
+
+      const predictionData = useMemo(() => {
+        const vec = activeEmail ? getVector(activeEmail.cleaned, bowMode) : Array(vocabulary.length).fill(0);
+        
+        let weightedSum = bias;
+        const contributions = vec.map((val, i) => {
+          const contrib = val * weights[i];
+          weightedSum += contrib;
+          return contrib;
+        });
+
+        return { 
+          score: sigmoid(weightedSum), 
+          contributions, 
+          weightedSum,
+          activeVector: vec
+        };
+      }, [activeEmail, bowMode]);
+
+      const shuffleWords = () => {
+        const newArr = [...shuffledSentence].sort(() => Math.random() - 0.5);
+        setShuffledSentence(newArr);
+      };
+
+      return (
+        <div className="max-w-6xl mx-auto p-8 font-sans pb-24">
+          <header className="mb-12 text-center">
+            <h1 className="text-5xl font-extrabold text-slate-900 mb-4 tracking-tight">
+              Spam Detection: <span className="text-blue-600">Bag of Words</span>
+            </h1>
+            <div className="flex flex-col items-center gap-4">
+              <p className="text-xl text-slate-600">
+                Visualizing the transition from words to neural predictions.
+              </p>
+              
+              {/* MODE TOGGLE */}
+              <div className="flex bg-slate-200 p-1 rounded-xl shadow-inner mt-2">
+                <button 
+                  onClick={() => setBowMode('binary')}
+                  className={`px-6 py-2 rounded-lg font-bold transition-all ${bowMode === 'binary' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+                >
+                  Binary BoW
+                </button>
+                <button 
+                  onClick={() => setBowMode('count')}
+                  className={`px-6 py-2 rounded-lg font-bold transition-all ${bowMode === 'count' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+                >
+                  Counting BoW
+                </button>
+              </div>
+            </div>
+          </header>
+
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
+            <div className="lg:col-span-4 space-y-6">
+              <h2 className="text-xl font-bold text-slate-800 flex items-center gap-2">
+                <span className="bg-blue-600 text-white w-6 h-6 rounded-full flex items-center justify-center text-xs">1</span>
+                Input Emails & Preprocessing
+              </h2>
+              <div className="space-y-4">
+                {emails.map((email) => (
+                  <div 
+                    key={email.id}
+                    onMouseEnter={() => setHoveredEmailId(email.id)}
+                    onMouseLeave={() => setHoveredEmailId(null)}
+                    className={`p-4 rounded-xl border-2 transition-all cursor-pointer ${
+                      hoveredEmailId === email.id 
+                      ? 'border-blue-500 bg-white shadow-lg scale-[1.02]' 
+                      : 'border-slate-200 bg-slate-50 opacity-80'
+                    }`}
+                  >
+                    <div className="flex justify-between items-start mb-2">
+                      <div className="flex flex-col">
+                        <span className="text-xs font-bold uppercase tracking-wider text-slate-400">Email {email.id}</span>
+                        {email.note && <span className="text-[9px] text-blue-500 font-bold uppercase italic">{email.note}</span>}
+                      </div>
+                      <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                        email.type === 'Spam' ? 'bg-red-100 text-red-600' : 'bg-green-100 text-green-600'
+                      }`}>
+                        {email.type}
+                      </span>
+                    </div>
+                    <p className="text-slate-900 font-medium mb-2 italic text-sm">"{email.original}"</p>
+                    <div className="text-[11px] font-bold text-slate-400 mb-1">REMOVING STOP WORDS:</div>
+                    <div className="flex flex-wrap gap-1">
+                      {email.original.toLowerCase().split(/\s+/).map((word, i) => {
+                        const cleanWord = word.replace(/[?!]/g, "");
+                        const isStopWord = stopWords.includes(cleanWord);
+                        return (
+                          <span 
+                            key={i} 
+                            className={`px-1.5 py-0.5 rounded transition-colors text-[10px] ${
+                              isStopWord ? 'line-through text-slate-300' : 'bg-blue-100 text-blue-700 font-medium'
+                            }`}
+                          >
+                            {word}
+                          </span>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="lg:col-span-8 space-y-8">
+              <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
+                <h2 className="text-xl font-bold text-slate-800 mb-4 flex items-center gap-2">
+                  <span className="bg-blue-600 text-white w-6 h-6 rounded-full flex items-center justify-center text-xs">2</span>
+                  The Vocabulary ({vocabulary.length} Unique Words)
+                </h2>
+                <div className="flex flex-wrap gap-2">
+                  {vocabulary.map((word, index) => {
+                    const isActive = activeEmail?.cleaned.includes(word);
+                    return (
+                      <div 
+                        key={word}
+                        onMouseEnter={() => setHoveredWord(word)}
+                        onMouseLeave={() => setHoveredWord(null)}
+                        className={`px-3 py-2 rounded-lg border-2 transition-all font-mono text-sm relative group cursor-default ${
+                          isActive 
+                          ? 'border-blue-500 bg-blue-50 text-blue-700 scale-110 z-10 shadow-sm' 
+                          : 'border-slate-100 text-slate-400'
+                        }`}
+                      >
+                        <span className="absolute -top-3 left-1/2 -translate-x-1/2 text-[10px] bg-slate-800 text-white px-1.5 rounded-full opacity-0 group-hover:opacity-100 transition-opacity">
+                          Idx: {index}
+                        </span>
+                        {word}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Stage 3: Neural Network / Classifier - Height Fixed */}
+              <div className="bg-white p-8 rounded-3xl shadow-xl border border-slate-200 overflow-hidden relative min-h-[460px]">
+                <div className="flex justify-between items-center mb-4">
+                  <h2 className="text-xl font-bold text-slate-800 flex items-center gap-2">
+                    <span className="bg-blue-600 text-white w-6 h-6 rounded-full flex items-center justify-center text-xs">3</span>
+                    Neural Network Classifier (Logit Layer)
+                  </h2>
+                  <span className="text-[10px] font-bold bg-slate-100 text-slate-500 px-2 py-1 rounded uppercase tracking-widest">
+                    Mode: {bowMode}
+                  </span>
+                </div>
+                
+                <div className={`transition-opacity duration-300 ${!hoveredEmailId ? 'opacity-40 grayscale' : 'opacity-100'}`}>
+                  <div className="flex flex-col md:flex-row items-center gap-8 relative py-6">
+                    {/* Input Layer (Bits or Counts) */}
+                    <div className="flex flex-col gap-2">
+                      <div className="text-[10px] font-bold text-slate-400 uppercase text-center mb-2">Input Layer</div>
+                      {predictionData.activeVector.map((val, idx) => (
+                        <div key={idx} className={`w-8 h-8 rounded-md border flex items-center justify-center transition-all ${val > 0 ? 'bg-blue-500 text-white border-blue-600 shadow-md scale-110' : 'bg-slate-100 text-slate-300 border-slate-200'}`}>
+                          <span className="text-[10px] font-bold">{val}</span>
+                        </div>
+                      ))}
+                    </div>
+
+                    {/* Weighted Connections (SVG) */}
+                    <div className="hidden md:block flex-grow relative" style={{ height: '420px', width: '200px' }}>
+                      <svg width="100%" height="100%" className="absolute inset-0 overflow-visible">
+                        {predictionData.activeVector.map((val, idx) => {
+                          const weight = weights[idx];
+                          const color = weight > 0 ? '#ef4444' : '#3b82f6';
+                          const strokeWidth = Math.abs(weight) * 5;
+                          return (
+                            <line 
+                              key={idx}
+                              x1="0" y1={25 + idx * 40} 
+                              x2="200" y2="210" 
+                              stroke={color} 
+                              strokeWidth={strokeWidth} 
+                              strokeOpacity={val > 0 ? "0.4" : "0.05"}
+                              className="transition-all duration-300"
+                            />
+                          );
+                        })}
+                      </svg>
+                    </div>
+
+                    {/* Prediction Neuron */}
+                    <div className="flex flex-col items-center gap-6 min-w-[200px]">
+                       <div className="text-[10px] font-bold text-slate-400 uppercase mb-2">Classification Node</div>
+                       <div className={`w-24 h-24 rounded-full border-4 flex flex-col items-center justify-center transition-all shadow-xl relative ${predictionData.score > 0.5 ? 'border-red-500 bg-red-50' : 'border-green-500 bg-green-50'}`}>
+                         {(hoveredEmailId && predictionData.score > 0.5) && <div className="absolute inset-0 rounded-full active-node bg-red-400 z-0"></div>}
+                         <span className="text-xs text-slate-400 z-10 uppercase">Spam Prob.</span>
+                         <span className={`text-2xl font-black z-10 ${predictionData.score > 0.5 ? 'text-red-600' : 'text-green-600'}`}>
+                           {(predictionData.score * 100).toFixed(0)}%
+                         </span>
+                       </div>
+
+                       <div className="text-center p-4 bg-slate-50 rounded-xl border border-slate-200 w-full min-h-[100px] flex flex-col justify-center">
+                         <p className="text-xs font-bold text-slate-800 mb-2">Calculation Breakdown:</p>
+                         <div className="text-[10px] font-mono text-slate-500 leading-relaxed overflow-x-auto">
+                            Σ(input × weight) + bias = <span className="font-bold text-slate-800">{predictionData.weightedSum.toFixed(2)}</span>
+                            <br/>
+                            Sigmoid({predictionData.weightedSum.toFixed(2)}) = <span className="font-bold text-slate-800">{predictionData.score.toFixed(3)}</span>
+                         </div>
+                       </div>
+                    </div>
+
+                    <div className="flex-grow bg-slate-50 p-4 rounded-xl border border-slate-100 min-h-[200px] w-full md:w-auto">
+                       <h3 className="text-xs font-bold text-slate-400 uppercase mb-4">Learned Features</h3>
+                       <div className="space-y-2">
+                         {vocabulary.map((word, idx) => {
+                           const val = predictionData.activeVector[idx];
+                           if (val === 0 && hoveredEmailId) return null;
+                           const weight = weights[idx];
+                           const isSpammy = weight > 0;
+                           return (
+                             <div key={idx} className={`flex justify-between items-center text-[10px] ${val === 0 ? 'opacity-20' : 'opacity-100 font-bold'}`}>
+                               <span className="text-slate-700 capitalize">"{word}"</span>
+                               <span className={isSpammy ? 'text-red-500' : 'text-blue-500'}>
+                                 {isSpammy ? '↑' : '↓'} {Math.abs(weight).toFixed(1)}
+                               </span>
+                             </div>
+                           );
+                         })}
+                       </div>
+                    </div>
+                  </div>
+                </div>
+
+                {!hoveredEmailId && (
+                  <div className="absolute inset-0 flex items-center justify-center bg-white/10 backdrop-blur-[1px] pointer-events-none z-50">
+                    <div className="bg-slate-800 text-white px-6 py-3 rounded-full shadow-2xl font-bold animate-bounce">
+                      Hover over an email to trace the signal
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+
+          <div className="mt-12 bg-white p-8 rounded-3xl border border-slate-200 shadow-xl overflow-hidden">
+             <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4">
+               <div>
+                  <h2 className="text-2xl font-extrabold text-slate-800 flex items-center gap-3">
+                    <span className="bg-amber-400 text-amber-900 w-8 h-8 rounded-full flex items-center justify-center text-sm italic">?</span>
+                    The "Bag" Constraint Experiment
+                  </h2>
+                  <p className="text-slate-500">Shuffling words changes meaning to humans, but leaves the math identical.</p>
+               </div>
+               <button 
+                onClick={shuffleWords}
+                className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded-full font-bold transition-all shadow-md active:scale-95 flex items-center gap-2"
+               >
+                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path></svg>
+                 Shuffle Word Order
+               </button>
+             </div>
+
+             <div className="grid grid-cols-1 md:grid-cols-2 gap-8 items-center bg-slate-50 p-6 rounded-2xl border border-slate-100">
+                <div className="text-center p-6 bg-white rounded-xl shadow-inner border">
+                  <div className="text-[10px] font-bold text-slate-400 uppercase mb-4">Current Order (Human View)</div>
+                  <div className="flex flex-wrap justify-center gap-3">
+                    {shuffledSentence.map((word, i) => (
+                      <div key={i} className="bg-blue-50 px-4 py-2 rounded-lg border-2 border-blue-200 text-blue-800 font-bold shadow-sm transition-all duration-500">
+                        {word}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="flex flex-col items-center">
+                   <div className="text-[10px] font-bold text-slate-400 uppercase mb-4">BoW Vector (Machine View)</div>
+                   <div className="flex gap-1.5 p-4 bg-slate-900 rounded-xl">
+                      {vocabulary.map((vWord, idx) => {
+                        const vec = getVector(shuffledSentence, bowMode);
+                        const val = vec[idx];
+                        const active = val > 0;
+                        return (
+                          <div key={idx} className={`w-8 h-8 rounded flex items-center justify-center font-mono text-xs border ${active ? 'bg-blue-600 text-white border-blue-400 shadow-[0_0_10px_rgba(37,99,235,0.4)]' : 'bg-slate-800 text-slate-600 border-slate-700'}`}>
+                            {val}
+                          </div>
+                        );
+                      })}
+                   </div>
+                   <p className="mt-4 text-xs text-slate-500 font-medium text-center">
+                     {bowMode === 'binary' 
+                       ? "In binary BoW, duplicates are ignored. The bit is either 0 or 1."
+                       : "In counting BoW, duplicates are summed. The input represents frequency."
+                     }
+                   </p>
+                </div>
+             </div>
+
+             <div className="mt-6 p-4 bg-amber-50 border-l-4 border-amber-400 rounded-r-xl">
+               <p className="text-amber-800 text-sm font-medium">
+                 <strong>Conclusion:</strong> Whether words are re-ordered, the vector remains the same. {bowMode === 'binary' 
+                  ? "Binary vectors treat multiple occurrences as a single 'present' signal."
+                  : "Counting vectors capture intensity by tracking how many times a word appears."
+                 }
+               </p>
+             </div>
+          </div>
+        </div>
+      );
+    }
+
+    const root = ReactDOM.createRoot(document.getElementById('root'));
+    root.render(<App />);
+  </script>
+</body>
+</html>

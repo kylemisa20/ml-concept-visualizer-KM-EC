@@ -1,0 +1,560 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Seq2Seq with Cross Attention - Pro Visualization</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body { background-color: #f1f5f9; font-family: 'Inter', sans-serif; overflow-x: hidden; }
+        canvas { background-color: white; border-radius: 12px; box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1); width: 100%; height: auto; }
+        .math-font { font-family: "Times New Roman", Times, serif; font-style: italic; }
+        .phase-indicator { transition: all 0.3s ease; border-width: 2px; }
+        .phase-active { background-color: #3b82f6; color: white; transform: scale(1.05); border-color: #2563eb; }
+        button:disabled { cursor: not-allowed; opacity: 0.3 !important; }
+    </style>
+</head>
+<body class="p-4 md:p-8">
+    <div class="max-w-6xl mx-auto space-y-6">
+        <header class="text-center space-y-2">
+            <h1 class="text-3xl font-extrabold text-slate-900">Seq2Seq with Cross Attention</h1>
+            <p class="text-slate-600 max-w-2xl mx-auto">
+                Step-by-step architectural trace. Features auto-play, real word translation mapping, and attention heatmaps.
+            </p>
+        </header>
+
+        <!-- Control Panel -->
+        <div class="bg-white p-5 rounded-xl shadow-sm space-y-4">
+            <div class="flex flex-wrap justify-center gap-4 items-center border-b pb-4">
+                <div class="flex items-center gap-2">
+                    <span class="text-sm font-bold text-slate-700">Architecture:</span>
+                    <select id="archSelect" class="border-2 border-slate-200 p-2 rounded-lg bg-slate-50 focus:border-blue-500 outline-none cursor-pointer">
+                        <option value="rnn">RNN Decoder</option>
+                        <option value="lstm">LSTM Decoder</option>
+                    </select>
+                </div>
+                
+                <div class="flex items-center gap-2 border-l border-slate-300 pl-4 ml-2">
+                    <input type="checkbox" id="realWordsToggle" class="w-4 h-4 cursor-pointer text-blue-600 focus:ring-blue-500">
+                    <label for="realWordsToggle" class="text-sm font-bold text-slate-700 cursor-pointer select-none">Real Words Example</label>
+                </div>
+
+                <div class="flex gap-2 border-l border-slate-300 pl-4 ml-2">
+                    <button id="playBtn" class="bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-2 px-4 rounded-lg shadow-md transition-all flex items-center gap-2 w-[120px] justify-center">
+                        <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20"><path d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z" clip-rule="evenodd" fill-rule="evenodd"></path></svg>
+                        Auto-Play
+                    </button>
+                    <button id="prevStepBtn" class="bg-slate-600 hover:bg-slate-700 text-white font-bold py-2 px-4 rounded-lg shadow-md transition-all">
+                        ← Back
+                    </button>
+                    <button id="nextStepBtn" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-6 rounded-lg shadow-md transition-all">
+                        Next Step →
+                    </button>
+                    <button id="resetBtn" class="bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold py-2 px-4 rounded-lg transition-all">
+                        Reset
+                    </button>
+                </div>
+
+                <div id="statusBox" class="px-4 py-2 bg-blue-50 border border-blue-100 rounded-lg text-blue-700 font-mono text-sm min-w-[180px] text-center">
+                    Time: <span id="timeStepDisplay">1</span> | <span id="phaseDisplay">Ready</span>
+                </div>
+            </div>
+
+            <!-- Sub-step Indicators -->
+            <div class="flex justify-around gap-2 text-[10px] md:text-xs font-bold uppercase tracking-wider text-slate-400">
+                <div id="ind-alignment" class="phase-indicator p-2 rounded-md border-2">1. Alignment</div>
+                <div id="ind-softmax" class="phase-indicator p-2 rounded-md border-2">2. Softmax (Weights)</div>
+                <div id="ind-context" class="phase-indicator p-2 rounded-md border-2">3. Context Vector</div>
+                <div id="ind-concatenation" class="phase-indicator p-2 rounded-md border-2">4. Concatenation</div>
+                <div id="ind-output" class="phase-indicator p-2 rounded-md border-2">5. Update State</div>
+            </div>
+        </div>
+
+        <!-- Main Viz -->
+        <div class="relative">
+            <canvas id="mainCanvas"></canvas>
+            <div class="absolute inset-0 pointer-events-none">
+                <div class="absolute top-[5%] left-[4%] text-blue-600 font-bold opacity-40">Inputs (x)</div>
+                <div class="absolute top-[5%] left-[13%] text-slate-500 font-bold opacity-40">Encoder (h<sub>i</sub>)</div>
+                <div class="absolute top-[5%] right-[25%] text-red-500 font-bold opacity-40">Decoder (s<sub>t</sub>)</div>
+            </div>
+        </div>
+
+        <!-- Math Details -->
+        <div id="formulaCard" class="bg-white p-6 rounded-xl border shadow-sm text-center min-h-[100px] flex flex-col justify-center transition-all duration-300">
+            <h3 id="formulaTitle" class="font-bold text-slate-800 mb-2 underline underline-offset-4">Waiting to start...</h3>
+            <p id="formulaText" class="text-slate-600 text-sm md:text-base">Navigate using the controls or <kbd class="bg-slate-100 border px-1 rounded">←</kbd> <kbd class="bg-slate-100 border px-1 rounded">→</kbd> keys.</p>
+        </div>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('mainCanvas');
+        const ctx = canvas.getContext('2d');
+        const nextStepBtn = document.getElementById('nextStepBtn');
+        const prevStepBtn = document.getElementById('prevStepBtn');
+        const resetBtn = document.getElementById('resetBtn');
+        const playBtn = document.getElementById('playBtn');
+        const archSelect = document.getElementById('archSelect');
+        const realWordsToggle = document.getElementById('realWordsToggle');
+        const timeStepDisplay = document.getElementById('timeStepDisplay');
+        const phaseDisplay = document.getElementById('phaseDisplay');
+        const formulaTitle = document.getElementById('formulaTitle');
+        const formulaText = document.getElementById('formulaText');
+
+        let timeStep = 1;
+        let subStep = 0; 
+        let particles = [];
+        let persistentParticles = []; 
+        let outputSequence = [];
+        let autoPlayTimer = null;
+
+        // Translation Data Maps
+        const sourceWords = ["The", "black", "cat", "sleeps"];
+        const targetWords = ["<sos>", "Le", "chat", "noir", "dort"];
+        
+        // Mock Attention Weights (Heatmap data for realistic focus per time step)
+        // Format: [weight_for_word_1, weight_for_word_2, ...]
+        const mockWeights = {
+            1: [0.80, 0.05, 0.05, 0.10], // 'Le' attends mostly to 'The'
+            2: [0.05, 0.05, 0.85, 0.05], // 'chat' attends mostly to 'cat'
+            3: [0.05, 0.80, 0.05, 0.10], // 'noir' attends mostly to 'black' (French adj ordering)
+            4: [0.05, 0.05, 0.05, 0.85]  // 'dort' attends mostly to 'sleeps'
+        };
+
+        const ENCODER_X = 150;
+        const ATTENTION_X = 450;
+        const DECODER_X = 700;
+        const Y_TOP = 100;
+        const Y_SPACING = 60;
+        const INPUT_COUNT = 4;
+
+        const phases = [
+            { id: "ready", name: "Ready", title: "Wait", formula: "Ready to process time step." },
+            { id: "alignment", name: "Alignment", title: "Step 1: Alignment Scoring", formula: "Comparing history s(t-1) to all encoder states h(i)." },
+            { id: "softmax", name: "Softmax", title: "Step 2: Attention Weights", formula: "Turning compatibility scores into probabilities (α)." },
+            { id: "context", name: "Context", title: "Step 3: Context Vector", formula: "A weighted sum of all encoder states focused on relevant parts." },
+            { id: "concatenation", name: "Concatenation", title: "Step 4: Merged Input", formula: "Joining [y(t-1), ct] to feed the Decoder cell." },
+            { id: "output", name: "Update", title: "Step 5: State Transition", formula: "Calculating the next hidden state s(t)." }
+        ];
+
+        function init() {
+            canvas.width = 1000;
+            canvas.height = 500;
+            
+            // Keyboard Nav
+            document.addEventListener('keydown', (e) => {
+                if (e.key === 'ArrowRight' && !nextStepBtn.disabled) nextStepBtn.click();
+                if (e.key === 'ArrowLeft' && !prevStepBtn.disabled) prevStepBtn.click();
+            });
+
+            realWordsToggle.addEventListener('change', updateUI);
+
+            updateUI();
+            requestAnimationFrame(loop);
+        }
+
+        function drawConnections() {
+            ctx.lineWidth = 1.5;
+            ctx.setLineDash([5, 5]);
+            ctx.strokeStyle = '#e2e8f0';
+
+            // Inputs to Encoder
+            for(let i=0; i<INPUT_COUNT; i++) {
+                const y = Y_TOP + i * Y_SPACING;
+                ctx.beginPath();
+                ctx.moveTo(ENCODER_X - 50, y);
+                ctx.lineTo(ENCODER_X - 30, y);
+                ctx.stroke();
+            }
+
+            for(let i=0; i<INPUT_COUNT; i++) {
+                ctx.beginPath();
+                ctx.moveTo(ENCODER_X + 30, Y_TOP + i * Y_SPACING);
+                ctx.lineTo(ATTENTION_X - 40, 200);
+                ctx.stroke();
+            }
+
+            ctx.beginPath();
+            ctx.moveTo(ATTENTION_X + 40, 200);
+            ctx.lineTo(ATTENTION_X + 95, 200);
+            ctx.stroke();
+
+            ctx.beginPath();
+            ctx.moveTo(ATTENTION_X + 145, 200);
+            ctx.lineTo(DECODER_X - 60, 210);
+            ctx.stroke();
+
+            ctx.beginPath();
+            ctx.moveTo(DECODER_X - 120, 350);
+            ctx.lineTo(DECODER_X - 60, 230);
+            ctx.stroke();
+
+            ctx.setLineDash([5, 5]);
+            ctx.strokeStyle = '#fee2e2';
+            ctx.beginPath();
+            ctx.moveTo(DECODER_X, 160);
+            ctx.bezierCurveTo(DECODER_X, 50, ATTENTION_X, 50, ATTENTION_X, 80);
+            ctx.stroke();
+            ctx.setLineDash([]);
+        }
+
+        function drawOutputTray() {
+            // Background panel for output sequence
+            ctx.shadowColor = 'rgba(0,0,0,0.05)';
+            ctx.shadowBlur = 10;
+            ctx.fillStyle = 'white';
+            ctx.roundRect(850, 70, 130, 350, 8);
+            ctx.fill();
+            ctx.shadowBlur = 0;
+            ctx.strokeStyle = '#e2e8f0';
+            ctx.stroke();
+            
+            ctx.fillStyle = '#64748b';
+            ctx.font = 'bold 12px sans-serif';
+            ctx.textAlign = 'center';
+            ctx.fillText("Output Sequence", 915, 95);
+
+            ctx.beginPath();
+            ctx.moveTo(860, 110);
+            ctx.lineTo(970, 110);
+            ctx.strokeStyle = '#f1f5f9';
+            ctx.stroke();
+
+            // Draw accumulated items
+            outputSequence.forEach((outStr, idx) => {
+                drawBox(915, 140 + idx * 45, 90, 32, outStr, '#10b981', false, 'white');
+            });
+        }
+
+        function draw() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            drawConnections();
+
+            // Highlight logic
+            const hlEncoder = (subStep === 2 || subStep === 3);
+            const hlSoftmax = (subStep === 1 || subStep === 2 || subStep === 3);
+            const hlContext = (subStep === 3 || subStep === 4);
+            const hlDecoder = (subStep === 1 || subStep === 4 || subStep === 5);
+
+            // Inputs (x)
+            for(let i=0; i<INPUT_COUNT; i++) {
+                const y = Y_TOP + i * Y_SPACING;
+                let text = realWordsToggle.checked ? `"${sourceWords[i]}"` : `x${i+1}`;
+                drawBox(ENCODER_X - 85, y, 70, 25, text, '#3b82f6', true);
+            }
+
+            // Encoder States (h)
+            for(let i=0; i<INPUT_COUNT; i++) {
+                const y = Y_TOP + i * Y_SPACING;
+                drawBox(ENCODER_X, y, 60, 40, `h${i+1}`, '#93c5fd', false, '#1e40af', hlEncoder);
+            }
+
+            // Softmax Oval
+            ctx.beginPath();
+            ctx.ellipse(ATTENTION_X, 200, 40, 150, 0, 0, Math.PI * 2);
+            if(hlSoftmax) { ctx.shadowBlur = 15; ctx.shadowColor = '#fde047'; }
+            ctx.fillStyle = subStep >= 2 ? '#f3e8ff' : '#f8fafc';
+            ctx.fill();
+            ctx.shadowBlur = 0;
+            ctx.strokeStyle = hlSoftmax ? '#eab308' : (subStep >= 2 ? '#a855f7' : '#e2e8f0');
+            ctx.lineWidth = hlSoftmax ? 3 : 1;
+            ctx.stroke();
+            ctx.lineWidth = 1;
+            ctx.fillStyle = subStep >= 2 ? '#6b21a8' : '#94a3b8';
+            ctx.font = 'bold 12px sans-serif';
+            ctx.textAlign = 'center';
+            ctx.fillText("SOFTMAX", ATTENTION_X, 200);
+
+            // Context Vector Node
+            drawCircle(ATTENTION_X + 120, 200, 25, "ct", subStep >= 3 ? "#a855f7" : "#f1f5f9", hlContext);
+
+            // Decoder Cell
+            const isLSTM = archSelect.value === 'lstm';
+            drawBox(DECODER_X, 200, 120, 80, isLSTM ? "LSTM" : "RNN", isLSTM ? "#dcfce7" : "#fef9c3", false, isLSTM ? "#166534" : "#854d0e", hlDecoder);
+            
+            // Decoder History Output Box (y_t-1)
+            let yText = realWordsToggle.checked ? `"${targetWords[timeStep-1]}"` : `y(${timeStep-1})`;
+            drawBox(DECODER_X - 150, 350, 70, 40, yText, "#60a5fa", true, 'white', subStep === 1 || subStep === 4);
+
+            drawOutputTray();
+
+            // DRAW PERSISTENT DATA
+            persistentParticles.forEach(p => {
+                ctx.beginPath();
+                ctx.arc(p.x, p.y, p.size || 5, 0, Math.PI * 2);
+                ctx.fillStyle = p.color;
+                ctx.globalAlpha = (p.opacity || 1.0) * 0.4;
+                ctx.fill();
+                ctx.globalAlpha = 1.0;
+                
+                if(p.label) {
+                    ctx.fillStyle = 'rgba(15, 23, 42, 0.8)';
+                    ctx.font = 'bold 10px sans-serif';
+                    ctx.textAlign = 'center';
+                    ctx.fillText(p.label, p.x, p.y - 12);
+                }
+            });
+
+            // DRAW ACTIVE ANIMATIONS
+            particles.forEach(p => {
+                ctx.beginPath();
+                ctx.arc(p.x, p.y, p.size || 7, 0, Math.PI * 2);
+                ctx.fillStyle = p.color;
+                ctx.globalAlpha = p.opacity || 1.0;
+                ctx.shadowBlur = 6;
+                ctx.shadowColor = 'rgba(0,0,0,0.3)';
+                ctx.fill();
+                ctx.globalAlpha = 1.0;
+                ctx.shadowBlur = 0;
+                
+                if(p.label) {
+                    ctx.fillStyle = 'black';
+                    ctx.font = 'bold 13px sans-serif';
+                    ctx.textAlign = 'center';
+                    ctx.fillText(p.label, p.x, p.y - (p.size + 8));
+                }
+            });
+        }
+
+        function drawBox(x, y, w, h, text, color, isInput = false, textColor = 'white', highlight = false) {
+            if (highlight) {
+                ctx.shadowBlur = 15;
+                ctx.shadowColor = '#fde047'; // yellow-300
+            }
+            ctx.fillStyle = color;
+            ctx.beginPath();
+            if (isInput) ctx.rect(x - w/2, y - h/2, w, h);
+            else ctx.roundRect(x - w/2, y - h/2, w, h, 8);
+            ctx.fill();
+            
+            ctx.shadowBlur = 0;
+            ctx.strokeStyle = highlight ? '#eab308' : 'rgba(0,0,0,0.05)';
+            ctx.lineWidth = highlight ? 3 : 1;
+            ctx.stroke();
+            ctx.lineWidth = 1;
+            
+            ctx.fillStyle = textColor;
+            ctx.font = 'bold 12px sans-serif';
+            ctx.textAlign = 'center';
+            ctx.fillText(text, x, y + 5);
+        }
+
+        function drawCircle(x, y, r, text, color, highlight = false) {
+            if (highlight) {
+                ctx.shadowBlur = 15;
+                ctx.shadowColor = '#fde047';
+            }
+            ctx.beginPath();
+            ctx.arc(x, y, r, 0, Math.PI * 2);
+            ctx.fillStyle = color;
+            ctx.fill();
+            
+            ctx.shadowBlur = 0;
+            ctx.strokeStyle = highlight ? '#eab308' : '#e2e8f0';
+            ctx.lineWidth = highlight ? 3 : 1;
+            ctx.stroke();
+            ctx.lineWidth = 1;
+            
+            ctx.fillStyle = color === "#f1f5f9" ? "#94a3b8" : 'white';
+            ctx.font = 'bold 12px sans-serif';
+            ctx.textAlign = 'center';
+            ctx.fillText(text, x, y + 5);
+        }
+
+        function updateParticles() {
+            if (particles.length === 0) return;
+
+            for (let i = particles.length - 1; i >= 0; i--) {
+                const p = particles[i];
+                p.x += (p.tx - p.x) * 0.1;
+                p.y += (p.ty - p.y) * 0.1;
+                
+                if (Math.hypot(p.tx - p.x, p.ty - p.y) < 1.5) {
+                    persistentParticles.push({...p, x: p.tx, y: p.ty});
+                    particles.splice(i, 1);
+                }
+            }
+        }
+
+        function loop() {
+            updateParticles();
+            draw();
+            updateBtnStates();
+            requestAnimationFrame(loop);
+        }
+
+        function spawn(sx, sy, tx, ty, color, label = "", size = 7, opacity = 1.0) {
+            particles.push({ 
+                x: sx, y: sy, tx: tx, ty: ty, 
+                color: color, label: label, size: size, opacity: opacity,
+                t: timeStep, s: subStep 
+            });
+        }
+
+        function updateBtnStates() {
+            const isAnimating = particles.length > 0;
+            nextStepBtn.disabled = isAnimating || subStep === 6;
+            prevStepBtn.disabled = isAnimating || (timeStep === 1 && subStep === 0);
+        }
+
+        function updateUI() {
+            if (subStep === 6) {
+                phaseDisplay.innerText = "Complete";
+                formulaTitle.innerHTML = "Sequence Complete 🎉";
+                formulaText.innerHTML = "The decoder has successfully generated the full translated sequence in the Output Tray.";
+                document.querySelectorAll('.phase-indicator').forEach(el => el.classList.remove('phase-active'));
+                updateBtnStates();
+                return;
+            }
+
+            const p = phases[subStep];
+            phaseDisplay.innerText = p.name;
+            
+            let title = p.title;
+            let formula = p.formula;
+
+            // Handle Contextual Translations in Formula Box
+            if (realWordsToggle.checked && subStep > 0) {
+                const wordYprev = targetWords[timeStep - 1] || "";
+                const wordOut = targetWords[timeStep] || "";
+                
+                switch(subStep) {
+                    case 1: formula = `Comparing previous output <b>"${wordYprev}"</b> to all input English words.`; break;
+                    case 2: formula = `Creating a Heatmap to decide which English words are most important for <b>Time Step ${timeStep}</b>.`; break;
+                    case 3: formula = `Condensing the input into a single Context Vector based on our Attention weights.`; break;
+                    case 4: formula = `Joining <b>["${wordYprev}", Context]</b> to provide history & focus to the cell.`; break;
+                    case 5: formula = `Cell generates the next predicted French word: <b>"${wordOut}"</b>.`; break;
+                }
+            }
+
+            formulaTitle.innerHTML = title;
+            formulaText.innerHTML = formula;
+            
+            document.querySelectorAll('.phase-indicator').forEach(el => el.classList.remove('phase-active'));
+            const currentInd = document.getElementById(`ind-${p.id}`);
+            if (currentInd) currentInd.classList.add('phase-active');
+            
+            timeStepDisplay.innerText = timeStep;
+            updateBtnStates();
+        }
+
+        nextStepBtn.onclick = () => {
+            if (particles.length > 0 || timeStep > 4) return;
+            
+            // Advance sequence and add to output tray on boundary
+            if (timeStep === 4 && subStep === 5) {
+                let outStr = realWordsToggle.checked ? targetWords[timeStep] : `y(${timeStep})`;
+                outputSequence.push(outStr);
+                subStep = 6; 
+                updateUI();
+                if(autoPlayTimer) playBtn.click(); // Auto-pause when done
+                return;
+            }
+
+            subStep++;
+            if (subStep > 5) {
+                let outStr = realWordsToggle.checked ? targetWords[timeStep] : `y(${timeStep})`;
+                outputSequence.push(outStr);
+                subStep = 1;
+                timeStep++;
+                persistentParticles = []; 
+            }
+
+            // Define animations with HEATMAP sizing logic
+            switch(subStep) {
+                case 1: 
+                    spawn(DECODER_X, 160, ATTENTION_X, 80, '#ef4444', `s${timeStep-1}`); 
+                    break;
+                case 2: 
+                    for(let i=0; i<INPUT_COUNT; i++) {
+                        let w = mockWeights[timeStep] ? mockWeights[timeStep][i] : 0.25;
+                        let size = 4 + (w * 8);
+                        let opacity = 0.3 + (w * 0.7);
+                        spawn(ENCODER_X + 30, Y_TOP + i * Y_SPACING, ATTENTION_X - 20, 200, '#a855f7', `e${i+1}`, size, opacity);
+                    }
+                    break;
+                case 3: 
+                    for(let i=0; i<INPUT_COUNT; i++) {
+                        let w = mockWeights[timeStep] ? mockWeights[timeStep][i] : 0.25;
+                        let size = 4 + (w * 8);
+                        let opacity = 0.3 + (w * 0.7);
+                        spawn(ATTENTION_X, 200, ATTENTION_X + 95, 200, '#a855f7', `α${i+1}`, size, opacity);
+                    }
+                    break;
+                case 4: 
+                    spawn(ATTENTION_X + 145, 200, DECODER_X - 60, 210, '#a855f7', 'ct');
+                    spawn(DECODER_X - 150, 350, DECODER_X - 60, 230, '#3b82f6', 'y(t-1)');
+                    break;
+                case 5: 
+                    let outText = realWordsToggle.checked ? targetWords[timeStep] : `s${timeStep}`;
+                    spawn(DECODER_X + 60, 200, 915, 140 + (timeStep - 1) * 45, '#10b981', outText, 9); 
+                    break;
+            }
+
+            updateUI();
+        };
+
+        prevStepBtn.onclick = () => {
+            if (particles.length > 0) return;
+
+            const oldSubStep = subStep;
+            const oldTimeStep = timeStep;
+
+            subStep--;
+            if (subStep < 0) {
+                if (timeStep > 1) {
+                    timeStep--;
+                    subStep = 5;
+                    outputSequence.pop();
+                    persistentParticles = [];
+                } else {
+                    subStep = 0;
+                }
+            } else if (oldSubStep === 6) {
+                subStep = 5;
+                outputSequence.pop();
+            }
+
+            persistentParticles = persistentParticles.filter(p => !(p.t === oldTimeStep && p.s === oldSubStep));
+            updateUI();
+        };
+
+        resetBtn.onclick = () => {
+            timeStep = 1;
+            subStep = 0;
+            particles = [];
+            persistentParticles = [];
+            outputSequence = [];
+            if(autoPlayTimer) playBtn.click();
+            updateUI();
+        };
+
+        // AutoPlay Logic
+        playBtn.onclick = () => {
+            if (autoPlayTimer) {
+                clearInterval(autoPlayTimer);
+                autoPlayTimer = null;
+                playBtn.innerHTML = `<svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20"><path d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z" clip-rule="evenodd" fill-rule="evenodd"></path></svg> Auto-Play`;
+                playBtn.classList.replace('bg-orange-500', 'bg-emerald-600');
+                playBtn.classList.replace('hover:bg-orange-600', 'hover:bg-emerald-700');
+            } else {
+                if (subStep === 6) resetBtn.click();
+                
+                playBtn.innerHTML = `<svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zM7 8a1 1 0 012 0v4a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v4a1 1 0 102 0V8a1 1 0 00-1-1z" clip-rule="evenodd"></path></svg> Pause`;
+                playBtn.classList.replace('bg-emerald-600', 'bg-orange-500');
+                playBtn.classList.replace('hover:bg-emerald-700', 'hover:bg-orange-600');
+                
+                autoPlayTimer = setInterval(() => {
+                    if (!nextStepBtn.disabled && particles.length === 0) {
+                        nextStepBtn.click();
+                    }
+                }, 900); // Trigger next step slightly after animation stops
+            }
+        };
+
+        archSelect.onchange = resetBtn.onclick;
+
+        init();
+    </script>
+</body>
+</html>

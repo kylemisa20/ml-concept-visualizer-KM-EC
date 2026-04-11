@@ -1,0 +1,560 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RNN Formulation & Execution Modes</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&family=Fira+Code:wght@400;500&display=swap');
+        
+        body { font-family: 'Inter', sans-serif; background-color: #f8fafc; }
+        .math { font-family: 'Fira Code', monospace; }
+        .node { transition: all 0.3s ease; }
+        .weight-path { transition: stroke-dashoffset 2s linear, stroke 0.3s ease, stroke-width 0.3s ease; }
+        
+        .active-math {
+            background-color: #dbeafe;
+            border-radius: 4px;
+            padding: 0 4px;
+            transition: all 0.2s ease;
+        }
+
+        @keyframes pulse-flow {
+            0% { stroke-dashoffset: 100; }
+            100% { stroke-dashoffset: 0; }
+        }
+        .flowing { stroke-dasharray: 5; animation: pulse-flow 2s infinite linear; }
+        
+        @keyframes highlight-pulse {
+            0%, 100% { fill: #22c55e; }
+            50% { fill: #4ade80; }
+        }
+        .winning-bar { animation: highlight-pulse 2s infinite; }
+
+        .tab-active {
+            background-color: #1e293b;
+            color: white;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.3);
+        }
+        .mode-active {
+            background-color: #8b5cf6;
+            color: white;
+            box-shadow: 0 1px 3px rgba(139, 92, 246, 0.4);
+        }
+
+        .weight-label {
+            font-family: 'Fira Code', monospace;
+            font-weight: 700;
+            font-size: 14px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+    </style>
+</head>
+<body class="p-4 md:p-8">
+    <div class="max-w-7xl mx-auto bg-white rounded-2xl shadow-xl overflow-hidden border border-slate-200">
+        <!-- Header -->
+        <div class="bg-slate-900 p-6 text-white flex flex-col xl:flex-row xl:items-center justify-between gap-6">
+            <div>
+                <h1 class="text-2xl font-bold">RNN Formulation & Execution Modes</h1>
+                <p class="text-slate-400 text-sm mt-1">Visualizing inputs, outputs, and temporal recurrence</p>
+            </div>
+            
+            <div class="flex flex-col sm:flex-row gap-4">
+                <!-- Data Domain Switcher -->
+                <div class="flex bg-slate-800 p-1 rounded-xl">
+                    <button onclick="setDomain('text')" id="btn-text" class="px-4 py-2 rounded-lg text-sm font-semibold transition-all tab-active">🔤 Text/NLP</button>
+                    <button onclick="setDomain('stock')" id="btn-stock" class="px-4 py-2 rounded-lg text-sm font-semibold text-slate-400 transition-all">📈 Time Series</button>
+                </div>
+
+                <!-- Execution Mode Switcher -->
+                <div class="flex bg-slate-800 p-1 rounded-xl ring-2 ring-purple-500/30">
+                    <button onclick="setMode('auto')" id="btn-auto" class="px-4 py-2 rounded-lg text-sm font-semibold transition-all mode-active flex items-center">
+                        <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path></svg>
+                        Autoregressive
+                    </button>
+                    <button onclick="setMode('non-auto')" id="btn-non-auto" class="px-4 py-2 rounded-lg text-sm font-semibold text-slate-400 transition-all">
+                        Non-Autoregressive
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-3">
+            <!-- Main Visualization Area -->
+            <div class="lg:col-span-2 p-6 border-r border-slate-100 bg-slate-50/50">
+                <div class="flex justify-between items-center mb-6">
+                    <div class="flex space-x-2">
+                        <button id="toggleView" class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-semibold transition-colors shadow-sm ring-2 ring-blue-600/30 ring-offset-2">
+                            Unfold Time Steps (View Outputs)
+                        </button>
+                        <button id="playFlow" class="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-sm font-semibold transition-colors shadow-sm flex items-center">
+                            Run Data Flow
+                        </button>
+                    </div>
+                    <div id="viewLabel" class="text-xs font-bold text-slate-400 uppercase tracking-widest bg-slate-100 px-3 py-1 rounded-full">Folded Mode</div>
+                </div>
+
+                <!-- SVG Canvas -->
+                <div class="relative w-full aspect-[16/9] flex items-center justify-center bg-white rounded-xl border border-slate-200 shadow-inner overflow-hidden">
+                    <svg id="rnnSvg" viewBox="0 0 950 450" class="w-full h-full">
+                        <defs>
+                            <marker id="arrowhead" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+                                <polygon points="0 0, 10 3.5, 0 7" fill="#94a3b8" />
+                            </marker>
+                            <marker id="arrowhead-active" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+                                <polygon points="0 0, 10 3.5, 0 7" fill="#3b82f6" />
+                            </marker>
+                            <marker id="arrowhead-purple" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+                                <polygon points="0 0, 10 3.5, 0 7" fill="#a855f7" />
+                            </marker>
+                        </defs>
+
+                        <!-- Folded Content -->
+                        <g id="foldedGroup">
+                            <path d="M475 350 L475 250" class="weight-path stroke-slate-300 fill-none" stroke-width="3" marker-end="url(#arrowhead)" data-id="U" />
+                            <path d="M475 170 L475 90" class="weight-path stroke-slate-300 fill-none" stroke-width="3" marker-end="url(#arrowhead)" data-id="V" />
+                            <path d="M510 210 Q560 210 560 195 T510 180" class="weight-path stroke-slate-300 fill-none" stroke-width="3" marker-end="url(#arrowhead)" data-id="W" />
+                            
+                            <text x="455" y="305" class="weight-label fill-slate-400" data-id="U">U</text>
+                            <text x="455" y="140" class="weight-label fill-slate-400" data-id="V">V</text>
+                            <text x="575" y="200" class="weight-label fill-slate-400" data-id="W">W</text>
+
+                            <circle cx="475" cy="380" r="35" class="node fill-white stroke-slate-400" stroke-width="2" />
+                            <text x="475" y="386" text-anchor="middle" class="text-sm font-bold fill-slate-700">X</text>
+                            
+                            <circle cx="475" cy="210" r="35" class="node fill-white stroke-slate-400" stroke-width="2" />
+                            <text x="475" y="217" text-anchor="middle" class="text-xl font-bold fill-slate-700">H</text>
+                            
+                            <circle cx="475" cy="50" r="35" class="node fill-white stroke-slate-400" stroke-width="2" />
+                            <text x="475" y="57" text-anchor="middle" class="text-xl font-bold fill-slate-700">O</text>
+                        </g>
+
+                        <!-- Unfolded Content -->
+                        <g id="unfoldedGroup" opacity="0" pointer-events="none">
+                            
+                            <!-- Autoregression / Feedback Paths (O to X) -->
+                            <g id="feedbackPaths">
+                                <path d="M 180 70 C 260 150, 320 280, 440 350" stroke="#a855f7" stroke-dasharray="6,4" stroke-width="2.5" fill="none" marker-end="url(#arrowhead-purple)" class="feedback-path"/>
+                                <rect x="250" y="200" width="120" height="20" fill="white" rx="4" opacity="0.8"/>
+                                <text x="310" y="214" fill="#a855f7" class="text-[10px] font-bold" text-anchor="middle" id="feedback-label-1">Feeds back to next input</text>
+
+                                <path d="M 500 70 C 580 150, 640 280, 760 350" stroke="#a855f7" stroke-dasharray="6,4" stroke-width="2.5" fill="none" marker-end="url(#arrowhead-purple)" class="feedback-path"/>
+                                <rect x="570" y="200" width="120" height="20" fill="white" rx="4" opacity="0.8"/>
+                                <text x="630" y="214" fill="#a855f7" class="text-[10px] font-bold" text-anchor="middle" id="feedback-label-2">Feeds back to next input</text>
+                            </g>
+
+                            <!-- Step 1 (t-1) -->
+                            <g class="step" transform="translate(150, 0)">
+                                <path d="M0 350 L0 245" class="weight-path stroke-slate-300 fill-none" stroke-width="2" marker-end="url(#arrowhead)" data-id="U" />
+                                <path d="M0 175 L0 85" class="weight-path stroke-slate-300 fill-none" stroke-width="2" marker-end="url(#arrowhead)" data-id="V" />
+                                <path d="M35 210 L285 210" class="weight-path stroke-slate-300 fill-none" stroke-width="2" marker-end="url(#arrowhead)" data-id="W" />
+                                <text x="-15" y="300" class="weight-label fill-slate-400 text-xs" data-id="U">U</text>
+                                <text x="-15" y="130" class="weight-label fill-slate-400 text-xs" data-id="V">V</text>
+                                <text x="160" y="200" class="weight-label fill-slate-400 text-xs" data-id="W">W</text>
+                                
+                                <circle cx="0" cy="380" r="30" class="node fill-white stroke-slate-400" stroke-width="2" />
+                                <text x="0" y="385" text-anchor="middle" class="text-[11px] font-bold fill-slate-800" id="unfold-x-1">X₁</text>
+                                <circle cx="0" cy="210" r="30" class="node fill-white stroke-slate-400" stroke-width="2" />
+                                <text x="0" y="215" text-anchor="middle" class="text-sm font-bold fill-slate-600">hₜ₋₁</text>
+                                <circle cx="0" cy="50" r="30" class="node fill-white stroke-slate-400" stroke-width="2" />
+                                <text x="0" y="55" text-anchor="middle" class="text-sm font-bold fill-slate-600">oₜ₋₁</text>
+
+                                <!-- Output Visualizations Container -->
+                                <g id="out-viz-1" transform="translate(45, 10)" opacity="0" class="transition-opacity duration-300"></g>
+                            </g>
+
+                            <!-- Step 2 (t) -->
+                            <g class="step" transform="translate(470, 0)">
+                                <path d="M0 350 L0 245" class="weight-path stroke-slate-300 fill-none" stroke-width="2" marker-end="url(#arrowhead)" data-id="U" />
+                                <path d="M0 175 L0 85" class="weight-path stroke-slate-300 fill-none" stroke-width="2" marker-end="url(#arrowhead)" data-id="V" />
+                                <path d="M35 210 L255 210" class="weight-path stroke-slate-300 fill-none" stroke-width="2" marker-end="url(#arrowhead)" data-id="W" />
+                                <text x="-15" y="300" class="weight-label fill-slate-400 text-xs" data-id="U">U</text>
+                                <text x="-15" y="130" class="weight-label fill-slate-400 text-xs" data-id="V">V</text>
+                                <text x="145" y="200" class="weight-label fill-slate-400 text-xs" data-id="W">W</text>
+
+                                <circle cx="0" cy="380" r="30" class="node fill-white stroke-slate-400" stroke-width="2" />
+                                <text x="0" y="385" text-anchor="middle" class="text-[11px] font-bold fill-slate-800" id="unfold-x-2">X₂</text>
+                                <circle cx="0" cy="210" r="30" class="node fill-white stroke-slate-400" stroke-width="2" />
+                                <text x="0" y="215" text-anchor="middle" class="text-sm font-bold fill-slate-600">hₜ</text>
+                                <circle cx="0" cy="50" r="30" class="node fill-white stroke-slate-400" stroke-width="2" />
+                                <text x="0" y="55" text-anchor="middle" class="text-sm font-bold fill-slate-600">oₜ</text>
+
+                                <g id="out-viz-2" transform="translate(45, 10)" opacity="0" class="transition-opacity duration-300"></g>
+                            </g>
+
+                            <!-- Step 3 (t+1) -->
+                            <g class="step" transform="translate(760, 0)">
+                                <path d="M0 350 L0 245" class="weight-path stroke-slate-300 fill-none" stroke-width="2" marker-end="url(#arrowhead)" data-id="U" />
+                                <path d="M0 175 L0 85" class="weight-path stroke-slate-300 fill-none" stroke-width="2" marker-end="url(#arrowhead)" data-id="V" />
+                                <text x="-15" y="300" class="weight-label fill-slate-400 text-xs" data-id="U">U</text>
+                                <text x="-15" y="130" class="weight-label fill-slate-400 text-xs" data-id="V">V</text>
+
+                                <circle cx="0" cy="380" r="30" class="node fill-white stroke-slate-400" stroke-width="2" />
+                                <text x="0" y="385" text-anchor="middle" class="text-[11px] font-bold fill-slate-800" id="unfold-x-3">X₃</text>
+                                <circle cx="0" cy="210" r="30" class="node fill-white stroke-slate-400" stroke-width="2" />
+                                <text x="0" y="215" text-anchor="middle" class="text-sm font-bold fill-slate-600">hₜ₊₁</text>
+                                <circle cx="0" cy="50" r="30" class="node fill-white stroke-slate-400" stroke-width="2" />
+                                <text x="0" y="55" text-anchor="middle" class="text-sm font-bold fill-slate-600">oₜ₊₁</text>
+
+                                <g id="out-viz-3" transform="translate(45, 10)" opacity="0" class="transition-opacity duration-300"></g>
+                            </g>
+                        </g>
+                    </svg>
+                </div>
+
+                <!-- Explanation Note Panel -->
+                <div class="mt-4 p-4 rounded-xl shadow-inner border transition-colors duration-300" id="mode-panel">
+                    <h4 class="text-sm font-bold mb-2 flex items-center" id="mode-title">
+                        <!-- Filled by JS -->
+                    </h4>
+                    <p class="text-xs leading-relaxed font-medium" id="mode-desc">
+                        <!-- Filled by JS -->
+                    </p>
+                </div>
+            </div>
+
+            <!-- Sidebar / Content Panel -->
+            <div class="p-6 bg-white space-y-6">
+                <div>
+                    <h2 class="text-xs font-bold text-slate-400 uppercase tracking-widest mb-4">Variable Breakdown</h2>
+                    <div class="space-y-4">
+                        <div class="p-3 bg-slate-50 rounded-lg border-l-4 border-blue-500">
+                            <div class="flex justify-between items-center mb-1">
+                                <span class="text-xs font-bold text-slate-500">INPUT (xₜ)</span>
+                            </div>
+                            <p id="desc-x" class="text-sm text-slate-700 font-medium">--</p>
+                        </div>
+
+                        <div class="p-3 bg-slate-50 rounded-lg border-l-4 border-slate-400">
+                            <div class="flex justify-between items-center mb-1">
+                                <span class="text-xs font-bold text-slate-500">HIDDEN STATE (hₜ)</span>
+                            </div>
+                            <p id="desc-h" class="text-sm text-slate-700 font-medium italic">Memory of past context</p>
+                        </div>
+
+                        <div class="p-3 bg-slate-50 rounded-lg border-l-4 border-emerald-500">
+                            <div class="flex justify-between items-center mb-1">
+                                <span class="text-xs font-bold text-slate-500">OUTPUT (oₜ)</span>
+                            </div>
+                            <p id="desc-o" class="text-sm text-slate-700 font-medium">--</p>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="pt-4 border-t border-slate-100">
+                    <h3 class="text-xs font-bold text-slate-400 uppercase tracking-widest mb-3">Formulas</h3>
+                    <div class="space-y-2 math text-sm">
+                        <div class="p-2 bg-slate-50 rounded border border-slate-100 flex items-center justify-between">
+                            <span><span data-math="h">hₜ</span> = f(<span data-math="u">U</span>·xₜ + <span data-math="w">W</span>·hₜ₋₁ + b)</span>
+                            <span class="text-[10px] text-slate-400 uppercase font-sans">Memory</span>
+                        </div>
+                        <div class="p-2 bg-slate-50 rounded border border-slate-100 flex items-center justify-between">
+                            <span><span data-math="o">oₜ</span> = g(<span data-math="v">V</span>·hₜ + c)</span>
+                            <span class="text-[10px] text-slate-400 uppercase font-sans">Prediction</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // SVG Generators (Replacing finicky templates with bulletproof string generation)
+        function generateTextSVG(out, mode) {
+            const isAuto = mode === 'auto';
+            const headerText = isAuto ? 'PREDICTED NEXT WORD' : 'TAG (NEVER FED BACK)';
+            const headerColor = isAuto ? '#64748b' : '#ef4444';
+            const headerBg = isAuto ? '#f1f5f9' : '#fef2f2';
+
+            const bg1 = isAuto ? '#dcfce7' : '#eff6ff';
+            const txt1 = isAuto ? '#166534' : '#1e40af';
+            const pct1 = isAuto ? '#16a34a' : '#2563eb';
+            const trk1 = isAuto ? '#bbf7d0' : '#dbeafe';
+            const bar1 = isAuto ? '#22c55e' : '#3b82f6';
+            const animClass = isAuto ? 'winning-bar' : '';
+            const animStyle = isAuto ? '' : 'animation: none;';
+
+            // Scaled up bar widths
+            const barW1 = (out.p1 / 100) * 105;
+            const barW2 = (out.p2 / 100) * 105;
+            const barW3 = (out.p3 / 100) * 105;
+
+            const subText = isAuto ? '... out of 50,000' : '... part of speech tags';
+
+            return `
+                <path d="M -15 45 L 0 45" stroke="#94a3b8" stroke-width="1.5" stroke-dasharray="2,2"/>
+                <rect x="0" y="0" width="125" height="105" rx="6" fill="white" stroke="#cbd5e1" stroke-width="1.5" style="filter: drop-shadow(0 4px 6px rgba(0,0,0,0.1));"/>
+                
+                <rect x="0" y="0" width="125" height="20" fill="${headerBg}" style="border-bottom-left-radius: 0; border-bottom-right-radius: 0;"/>
+                <text x="62.5" y="14" font-size="8" font-weight="bold" fill="${headerColor}" text-anchor="middle" class="uppercase tracking-wider">${headerText}</text>
+                
+                <rect x="5" y="25" width="115" height="20" rx="4" fill="${bg1}"/>
+                <text x="10" y="39" font-size="12" font-weight="bold" fill="${txt1}">${out.v1}</text>
+                <text x="85" y="39" font-size="11" font-weight="bold" fill="${pct1}">${out.p1}%</text>
+                <rect x="10" y="46" width="105" height="5" fill="${trk1}" rx="2"/>
+                <rect x="10" y="46" width="${barW1}" height="5" fill="${bar1}" rx="2" class="${animClass}" style="${animStyle}"/>
+                
+                <text x="10" y="65" font-size="10" fill="#475569">${out.v2}</text>
+                <text x="85" y="65" font-size="9" fill="#64748b">${out.p2}%</text>
+                <rect x="10" y="70" width="105" height="4" fill="#f1f5f9" rx="2"/>
+                <rect x="10" y="70" width="${barW2}" height="4" fill="#94a3b8" rx="2"/>
+                
+                <text x="10" y="85" font-size="10" fill="#475569">${out.v3}</text>
+                <text x="85" y="85" font-size="9" fill="#64748b">${out.p3}%</text>
+                <rect x="10" y="90" width="105" height="4" fill="#f1f5f9" rx="2"/>
+                <rect x="10" y="90" width="${barW3}" height="4" fill="#94a3b8" rx="2"/>
+                
+                <text x="62.5" y="100" font-size="8" fill="#94a3b8" text-anchor="middle" font-style="italic">${subText}</text>
+            `;
+        }
+
+        function generateStockSVG(out, mode) {
+            const isAuto = mode === 'auto';
+            const headerText = isAuto ? 'NEXT DAY FORECAST' : 'EVAL ONLY (NO FEEDBACK)';
+            const headerColor = isAuto ? '#64748b' : '#ef4444';
+            const headerBg = isAuto ? '#f1f5f9' : '#fef2f2';
+
+            return `
+                <path d="M -15 45 L 0 45" stroke="#94a3b8" stroke-width="1.5" stroke-dasharray="2,2"/>
+                <rect x="0" y="20" width="125" height="50" rx="6" fill="white" stroke="#cbd5e1" stroke-width="1.5" style="filter: drop-shadow(0 4px 6px rgba(0,0,0,0.1));"/>
+                
+                <rect x="0" y="20" width="125" height="20" fill="${headerBg}" style="border-bottom-left-radius: 0; border-bottom-right-radius: 0;"/>
+                <text x="62.5" y="34" font-size="8" font-weight="bold" fill="${headerColor}" text-anchor="middle" class="uppercase tracking-wider">${headerText}</text>
+                
+                <text x="62.5" y="60" font-size="16" font-weight="bold" fill="#0f172a" text-anchor="middle">${out.v}</text>
+            `;
+        }
+
+        // Data Structures for the 4 combinations
+        const configData = {
+            text: {
+                'auto': {
+                    descX: 'Current Word (e.g. prompt token or previously generated word)',
+                    descO: 'Probability distribution over the entire dictionary to predict the NEXT word.',
+                    panelClass: 'bg-purple-50 border-purple-200 text-purple-900',
+                    panelTitle: '<svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path></svg> Autoregressive Loop (Generative AI)',
+                    panelDesc: '<span class="font-bold underline">Generating Sequences:</span> Like ChatGPT. The network outputs dictionary probabilities. We pick the highest scoring word (green), and <strong>feed it back as the Input</strong> for the next step to continue the sentence.',
+                    inputs: ['"Machine"', '"Learning"', '"is"'],
+                    outputs: [
+                        { v1: '"Learning"', p1: '85', v2: '"Code"', p2: '10', v3: '"Vision"', p3: '5' },
+                        { v1: '"is"', p1: '90', v2: '"can"', p2: '7', v3: '"models"', p3: '3' },
+                        { v1: '"fun"', p1: '70', v2: '"hard"', p2: '20', v3: '"a"', p3: '10' }
+                    ],
+                    template: 'tpl-text-prob',
+                    outTitle: 'PREDICTED NEXT WORD'
+                },
+                'non-auto': {
+                    descX: 'Words provided one-by-one from an existing, known sentence.',
+                    descO: 'Classification label (e.g., Part-of-Speech tag or Sentiment) for that specific word.',
+                    panelClass: 'bg-blue-50 border-blue-200 text-blue-900',
+                    panelTitle: '<svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path></svg> Non-Autoregressive (Independent Inputs)',
+                    panelDesc: '<span class="font-bold underline">Tagging / Classification:</span> Like Part-of-Speech tagging. We already have the whole sentence ("The apple fell"). We feed words in one by one. The output is a tag (Noun, Verb), but it is <strong>never fed back</strong> as an input.',
+                    inputs: ['"The"', '"apple"', '"fell"'],
+                    outputs: [
+                        { v1: '"Determiner"', p1: '98', v2: '"Noun"', p2: '1', v3: '"Verb"', p3: '1' },
+                        { v1: '"Noun"', p1: '95', v2: '"Adj"', p2: '3', v3: '"Verb"', p3: '2' },
+                        { v1: '"Verb"', p1: '92', v2: '"Noun"', p2: '5', v3: '"Adj"', p3: '3' }
+                    ],
+                    template: 'tpl-text-prob',
+                    outTitle: 'TAG (NEVER FED BACK)'
+                }
+            },
+            stock: {
+                'auto': {
+                    descX: 'Today\'s actual closing price OR the previously predicted price.',
+                    descO: 'Numerical forecast for tomorrow\'s price.',
+                    panelClass: 'bg-purple-50 border-purple-200 text-purple-900',
+                    panelTitle: '<svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path></svg> Autoregressive Loop (Multi-step Forecast)',
+                    panelDesc: '<span class="font-bold underline">Long-term Prediction:</span> To predict 3 days into the future, we take the Day 1 predicted Output price, and <strong>feed it back as the Input</strong> to guess Day 2, and so on. (Errors compound quickly!)',
+                    inputs: ['$150.00', '$152.40', '$154.10'],
+                    outputs: [{v: '$152.40'}, {v: '$154.10'}, {v: '$151.80'}],
+                    template: 'tpl-stock-val',
+                    outTitle: 'NEXT DAY FORECAST'
+                },
+                'non-auto': {
+                    descX: 'Actual historical market data provided from a dataset.',
+                    descO: 'Numerical forecast for the next day, evaluated against reality.',
+                    panelClass: 'bg-blue-50 border-blue-200 text-blue-900',
+                    panelTitle: '<svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path></svg> Non-Autoregressive (Teacher Forcing)',
+                    panelDesc: '<span class="font-bold underline">Standard Training:</span> We predict tomorrow\'s price, but we don\'t use that prediction to predict the day after. Instead, we provide the <strong>actual known price</strong> from our dataset as the next independent input.',
+                    inputs: ['Actual Day 1', 'Actual Day 2', 'Actual Day 3'],
+                    outputs: [{v: '$152.40'}, {v: '$154.10'}, {v: '$151.80'}],
+                    template: 'tpl-stock-val',
+                    outTitle: 'EVAL ONLY (NO FEEDBACK)'
+                }
+            }
+        };
+
+        let currentDomain = 'text';
+        let currentMode = 'auto';
+        let isUnfolded = false;
+        let isPlaying = false;
+        let isInitialized = false;
+
+        function setDomain(domain) {
+            currentDomain = domain;
+            document.getElementById('btn-text').className = domain === 'text' ? 'px-4 py-2 rounded-lg text-sm font-semibold transition-all tab-active' : 'px-4 py-2 rounded-lg text-sm font-semibold text-slate-400 transition-all hover:text-slate-200';
+            document.getElementById('btn-stock').className = domain === 'stock' ? 'px-4 py-2 rounded-lg text-sm font-semibold transition-all tab-active' : 'px-4 py-2 rounded-lg text-sm font-semibold text-slate-400 transition-all hover:text-slate-200';
+            
+            updateUI();
+            // Instantly open the view if the user interacts, so they can see the changes.
+            if (isInitialized && !isUnfolded) document.getElementById('toggleView').click();
+        }
+
+        function setMode(mode) {
+            currentMode = mode;
+            document.getElementById('btn-auto').className = mode === 'auto' ? 'px-4 py-2 rounded-lg text-sm font-semibold transition-all mode-active flex items-center' : 'px-4 py-2 rounded-lg text-sm font-semibold text-slate-400 transition-all hover:text-slate-200 flex items-center';
+            document.getElementById('btn-non-auto').className = mode === 'non-auto' ? 'px-4 py-2 rounded-lg text-sm font-semibold transition-all mode-active' : 'px-4 py-2 rounded-lg text-sm font-semibold text-slate-400 transition-all hover:text-slate-200';
+            
+            updateUI();
+            // Instantly open the view if the user interacts, so they can see the changes.
+            if (isInitialized && !isUnfolded) document.getElementById('toggleView').click();
+        }
+
+        function updateUI() {
+            const data = configData[currentDomain][currentMode];
+            
+            // Text Variables
+            document.getElementById('desc-x').textContent = data.descX;
+            document.getElementById('desc-o').textContent = data.descO;
+            
+            // Panel Info
+            const panel = document.getElementById('mode-panel');
+            panel.className = `mt-4 p-4 rounded-xl shadow-inner border transition-colors duration-300 ${data.panelClass}`;
+            document.getElementById('mode-title').innerHTML = data.panelTitle;
+            document.getElementById('mode-desc').innerHTML = data.panelDesc;
+
+            // Feedback Paths Visibility
+            const feedbackPaths = document.getElementById('feedbackPaths');
+            feedbackPaths.style.display = currentMode === 'auto' ? 'block' : 'none';
+
+            // Inputs
+            for(let i=1; i<=3; i++) {
+                document.getElementById(`unfold-x-${i}`).textContent = data.inputs[i-1];
+            }
+
+            // Outputs Visualizations
+            for(let i=1; i<=3; i++) {
+                const container = document.getElementById(`out-viz-${i}`);
+                if (currentDomain === 'text') {
+                    container.innerHTML = generateTextSVG(data.outputs[i-1], currentMode);
+                } else {
+                    container.innerHTML = generateStockSVG(data.outputs[i-1], currentMode);
+                }
+                
+                // Force visibility immediately if we are already unfolded
+                if (isUnfolded) {
+                    container.style.opacity = '1';
+                }
+            }
+        }
+
+        const toggleBtn = document.getElementById('toggleView');
+        const playBtn = document.getElementById('playFlow');
+        const viewLabel = document.getElementById('viewLabel');
+        const foldedGroup = document.getElementById('foldedGroup');
+        const unfoldedGroup = document.getElementById('unfoldedGroup');
+        const weightPaths = document.querySelectorAll('.weight-path');
+        const weightLabels = document.querySelectorAll('.weight-label');
+        const feedbackPaths = document.querySelectorAll('.feedback-path');
+
+        // Hover functionality
+        function highlight(id) {
+            document.querySelectorAll(`[data-id="${id}"]`).forEach(el => {
+                if (el.tagName === 'path') {
+                    el.style.stroke = '#3b82f6';
+                    el.style.strokeWidth = isUnfolded ? '3' : '4';
+                    el.setAttribute('marker-end', 'url(#arrowhead-active)');
+                } else {
+                    el.classList.replace('fill-slate-400', 'fill-blue-600');
+                    el.style.fontWeight = '900';
+                }
+            });
+            document.querySelectorAll(`[data-math="${id.toLowerCase()}"]`).forEach(m => m.classList.add('active-math', 'font-bold', 'text-blue-600'));
+        }
+
+        function clearHighlight() {
+            weightPaths.forEach(el => {
+                el.style.stroke = '#cbd5e1';
+                el.style.strokeWidth = isUnfolded ? '2' : '3';
+                el.setAttribute('marker-end', 'url(#arrowhead)');
+            });
+            weightLabels.forEach(el => {
+                el.classList.replace('fill-blue-600', 'fill-slate-400');
+                el.style.fontWeight = '700';
+            });
+            document.querySelectorAll('.active-math').forEach(m => m.classList.remove('active-math', 'font-bold', 'text-blue-600'));
+        }
+
+        [weightPaths, weightLabels].forEach(collection => {
+            collection.forEach(el => {
+                el.addEventListener('mouseenter', () => highlight(el.getAttribute('data-id')));
+                el.addEventListener('mouseleave', clearHighlight);
+            });
+        });
+
+        toggleBtn.addEventListener('click', () => {
+            isUnfolded = !isUnfolded;
+            if (isUnfolded) {
+                foldedGroup.style.opacity = '0';
+                unfoldedGroup.style.opacity = '1';
+                unfoldedGroup.style.pointerEvents = 'auto';
+                toggleBtn.textContent = 'Fold Time Steps';
+                toggleBtn.classList.replace('bg-blue-600', 'bg-slate-700');
+                toggleBtn.classList.replace('hover:bg-blue-700', 'hover:bg-slate-800');
+                toggleBtn.classList.replace('ring-blue-600/30', 'ring-slate-600/30');
+                viewLabel.textContent = 'Unfolded Mode (Showing Outputs)';
+                
+                // Fade in output visualizations slightly after unfolding
+                setTimeout(() => {
+                    document.getElementById('out-viz-1').style.opacity = '1';
+                    document.getElementById('out-viz-2').style.opacity = '1';
+                    document.getElementById('out-viz-3').style.opacity = '1';
+                }, 300);
+
+            } else {
+                foldedGroup.style.opacity = '1';
+                unfoldedGroup.style.opacity = '0';
+                unfoldedGroup.style.pointerEvents = 'none';
+                toggleBtn.textContent = 'Unfold Time Steps (View Outputs)';
+                toggleBtn.classList.replace('bg-slate-700', 'bg-blue-600');
+                toggleBtn.classList.replace('hover:bg-slate-800', 'hover:bg-blue-700');
+                toggleBtn.classList.replace('ring-slate-600/30', 'ring-blue-600/30');
+                viewLabel.textContent = 'Folded Mode';
+                
+                document.getElementById('out-viz-1').style.opacity = '0';
+                document.getElementById('out-viz-2').style.opacity = '0';
+                document.getElementById('out-viz-3').style.opacity = '0';
+            }
+            stopFlow();
+        });
+
+        function startFlow() {
+            isPlaying = true;
+            playBtn.innerHTML = `<svg class="w-4 h-4 mr-2" fill="currentColor" viewBox="0 0 20 20"><path d="M4 4h12v12H4z"/></svg> Stop Flow`;
+            playBtn.classList.replace('bg-emerald-600', 'bg-red-600');
+            weightPaths.forEach(path => path.classList.add('flowing'));
+            feedbackPaths.forEach(path => path.classList.add('flowing'));
+        }
+
+        function stopFlow() {
+            isPlaying = false;
+            playBtn.innerHTML = `Run Data Flow`;
+            playBtn.classList.replace('bg-red-600', 'bg-emerald-600');
+            weightPaths.forEach(path => path.classList.remove('flowing'));
+            feedbackPaths.forEach(path => path.classList.remove('flowing'));
+        }
+
+        playBtn.addEventListener('click', () => {
+            if (isPlaying) stopFlow();
+            else startFlow();
+        });
+
+        // Safe Initialization
+        updateUI();
+        isInitialized = true;
+    </script>
+</body>
+</html>

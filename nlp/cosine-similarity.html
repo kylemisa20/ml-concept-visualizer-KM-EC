@@ -1,0 +1,452 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cosine Similarity Interactive</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&family=Fira+Code:wght@400;500&display=swap');
+        
+        body { font-family: 'Inter', sans-serif; background-color: #f8fafc; }
+        .math { font-family: 'Fira Code', monospace; }
+        
+        .vector-handle {
+            cursor: grab;
+            transition: r 0.2s;
+        }
+        .vector-handle:active { cursor: grabbing; r: 8; }
+        
+        .formula-container {
+            background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%);
+            color: #e2e8f0;
+        }
+
+        .highlight-a { color: #3b82f6; }
+        .highlight-b { color: #10b981; }
+        .highlight-prod { color: #f59e0b; }
+        
+        .arc-path {
+            transition: d 0.1s ease-out;
+        }
+
+        .embedding-table th {
+            font-size: 10px;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            color: #64748b;
+            padding: 8px;
+            border-bottom: 2px solid #f1f5f9;
+        }
+
+        .embedding-table td {
+            padding: 10px 8px;
+            font-family: 'Fira Code', monospace;
+            font-size: 12px;
+        }
+
+        .mode-toggle-btn {
+            transition: all 0.2s;
+        }
+        .mode-active {
+            background-color: #3b82f6;
+            color: white;
+            box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1);
+        }
+
+        .hidden-mode { display: none !important; }
+
+        .product-bar {
+            transition: height 0.3s cubic-bezier(0.4, 0, 0.2, 1), y 0.3s cubic-bezier(0.4, 0, 0.2, 1), fill 0.3s;
+            cursor: crosshair;
+        }
+        .product-bar:hover {
+            fill: #fbbf24 !important;
+            filter: drop-shadow(0 0 5px rgba(251, 191, 36, 0.5));
+        }
+
+        .metric-card {
+            background: rgba(255, 255, 255, 0.03);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            transition: all 0.3s;
+        }
+        .metric-card:hover { background: rgba(255, 255, 255, 0.07); }
+
+        /* Robust Floating Tooltip */
+        #bar-tooltip {
+            position: fixed;
+            pointer-events: none;
+            background: #0f172a;
+            color: white;
+            padding: 10px 14px;
+            border-radius: 8px;
+            font-size: 12px;
+            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.4);
+            z-index: 9999;
+            display: none;
+            border: 1px solid #334155;
+            transform: translate(-50%, -110%);
+        }
+
+        #plot-container {
+            transition: background-color 0.6s ease;
+        }
+    </style>
+</head>
+<body class="p-4 md:p-8">
+    <!-- Fixed Tooltip -->
+    <div id="bar-tooltip"></div>
+
+    <div class="max-w-6xl mx-auto bg-white rounded-2xl shadow-2xl overflow-hidden border border-slate-200">
+        <!-- Header -->
+        <div class="bg-slate-900 p-6 text-white flex flex-col md:flex-row justify-between items-center gap-4">
+            <div>
+                <h1 class="text-2xl font-bold italic tracking-tight">Cosine Similarity Explorer</h1>
+                <p class="text-slate-400 text-sm">Visualizing the geometry of meaning.</p>
+            </div>
+            
+            <div class="flex items-center gap-4">
+                <div class="bg-slate-800 p-1 rounded-xl flex border border-slate-700">
+                    <button id="btn-sparse" onclick="toggleMode('sparse')" class="mode-toggle-btn px-4 py-2 text-xs font-bold rounded-lg mode-active">Sparse (2D)</button>
+                    <button id="btn-dense" onclick="toggleMode('dense')" class="mode-toggle-btn px-4 py-2 text-xs font-bold rounded-lg text-slate-400 hover:text-white">Dense (5D)</button>
+                </div>
+            </div>
+        </div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-2">
+            <!-- Left Panel -->
+            <div class="p-6 bg-slate-50 flex flex-col items-center border-r border-slate-100">
+                
+                <!-- Sparse Table -->
+                <div id="sparse-table-container" class="w-full bg-white rounded-xl border border-slate-200 shadow-sm mb-4 overflow-hidden">
+                    <div class="bg-slate-100 px-4 py-2 border-b border-slate-200 flex justify-between items-center">
+                        <span class="text-[10px] font-bold text-slate-500 uppercase">Sparse Word Counts</span>
+                        <div class="flex items-center gap-2">
+                            <input type="checkbox" id="show-unit-vecs" onchange="update()" class="w-3 h-3 cursor-pointer">
+                            <label for="show-unit-vecs" class="text-[10px] font-bold text-slate-400 uppercase cursor-pointer">Unit Vectors</label>
+                        </div>
+                    </div>
+                    <table class="w-full embedding-table">
+                        <thead>
+                            <tr><th>Phrase</th><th class="text-center">"Hey"</th><th class="text-center">"There"</th></tr>
+                        </thead>
+                        <tbody>
+                            <tr class="border-b border-slate-50">
+                                <td class="font-semibold" id="name-a-sparse">"Hey there"</td>
+                                <td class="text-center highlight-a font-bold" id="table-ax">1.0</td>
+                                <td class="text-center highlight-a font-bold" id="table-ay">1.0</td>
+                            </tr>
+                            <tr>
+                                <td class="font-semibold" id="name-b-sparse">"Hey hey"</td>
+                                <td class="text-center highlight-b font-bold" id="table-bx">2.0</td>
+                                <td class="text-center highlight-b font-bold" id="table-by">0.0</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+
+                <!-- Dense Table -->
+                <div id="dense-table-container" class="w-full bg-white rounded-xl border border-slate-200 shadow-sm mb-4 overflow-hidden hidden-mode">
+                    <div class="bg-slate-100 px-4 py-2 border-b border-slate-200">
+                        <span class="text-[10px] font-bold text-slate-500 uppercase">Dense Embedding & Element-wise Products</span>
+                    </div>
+                    <table class="w-full embedding-table">
+                        <thead>
+                            <tr><th>Op</th><th class="text-center">D1</th><th class="text-center">D2</th><th class="text-center">D3</th><th class="text-center">D4</th><th class="text-center">D5</th></tr>
+                        </thead>
+                        <tbody id="dense-tbody"></tbody>
+                    </table>
+                </div>
+
+                <!-- PLOT AREA (Background Glow here) -->
+                <div id="plot-container" class="relative w-full aspect-square bg-white rounded-xl border border-slate-200 shadow-inner overflow-hidden flex items-center justify-center">
+                    
+                    <!-- Sparse SVG -->
+                    <svg id="plot-sparse" viewBox="-35 -25 170 160" class="w-full h-full select-none touch-none relative z-10">
+                        <g stroke="#f1f5f9" stroke-width="0.5">
+                            <line x1="0" y1="0" x2="0" y2="100" /><line x1="20" y1="0" x2="20" y2="100" /><line x1="40" y1="0" x2="40" y2="100" /><line x1="60" y1="0" x2="60" y2="100" /><line x1="80" y1="0" x2="80" y2="100" /><line x1="100" y1="0" x2="100" y2="100" />
+                            <line x1="0" y1="0" x2="100" y2="0" /><line x1="0" y1="20" x2="100" y2="20" /><line x1="0" y1="40" x2="100" y2="40" /><line x1="0" y1="60" x2="100" y2="60" /><line x1="0" y1="80" x2="100" y2="80" /><line x1="0" y1="100" x2="100" y2="100" />
+                        </g>
+                        <circle cx="0" cy="100" r="20" fill="none" stroke="#e2e8f0" stroke-width="0.5" stroke-dasharray="2,2" id="unit-circle" class="hidden-mode"/>
+                        <g stroke="#64748b" stroke-width="1.2">
+                            <line x1="0" y1="100" x2="110" y2="100" /><line x1="0" y1="100" x2="0" y2="-10" />
+                        </g>
+                        <g font-size="5" fill="#94a3b8" font-weight="bold" text-anchor="middle">
+                            <text x="0" y="110">0</text><text x="20" y="110">1</text><text x="40" y="110">2</text><text x="60" y="110">3</text><text x="80" y="110">4</text><text x="100" y="110">5</text>
+                        </g>
+                        <text x="112" y="100" font-size="6.5" fill="#1e293b" font-weight="800">"Hey"</text>
+                        <text x="-30" y="-12" font-size="6.5" fill="#1e293b" font-weight="800">"There"</text>
+                        <path id="angle-arc" d="" fill="rgba(249, 115, 22, 0.1)" stroke="#f97316" stroke-width="0.5" stroke-dasharray="1,1" class="arc-path" />
+                        <text id="angle-label" x="0" y="0" font-size="5" font-weight="bold" fill="#ea580c" text-anchor="middle">α</text>
+                        <line id="unit-a-line" x1="0" y1="100" x2="0" y2="100" stroke="#3b82f6" stroke-width="1" stroke-dasharray="1,1" opacity="0.6"/>
+                        <line id="unit-b-line" x1="0" y1="100" x2="0" y2="100" stroke="#10b981" stroke-width="1" stroke-dasharray="1,1" opacity="0.6"/>
+                        <line id="vec-a-line" x1="0" y1="100" x2="20" y2="80" stroke="#3b82f6" stroke-width="1.8" marker-end="url(#arrow-a)" />
+                        <circle id="vec-a-head" cx="20" cy="80" r="4.5" fill="white" stroke="#3b82f6" stroke-width="1.5" class="vector-handle" data-vec="a" />
+                        <line id="vec-b-line" x1="0" y1="100" x2="40" y2="100" stroke="#10b981" stroke-width="1.8" marker-end="url(#arrow-b)" />
+                        <circle id="vec-b-head" cx="40" cy="100" r="4.5" fill="white" stroke="#10b981" stroke-width="1.5" class="vector-handle" data-vec="b" />
+                        <defs>
+                            <marker id="arrow-a" markerWidth="6" markerHeight="6" refX="5" refY="3" orient="auto"><polygon points="0 0, 6 3, 0 6" fill="#3b82f6" /></marker>
+                            <marker id="arrow-b" markerWidth="6" markerHeight="6" refX="5" refY="3" orient="auto"><polygon points="0 0, 6 3, 0 6" fill="#10b981" /></marker>
+                        </defs>
+                    </svg>
+
+                    <!-- Dense SVG -->
+                    <svg id="plot-dense" viewBox="0 0 100 100" class="w-full h-full hidden-mode relative z-10 p-4">
+                        <line x1="0" y1="10" x2="100" y2="10" stroke="#f1f5f9" stroke-width="0.5" />
+                        <line x1="0" y1="30" x2="100" y2="30" stroke="#f1f5f9" stroke-width="0.5" />
+                        <line x1="0" y1="50" x2="100" y2="50" stroke="#cbd5e1" stroke-width="1" />
+                        <line x1="0" y1="70" x2="100" y2="70" stroke="#f1f5f9" stroke-width="0.5" />
+                        <line x1="0" y1="90" x2="100" y2="90" stroke="#f1f5f9" stroke-width="0.5" />
+                        <text x="50" y="8" font-size="4" fill="#94a3b8" font-weight="bold" text-anchor="middle">Aᵢ × Bᵢ Component Profile</text>
+                        <g id="bars-group"></g>
+                        <g font-size="3.5" fill="#64748b" font-weight="bold" text-anchor="middle">
+                            <text x="10" y="55">D1</text><text x="30" y="55">D2</text>
+                            <text x="50" y="55">D3</text><text x="70" y="55">D4</text>
+                            <text x="90" y="55">D5</text>
+                        </g>
+                    </svg>
+                </div>
+
+                <div id="dense-info" class="w-full p-4 bg-white rounded-xl border border-slate-200 shadow-inner hidden-mode mt-4">
+                    <p class="text-[11px] text-slate-600 leading-relaxed">
+                        <strong>Hover the bars!</strong> Each bar is a "match" between specific semantic features. Red bars indicate dimensions where concepts differ.
+                    </p>
+                </div>
+            </div>
+
+            <!-- Right Panel -->
+            <div class="flex flex-col h-full formula-container p-8">
+                <div class="flex justify-between items-center mb-6">
+                    <h2 class="text-xs font-bold text-blue-400 uppercase tracking-widest">Similarity Engine</h2>
+                    <div class="text-[10px] text-slate-500 font-mono" id="vector-status">Sparse Mode</div>
+                </div>
+                
+                <div class="grid grid-cols-2 gap-4 mb-8">
+                    <div class="metric-card p-4 rounded-xl">
+                        <div class="text-[10px] text-slate-500 font-bold uppercase mb-1">Similarity (Cos)</div>
+                        <div class="text-4xl font-bold text-white math" id="sim-score">0.000</div>
+                    </div>
+                    <div class="metric-card p-4 rounded-xl">
+                        <div class="text-[10px] text-slate-500 font-bold uppercase mb-1">Distance (Eucl)</div>
+                        <div class="text-4xl font-bold text-slate-300 math" id="dist-score">0.00</div>
+                    </div>
+                </div>
+
+                <div class="space-y-6">
+                    <div id="angle-container" class="flex justify-between items-center bg-white/5 p-3 rounded-lg border border-white/5">
+                        <span class="text-xs text-slate-400">Angular Difference (α)</span>
+                        <span class="text-xl font-bold text-orange-400 math" id="angle-val">0°</span>
+                    </div>
+
+                    <div class="math text-sm p-4 bg-black/20 rounded-xl border border-white/5 overflow-x-auto">
+                        <div class="flex items-center gap-4">
+                            <div class="flex flex-col items-center shrink-0">
+                                <div class="pb-1 border-b border-slate-500 w-full text-center">A · B</div>
+                                <div class="pt-1 text-[11px]">||A|| × ||B||</div>
+                            </div>
+                            <span class="text-slate-500">=</span>
+                            <div class="flex flex-col items-center shrink-0">
+                                <div class="pb-1 border-b border-slate-500 w-full text-center text-blue-300" id="calc-dot">--</div>
+                                <div class="pt-1 text-[11px] text-slate-400" id="calc-norm">--</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div id="interpretation" class="p-4 rounded-lg bg-blue-500/10 border border-blue-500/20 text-xs text-blue-100"></div>
+
+                    <!-- Presets -->
+                    <div class="pt-6 border-t border-white/10">
+                        <h2 class="text-xs font-bold text-slate-500 uppercase mb-4">Presets</h2>
+                        <div id="presets-sparse" class="grid gap-2">
+                            <button onclick="loadSparsePreset('hey-there', 'hey-hey', 'Hey there', 'Hey hey')" class="bg-white/5 hover:bg-white/10 p-2 rounded text-left text-xs transition">Partial Overlap</button>
+                            <button onclick="loadSparsePreset('hey-there', 'long', 'Hey there', 'Longer phrase')" class="bg-white/5 hover:bg-white/10 p-2 rounded text-left text-xs transition">Length Invariance (1.0)</button>
+                        </div>
+                        <div id="presets-dense" class="grid gap-2 hidden-mode">
+                            <button onclick="loadDensePreset('king', 'queen', 'King', 'Queen')" class="bg-white/5 hover:bg-white/10 p-2 rounded text-left text-xs transition">"King" vs "Queen" (Semantic match)</button>
+                            <button onclick="loadDensePreset('king', 'orange', 'King', 'Orange')" class="bg-white/5 hover:bg-white/10 p-2 rounded text-left text-xs transition">"King" vs "Orange" (No match)</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let currentMode = 'sparse';
+        const plotSparse = document.getElementById('plot-sparse');
+        const plotDense = document.getElementById('plot-dense');
+        const plotContainer = document.getElementById('plot-container');
+        const barsGroup = document.getElementById('bars-group');
+        const tooltip = document.getElementById('bar-tooltip');
+        
+        let vecA = [1, 1, 0, 0, 0]; 
+        let vecB = [2, 0, 0, 0, 0];
+        let labels = ["Hey", "There"];
+
+        function toggleMode(mode) {
+            currentMode = mode;
+            document.getElementById('btn-sparse').className = `mode-toggle-btn px-4 py-2 text-xs font-bold rounded-lg ${mode === 'sparse' ? 'mode-active' : 'text-slate-400 hover:text-white'}`;
+            document.getElementById('btn-dense').className = `mode-toggle-btn px-4 py-2 text-xs font-bold rounded-lg ${mode === 'dense' ? 'mode-active' : 'text-slate-400 hover:text-white'}`;
+            
+            document.getElementById('sparse-table-container').classList.toggle('hidden-mode', mode !== 'sparse');
+            plotSparse.classList.toggle('hidden-mode', mode !== 'sparse');
+            document.getElementById('presets-sparse').classList.toggle('hidden-mode', mode !== 'sparse');
+            document.getElementById('angle-container').classList.toggle('hidden-mode', mode !== 'sparse');
+
+            document.getElementById('dense-table-container').classList.toggle('hidden-mode', mode !== 'dense');
+            document.getElementById('dense-info').classList.toggle('hidden-mode', mode !== 'dense');
+            document.getElementById('presets-dense').classList.toggle('hidden-mode', mode !== 'dense');
+            plotDense.classList.toggle('hidden-mode', mode !== 'dense');
+            document.getElementById('vector-status').textContent = mode === 'sparse' ? 'Sparse 2D' : 'Dense 5D';
+
+            if (mode === 'dense') loadDensePreset('king', 'queen', 'King', 'Queen');
+            else loadSparsePreset('hey-there', 'hey-hey', 'Hey there', 'Hey hey');
+        }
+
+        function update() {
+            if (currentMode === 'sparse') updateSparseVisuals();
+            else updateDenseUI();
+
+            const dims = currentMode === 'sparse' ? 2 : 5;
+            let dot = 0, normA = 0, normB = 0, sqDist = 0;
+            for (let i = 0; i < dims; i++) {
+                dot += vecA[i] * vecB[i];
+                normA += vecA[i] * vecA[i];
+                normB += vecB[i] * vecB[i];
+                sqDist += Math.pow(vecA[i] - vecB[i], 2);
+            }
+            normA = Math.sqrt(normA); normB = Math.sqrt(normB);
+            const score = (normA === 0 || normB === 0) ? 0 : dot / (normA * normB);
+            const dist = Math.sqrt(sqDist);
+
+            document.getElementById('sim-score').textContent = score.toFixed(3);
+            document.getElementById('dist-score').textContent = dist.toFixed(2);
+            document.getElementById('calc-dot').textContent = currentMode === 'sparse' ? `(${vecA[0].toFixed(1)}×${vecB[0].toFixed(1)}) + (${vecA[1].toFixed(1)}×${vecB[1].toFixed(1)}) = ${dot.toFixed(2)}` : `Σ(AᵢBᵢ) = ${dot.toFixed(2)}`;
+            document.getElementById('calc-norm').textContent = `${normA.toFixed(2)} × ${normB.toFixed(2)} = ${(normA * normB).toFixed(2)}`;
+
+            // HEATMAP CHANGE
+            if (score > 0.8) plotContainer.style.backgroundColor = `rgba(59, 130, 246, 0.15)`; // Blue glow
+            else if (score < 0.2) plotContainer.style.backgroundColor = `rgba(239, 68, 68, 0.1)`; // Red glow
+            else plotContainer.style.backgroundColor = `#ffffff`;
+
+            const interp = document.getElementById('interpretation');
+            if (currentMode === 'sparse') {
+                const ang = Math.acos(Math.max(-1, Math.min(1, score))) * 180 / Math.PI;
+                document.getElementById('angle-val').textContent = Math.round(ang) + '°';
+                interp.innerHTML = score > 0.95 ? "<b>High Similarity:</b> Vectors are almost parallel." : "<b>Mixed Similarity:</b> Vectors are diverging.";
+            } else {
+                interp.innerHTML = score > 0.8 ? "<b>High Similarity:</b> Concepts are semantically identical." : "<b>Low Similarity:</b> Unrelated concepts.";
+            }
+        }
+
+        const vecAHead = document.getElementById('vec-a-head');
+        const vecBHead = document.getElementById('vec-b-head');
+        const vecALine = document.getElementById('vec-a-line');
+        const vecBLine = document.getElementById('vec-b-line');
+        const unitALine = document.getElementById('unit-a-line');
+        const unitBLine = document.getElementById('unit-b-line');
+        const angleArc = document.getElementById('angle-arc');
+        const angleLabel = document.getElementById('angle-label');
+        const unitCircle = document.getElementById('unit-circle');
+
+        function updateSparseVisuals() {
+            const ax_svg = vecA[0] * 20, ay_svg = 100 - (vecA[1] * 20);
+            const bx_svg = vecB[0] * 20, by_svg = 100 - (vecB[1] * 20);
+
+            vecALine.setAttribute('x2', ax_svg); vecALine.setAttribute('y2', ay_svg);
+            vecBLine.setAttribute('x2', bx_svg); vecBLine.setAttribute('y2', by_svg);
+            vecAHead.setAttribute('cx', ax_svg); vecAHead.setAttribute('cy', ay_svg);
+            vecBHead.setAttribute('cx', bx_svg); vecBHead.setAttribute('cy', by_svg);
+
+            const showUnit = document.getElementById('show-unit-vecs').checked;
+            unitCircle.classList.toggle('hidden-mode', !showUnit);
+            unitALine.setAttribute('stroke-opacity', showUnit ? 1 : 0);
+            unitBLine.setAttribute('stroke-opacity', showUnit ? 1 : 0);
+
+            if(showUnit) {
+                const nA = Math.sqrt(vecA[0]**2 + vecA[1]**2), nB = Math.sqrt(vecB[0]**2 + vecB[1]**2);
+                if(nA > 0) { unitALine.setAttribute('x2', (vecA[0]/nA)*20); unitALine.setAttribute('y2', 100-(vecA[1]/nA)*20); }
+                if(nB > 0) { unitBLine.setAttribute('x2', (vecB[0]/nB)*20); unitBLine.setAttribute('y2', 100-(vecB[1]/nB)*20); }
+            }
+
+            document.getElementById('table-ax').textContent = vecA[0].toFixed(1);
+            document.getElementById('table-ay').textContent = vecA[1].toFixed(1);
+            document.getElementById('table-bx').textContent = vecB[0].toFixed(1);
+            document.getElementById('table-by').textContent = vecB[1].toFixed(1);
+
+            const r = 18, sA = Math.atan2(vecA[1], vecA[0]), eA = Math.atan2(vecB[1], vecB[0]);
+            const s = { x: Math.cos(sA)*r, y: 100-(Math.sin(sA)*r) }, e = { x: Math.cos(eA)*r, y: 100-(Math.sin(eA)*r) };
+            angleArc.setAttribute('d', `M 0 100 L ${s.x} ${s.y} A ${r} ${r} 0 0 ${eA > sA ? 0 : 1} ${e.x} ${e.y} Z`);
+            const mid = (sA + eA) / 2;
+            angleLabel.setAttribute('x', Math.cos(mid)*(r+8)); angleLabel.setAttribute('y', 100-(Math.sin(mid)*(r+8)));
+        }
+
+        function updateDenseUI() {
+            const products = vecA.map((v, i) => v * vecB[i]);
+            const tbody = document.getElementById('dense-tbody');
+            tbody.innerHTML = `
+                <tr class="border-b border-slate-50"><td>Token A (${labels[0]})</td>${vecA.map(v => `<td class="text-center highlight-a">${v.toFixed(2)}</td>`).join('')}</tr>
+                <tr class="border-b border-slate-50"><td>Token B (${labels[1]})</td>${vecB.map(v => `<td class="text-center highlight-b">${v.toFixed(2)}</td>`).join('')}</tr>
+                <tr class="bg-orange-50/50 font-bold"><td>Aᵢ × Bᵢ</td>${products.map(v => `<td class="text-center highlight-prod">${v.toFixed(2)}</td>`).join('')}</tr>
+            `;
+
+            barsGroup.innerHTML = '';
+            products.forEach((val, i) => {
+                const x = 5 + (i * 20), baseline = 50, scale = 40;
+                const h = Math.max(4, Math.abs(val) * scale);
+                const y = val >= 0 ? baseline - h : baseline;
+                const rect = document.createElementNS("http://www.w3.org/2000/svg", "rect");
+                rect.setAttribute("x", x); rect.setAttribute("y", y); rect.setAttribute("width", 12); rect.setAttribute("height", h);
+                rect.setAttribute("fill", val > 0 ? "#f59e0b" : "#ef4444");
+                rect.setAttribute("rx", "2");
+                rect.setAttribute("class", "product-bar");
+                
+                // TOOLTIP LOGIC
+                rect.onmousemove = (e) => {
+                    tooltip.style.display = 'block';
+                    tooltip.style.left = e.clientX + 'px';
+                    tooltip.style.top = e.clientY + 'px';
+                    tooltip.innerHTML = `<strong>Dim D${i+1}</strong><br>${labels[0]}: ${vecA[i].toFixed(2)}<br>${labels[1]}: ${vecB[i].toFixed(2)}<br><hr class='my-1 border-white/20'>Product: ${val.toFixed(2)}`;
+                };
+                rect.onmouseleave = () => tooltip.style.display = 'none';
+                barsGroup.appendChild(rect);
+            });
+        }
+
+        let activeVec = null;
+        [vecAHead, vecBHead].forEach(head => {
+            const start = (e) => { e.preventDefault(); activeVec = e.target.dataset.vec; };
+            head.onmousedown = start; head.ontouchstart = start;
+        });
+
+        window.onmousemove = (e) => {
+            if (!activeVec) return;
+            const pt = plotSparse.createSVGPoint();
+            pt.x = e.clientX || e.touches[0].clientX; pt.y = e.clientY || e.touches[0].clientY;
+            const svgPt = pt.matrixTransform(plotSparse.getScreenCTM().inverse());
+            if (activeVec === 'a') { vecA[0] = Math.max(0, Math.min(5, svgPt.x/20)); vecA[1] = Math.max(0, Math.min(5, (100-svgPt.y)/20)); }
+            else { vecB[0] = Math.max(0, Math.min(5, svgPt.x/20)); vecB[1] = Math.max(0, Math.min(5, (100-svgPt.y)/20)); }
+            update();
+        };
+
+        window.onmouseup = () => activeVec = null;
+        window.ontouchend = () => activeVec = null;
+
+        function loadSparsePreset(p1, p2, nA, nB) {
+            const d = { 'hey-there': [1,1], 'hey-hey': [2,0], 'long': [2,2], 'hey': [1,0], 'there': [0,1] };
+            vecA = [...d[p1], 0,0,0]; vecB = [...d[p2], 0,0,0];
+            document.getElementById('name-a-sparse').textContent = `"${nA}"`;
+            document.getElementById('name-b-sparse').textContent = `"${nB}"`;
+            update();
+        }
+
+        function loadDensePreset(p1, p2, nA, nB) {
+            const d = { 'king': [0.91, 0.12, 0.85, 0.05, 0.44], 'queen': [0.88, 0.15, 0.82, 0.04, 0.42], 'orange': [0.12, 0.95, 0.02, 0.11, 0.77] };
+            vecA = d[p1]; vecB = d[p2]; labels = [nA, nB];
+            update();
+        }
+
+        update();
+    </script>
+</body>
+</html>

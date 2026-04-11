@@ -1,0 +1,464 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Word-Level Transfer Learning & Fine-Tuning</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <style>
+        @keyframes pulse-ring {
+            0% { transform: scale(.33); opacity: 1; }
+            80%, 100% { opacity: 0; }
+        }
+        .dot-transition { transition: all 1.2s cubic-bezier(0.4, 0, 0.2, 1); }
+        .fade-in { animation: fadeIn 0.5s ease-in forwards; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+        
+        /* Flow line animation */
+        .flow-line {
+            stroke-dasharray: 10;
+            animation: dash 5s linear infinite;
+        }
+        @keyframes dash {
+            to { stroke-dashoffset: -100; }
+        }
+        
+        .matrix-row-pulse {
+            animation: matrixPulse 2s infinite ease-in-out;
+        }
+        @keyframes matrixPulse {
+            0%, 100% { opacity: 0.3; }
+            50% { opacity: 1; background-color: #60a5fa; }
+        }
+    </style>
+</head>
+<body class="bg-slate-50">
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect } = React;
+
+        // Icons
+        const IconDatabase = () => <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4m0 5c0 2.21-3.582 4-8 4s-8-1.79-8-4" /></svg>;
+        const IconLock = () => <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" /></svg>;
+        const IconUnlock = () => <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 11V7a4 4 0 118 0m-4 8v2M3 21h18" /></svg>;
+        const IconArrow = () => <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14 5l7 7m0 0l-7 7m7-7H3" /></svg>;
+        const IconLayers = ({ className }) => <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" /></svg>;
+        const IconNetwork = ({ className }) => <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 3v2m6-2v2M9 19v2m6-2v2M5 9H3m2 6H3m18-6h-2m2 6h-2M7 19h10a2 2 0 002-2V7a2 2 0 00-2-2H7a2 2 0 00-2-2v10a2 2 0 002 2zM9 9h6v6H9V9z" /></svg>;
+        const IconSettings = ({ className }) => <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m12 0a2 2 0 100-4m0 4a2 2 0 110-4m-6 0a2 2 0 100 4m0-4a2 2 0 110 4m-6 0v2m0-6V4m6 6v10m6-2v2m0-6V4" /></svg>;
+        const IconCheck = () => <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>;
+        const IconRotateCcw = ({ className }) => <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>;
+        const IconVariable = ({ className }) => <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4" /></svg>;
+        const IconMessageSquare = ({ className }) => <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" /></svg>;
+        const IconShieldCheck = ({ className }) => <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" /></svg>;
+
+        const App = () => {
+            const [modelType, setModelType] = useState('word'); // 'word' or 'sentence'
+            const [mode, setMode] = useState('frozen');
+            const [isTraining, setIsTraining] = useState(false);
+            const [progress, setProgress] = useState(0);
+            const [sentimentResult, setSentimentResult] = useState(null);
+
+            const wordInitialCoords = {
+                good: { x: 45, y: 50 },
+                amazing: { x: 75, y: 25 },
+                enjoyable: { x: 82, y: 38 },
+                thrilling: { x: 70, y: 18 },
+                bad: { x: 20, y: 80 },
+                awful: { x: 15, y: 70 }
+            };
+
+            const sentenceInitialCoords = {
+                "T2 Review": { x: 40, y: 55 },
+                "Masterpiece": { x: 85, y: 15 },
+                "Greatest Sequel": { x: 80, y: 25 },
+                "Disaster": { x: 10, y: 85 },
+                "Waste of Time": { x: 15, y: 90 }
+            };
+
+            const [coords, setCoords] = useState(wordInitialCoords);
+
+            useEffect(() => {
+                reset();
+                if (modelType === 'sentence') {
+                    setCoords(sentenceInitialCoords);
+                } else {
+                    setCoords(wordInitialCoords);
+                }
+            }, [modelType, mode]);
+
+            const handleTrain = () => {
+                if (isTraining) return;
+                setIsTraining(true);
+                setProgress(0);
+                setSentimentResult(null);
+
+                const duration = 3500;
+                const startTime = Date.now();
+
+                const animate = () => {
+                    const elapsed = Date.now() - startTime;
+                    const p = Math.min(elapsed / duration, 1);
+                    setProgress(p * 100);
+
+                    if (mode === 'fine-tuned') {
+                        if (modelType === 'word') {
+                            setCoords({
+                                ...wordInitialCoords,
+                                good: { 
+                                    x: wordInitialCoords.good.x + (wordInitialCoords.enjoyable.x - wordInitialCoords.good.x - 4) * p,
+                                    y: wordInitialCoords.good.y + (wordInitialCoords.enjoyable.y - wordInitialCoords.good.y + 4) * p
+                                },
+                                thrilling: {
+                                    x: wordInitialCoords.thrilling.x + (wordInitialCoords.amazing.x - wordInitialCoords.thrilling.x - 2) * p,
+                                    y: wordInitialCoords.thrilling.y + (wordInitialCoords.amazing.y - wordInitialCoords.thrilling.y + 2) * p
+                                }
+                            });
+                        } else {
+                            setCoords({
+                                ...sentenceInitialCoords,
+                                "T2 Review": {
+                                    x: sentenceInitialCoords["T2 Review"].x + (sentenceInitialCoords["Greatest Sequel"].x - sentenceInitialCoords["T2 Review"].x - 5) * p,
+                                    y: sentenceInitialCoords["T2 Review"].y + (sentenceInitialCoords["Greatest Sequel"].y - sentenceInitialCoords["T2 Review"].y + 5) * p
+                                }
+                            });
+                        }
+                    }
+
+                    if (p < 1) {
+                        requestAnimationFrame(animate);
+                    } else {
+                        setTimeout(() => {
+                            setIsTraining(false);
+                            setSentimentResult('positive');
+                        }, 400);
+                    }
+                };
+
+                requestAnimationFrame(animate);
+            };
+
+            const reset = () => {
+                setCoords(modelType === 'word' ? wordInitialCoords : sentenceInitialCoords);
+                setProgress(0);
+                setIsTraining(false);
+                setSentimentResult(null);
+            };
+
+            const reviewTokens = ["Terminator", "2", "delivered", "a", "thrilling", "blend", "of", "action", "..."];
+
+            return (
+                <div className="max-w-6xl mx-auto p-4 md:p-8 text-slate-800">
+                    <header className="mb-4">
+                        <h1 className="text-3xl font-bold text-slate-900 tracking-tight">Transfer Learning Playground</h1>
+                        <p className="text-slate-600 mt-2">Compare how different architectures adapt pretrained knowledge to sentiment tasks.</p>
+                    </header>
+
+                    {/* Model Type Selector */}
+                    <div className="flex gap-1 bg-slate-200 p-1 rounded-xl mb-8 w-fit">
+                        <button 
+                            onClick={() => setModelType('word')}
+                            className={`px-6 py-2 rounded-lg text-sm font-bold transition-all ${modelType === 'word' ? 'bg-white shadow-sm text-blue-600' : 'text-slate-500 hover:text-slate-700'}`}
+                        >
+                            Word-Level (GloVe)
+                        </button>
+                        <button 
+                            onClick={() => setModelType('sentence')}
+                            className={`px-6 py-2 rounded-lg text-sm font-bold transition-all ${modelType === 'sentence' ? 'bg-white shadow-sm text-blue-600' : 'text-slate-500 hover:text-slate-700'}`}
+                        >
+                            Sentence-Level (SBERT)
+                        </button>
+                    </div>
+
+                    <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
+                        {/* Control Panel */}
+                        <div className="lg:col-span-4 space-y-6">
+                            <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
+                                <h2 className="text-lg font-bold mb-4 flex items-center gap-2 text-blue-600">
+                                    <IconSettings className="w-5 h-5" /> Training Setup
+                                </h2>
+                                
+                                <div className="space-y-3">
+                                    <button 
+                                        onClick={() => setMode('frozen')}
+                                        className={`w-full flex items-center justify-between p-4 rounded-xl border-2 transition-all ${mode === 'frozen' ? 'border-blue-500 bg-blue-50 shadow-sm' : 'border-slate-100 hover:border-slate-200'}`}
+                                    >
+                                        <div className="text-left">
+                                            <div className="font-bold text-slate-800">Frozen Mode</div>
+                                            <div className="text-[11px] text-slate-500">Static weights, prevents overfitting</div>
+                                        </div>
+                                        <div className={mode === 'frozen' ? 'text-blue-500' : 'text-slate-300'}><IconLock /></div>
+                                    </button>
+
+                                    <button 
+                                        onClick={() => setMode('fine-tuned')}
+                                        className={`w-full flex items-center justify-between p-4 rounded-xl border-2 transition-all ${mode === 'fine-tuned' ? 'border-blue-500 bg-blue-50 shadow-sm' : 'border-slate-100 hover:border-slate-200'}`}
+                                    >
+                                        <div className="text-left">
+                                            <div className="font-bold text-slate-800">Fine-Tuned Mode</div>
+                                            <div className="text-[11px] text-slate-500">Updates weights for task-specific nuances</div>
+                                        </div>
+                                        <div className={mode === 'fine-tuned' ? 'text-blue-500' : 'text-slate-300'}><IconUnlock /></div>
+                                    </button>
+                                </div>
+
+                                <div className="mt-8 pt-6 border-t border-slate-100">
+                                    <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3">Input Text (Review Corpus)</p>
+                                    <div className="p-4 bg-slate-900 text-slate-200 rounded-xl text-xs font-mono mb-6 leading-relaxed border-l-4 border-amber-400 shadow-inner">
+                                        "Terminator 2 delivered a <span className="text-amber-400 font-bold">thrilling</span> blend of action, emotion, and groundbreaking visuals — an <span className="text-amber-400 font-bold">enjoying</span> experience that still holds up as one of the greatest sci-fi sequels ever made."
+                                    </div>
+                                    <div className="flex gap-2">
+                                        <button 
+                                            onClick={handleTrain}
+                                            disabled={isTraining}
+                                            className={`flex-1 py-4 px-4 rounded-xl font-bold transition-all relative overflow-hidden ${isTraining ? 'bg-slate-100 text-slate-400' : 'bg-blue-600 text-white hover:bg-blue-700 shadow-xl shadow-blue-100 active:scale-95'}`}
+                                        >
+                                            {isTraining ? 'Training Pipeline...' : 'Run Sentiment Classifier'}
+                                            {isTraining && (
+                                                <div className="absolute bottom-0 left-0 h-1 bg-blue-400" style={{ width: `${progress}%` }}></div>
+                                            )}
+                                        </button>
+                                        <button 
+                                            onClick={reset}
+                                            disabled={isTraining}
+                                            className={`px-4 rounded-xl border-2 border-slate-200 text-slate-500 hover:bg-slate-50 transition-all ${isTraining ? 'opacity-50 cursor-not-allowed' : 'active:scale-95'}`}
+                                            title="Reset Visualization"
+                                        >
+                                            <IconRotateCcw className="w-5 h-5" />
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div className={`p-6 rounded-2xl border transition-all duration-500 ${sentimentResult ? 'bg-emerald-50 border-emerald-200 scale-100 opacity-100 shadow-lg' : 'bg-slate-50 border-slate-200 opacity-50 scale-95'}`}>
+                                <h3 className={`font-bold mb-2 flex items-center gap-2 ${sentimentResult ? 'text-emerald-800' : 'text-slate-500'}`}>
+                                    Classification Result
+                                </h3>
+                                <div className="flex items-center gap-3">
+                                    <div className={`w-10 h-10 rounded-full flex items-center justify-center ${sentimentResult === 'positive' ? 'bg-emerald-500 text-white animate-bounce' : 'bg-slate-200 text-slate-400'}`}>
+                                        <IconCheck />
+                                    </div>
+                                    <span className={`text-2xl font-black ${sentimentResult === 'positive' ? 'text-emerald-600' : 'text-slate-400'}`}>
+                                        {sentimentResult ? 'POSITIVE' : 'WAITING...'}
+                                    </span>
+                                </div>
+                                <p className="text-[11px] text-slate-500 mt-3 leading-tight">
+                                    {mode === 'fine-tuned' 
+                                        ? `The fine-tuned ${modelType === 'word' ? 'embeddings' : 'sentence encoder'} shifted the internal representation closer to positive concepts, boosting classifier confidence.`
+                                        : "The classifier used fixed pretrained definitions. While correct, it lacked the task-specific precision of fine-tuning."}
+                                </p>
+                            </div>
+                        </div>
+
+                        {/* Visualization Area */}
+                        <div className="lg:col-span-8 space-y-8">
+                            
+                            {/* Pipeline Section */}
+                            <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 overflow-hidden relative">
+                                <h2 className="text-lg font-bold mb-8">
+                                    {modelType === 'word' ? 'Word-Level Pipeline (Tokens)' : 'Sentence-Level Pipeline (Global Context)'}
+                                </h2>
+                                
+                                {modelType === 'word' ? (
+                                    <div className="grid grid-cols-5 gap-2 items-center text-center relative animate-in fade-in duration-500">
+                                        {/* 1. Tokens */}
+                                        <div className="space-y-2">
+                                            <div className="text-[9px] font-bold text-slate-400 uppercase">1. Tokens</div>
+                                            <div className="flex flex-col gap-1">
+                                                {reviewTokens.map((t, i) => (
+                                                    <div key={i} className={`p-1 text-[9px] border rounded transition-colors duration-300 ${isTraining && progress > (i*5) ? 'bg-amber-50 border-amber-200 text-amber-700' : 'bg-slate-50 border-slate-100 text-slate-400'}`}>
+                                                        {t}
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        </div>
+
+                                        <div className="flex justify-center"><IconArrow /></div>
+
+                                        {/* 2. Enhanced Embedding Layer (Matrix) */}
+                                        <div className="space-y-2 relative">
+                                            <div className="text-[9px] font-bold text-slate-400 uppercase">2. Embedding Table</div>
+                                            <div className={`p-3 border-2 rounded-xl transition-all ${isTraining && mode === 'fine-tuned' ? 'border-blue-400 bg-blue-50 shadow-md' : 'border-slate-100 bg-slate-50/50'}`}>
+                                                <div className="grid grid-rows-6 gap-1.5">
+                                                    {[...Array(6)].map((_, rowIndex) => (
+                                                        <div key={rowIndex} className="flex gap-1 justify-center">
+                                                            {[...Array(5)].map((_, cellIndex) => (
+                                                                <div 
+                                                                    key={cellIndex} 
+                                                                    className={`w-3 h-3 rounded-sm transition-all duration-300 ${
+                                                                        isTraining && progress > 20 && rowIndex === Math.floor((progress % 40) / 7) 
+                                                                        ? 'bg-blue-500 scale-110 shadow-sm' 
+                                                                        : 'bg-slate-200'
+                                                                    }`}
+                                                                />
+                                                            ))}
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                                <div className="mt-3 text-[10px] font-bold text-slate-600 flex items-center justify-center gap-1">
+                                                    {mode === 'frozen' ? <IconLock className="w-3 h-3"/> : <IconUnlock className="w-3 h-3 text-blue-500"/>}
+                                                    {mode === 'frozen' ? 'Lookup Table' : 'Active Learning'}
+                                                </div>
+                                            </div>
+                                            {isTraining && mode === 'fine-tuned' && (
+                                                <div className="absolute -top-4 left-1/2 -translate-x-1/2 text-[8px] bg-blue-500 text-white px-1.5 py-0.5 rounded font-black tracking-widest animate-bounce">GRADIENT</div>
+                                            )}
+                                        </div>
+
+                                        <div className="flex justify-center"><IconArrow /></div>
+
+                                        {/* 3. Enhanced Aggregated Input */}
+                                        <div className="space-y-2">
+                                            <div className="text-[9px] font-bold text-slate-400 uppercase">3. Aggregation</div>
+                                            <div className={`relative p-3 rounded-2xl border-2 transition-all duration-500 flex flex-col items-center justify-center min-h-[110px] ${isTraining && progress > 55 ? 'border-indigo-400 bg-indigo-50 shadow-md scale-105' : 'border-slate-100 bg-slate-50/30'}`}>
+                                                <div className="flex flex-col items-center gap-1 mb-3">
+                                                    <div className="flex gap-0.5 relative">
+                                                        {[...Array(4)].map((_, i) => (
+                                                            <div key={i} className={`w-3 h-1 rounded-full transition-all duration-500 ${isTraining && progress > 60 ? 'bg-indigo-300 -translate-y-1' : 'bg-slate-200'}`} />
+                                                        ))}
+                                                        {isTraining && progress > 65 && (
+                                                            <div className="absolute -bottom-3 left-1/2 -translate-x-1/2 text-[14px] font-bold text-indigo-600">÷ N</div>
+                                                        )}
+                                                    </div>
+                                                    <div className={`text-[16px] font-bold transition-opacity mt-2 ${isTraining && progress > 60 ? 'opacity-100 text-indigo-700' : 'opacity-20'}`}>Σ</div>
+                                                </div>
+                                                <div className={`w-12 h-12 rounded-full border-2 border-indigo-200 flex items-center justify-center shadow-inner transition-all ${isTraining && progress > 80 ? 'bg-white scale-110 border-solid border-indigo-500 ring-4 ring-indigo-50' : 'border-dashed'}`}>
+                                                    <div className="flex flex-col items-center">
+                                                        <div className={`h-1.5 w-7 rounded-full mb-0.5 transition-colors ${isTraining && progress > 80 ? 'bg-indigo-600' : 'bg-slate-200'}`} />
+                                                        <div className={`h-1.5 w-5 rounded-full transition-colors ${isTraining && progress > 80 ? 'bg-indigo-400' : 'bg-slate-200'}`} />
+                                                    </div>
+                                                </div>
+                                                <div className="mt-2 text-[10px] font-black text-indigo-700 bg-indigo-100/50 px-2 rounded tracking-tighter">Average Pool</div>
+                                            </div>
+                                            <p className="text-[11px] text-slate-500 leading-tight font-medium mt-1">Tokens are averaged into one vector.</p>
+                                        </div>
+                                    </div>
+                                ) : (
+                                    <div className="grid grid-cols-5 gap-2 items-center text-center relative animate-in fade-in duration-500">
+                                        {/* 1. Full Sentence */}
+                                        <div className="space-y-2">
+                                            <div className="text-[9px] font-bold text-slate-400 uppercase">1. Input Sentence</div>
+                                            <div className={`p-3 border rounded-xl text-[10px] leading-tight font-medium transition-all ${isTraining && progress > 10 ? 'bg-blue-50 border-blue-200 text-blue-700' : 'bg-slate-50 border-slate-100 text-slate-400'}`}>
+                                                <IconMessageSquare className="w-6 h-6 mx-auto mb-2 opacity-50" />
+                                                "Terminator 2... sequels ever made."
+                                            </div>
+                                        </div>
+
+                                        <div className="flex justify-center"><IconArrow /></div>
+
+                                        {/* 2. Sentence Encoder (Transformer) */}
+                                        <div className="space-y-2 relative col-span-1">
+                                            <div className="text-[9px] font-bold text-slate-400 uppercase">2. Sentence Encoder</div>
+                                            <div className={`p-4 border-2 rounded-2xl transition-all flex flex-col items-center ${isTraining && progress > 30 ? 'border-purple-400 bg-purple-50 shadow-md scale-105' : 'border-slate-100 bg-slate-50/50'}`}>
+                                                <IconShieldCheck className={`w-10 h-10 mb-2 transition-all ${isTraining && progress > 35 ? 'text-purple-600' : 'text-slate-300'}`} />
+                                                <div className="text-[10px] font-bold text-slate-600">SBERT / USE</div>
+                                                {isTraining && mode === 'fine-tuned' && (
+                                                    <div className="absolute -top-4 left-1/2 -translate-x-1/2 text-[8px] bg-purple-600 text-white px-2 py-0.5 rounded font-black tracking-widest animate-pulse">ENCODER ADAPTATION</div>
+                                                )}
+                                            </div>
+                                            <p className="text-[8px] text-slate-400 mt-1 leading-tight">Processes global context using Attention mechanisms.</p>
+                                        </div>
+
+                                        <div className="flex justify-center"><IconArrow /></div>
+
+                                        {/* 3. Single Dense Vector */}
+                                        <div className="space-y-2">
+                                            <div className="text-[9px] font-bold text-slate-400 uppercase">3. Sentence Vector</div>
+                                            <div className={`relative p-4 rounded-xl border-2 transition-all flex flex-col items-center min-h-[110px] justify-center ${isTraining && progress > 70 ? 'border-emerald-400 bg-emerald-50 shadow-md scale-110' : 'border-slate-100 bg-slate-50/30'}`}>
+                                                <div className="space-y-1">
+                                                    {[...Array(4)].map((_, i) => (
+                                                        <div key={i} className={`h-2 w-12 rounded-sm transition-all duration-700 ${isTraining && progress > 75 ? 'bg-emerald-500' : 'bg-slate-200'}`} />
+                                                    ))}
+                                                </div>
+                                                <div className="mt-3 text-[10px] font-black text-emerald-700 bg-emerald-100/50 px-2 rounded">Global Vector</div>
+                                            </div>
+                                            <p className="text-[11px] text-slate-500 leading-tight font-medium mt-1">One fixed vector represents the entire text.</p>
+                                        </div>
+                                    </div>
+                                )}
+
+                                {/* Pipeline Explanation Overlay */}
+                                <div className="mt-8 p-4 bg-slate-50 rounded-xl border border-slate-100 text-[11px] leading-relaxed text-slate-600">
+                                    <div className="font-bold text-slate-800 mb-1 flex items-center gap-1">
+                                        <IconVariable className="w-3 h-3" /> How it works:
+                                    </div>
+                                    {modelType === 'word' ? (
+                                        "Word-level models like GloVe look up each token in a fixed dictionary. Because individual words are independent at first, they must be averaged (Avg Pool) to give the classifier a single 'summary' vector of the review."
+                                    ) : (
+                                        "Sentence-level models like SBERT (Sentence-BERT) process the entire sequence as a single unit using Transformer layers. They directly output one high-quality vector that captures the relationship between all words simultaneously, often producing better results for complex sentiment."
+                                    )}
+                                </div>
+                            </div>
+
+                            {/* Vector Space Plot */}
+                            <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
+                                <h2 className="text-lg font-bold mb-2">
+                                    {modelType === 'word' ? 'Semantic Map: Word Vector Adaptation' : 'Semantic Map: Sentence-Level Embedding'}
+                                </h2>
+                                <p className="text-[11px] text-slate-500 mb-6">
+                                    {modelType === 'word' 
+                                        ? "Individual words shift their 'meaning' towards positive or negative clusters." 
+                                        : "The entire review (one dot) moves through the semantic space to find its optimal position."}
+                                </p>
+                                
+                                <div className="relative aspect-[16/8] bg-slate-50 border border-slate-100 rounded-2xl overflow-hidden shadow-inner">
+                                    {/* Grid Lines */}
+                                    <div className="absolute inset-0 flex flex-col justify-between opacity-5">
+                                        {[...Array(6)].map((_, i) => <div key={i} className="w-full h-px bg-slate-900" />)}
+                                    </div>
+                                    <div className="absolute inset-0 flex justify-between opacity-5">
+                                        {[...Array(12)].map((_, i) => <div key={i} className="h-full w-px bg-slate-900" />)}
+                                    </div>
+
+                                    {/* Sentiment Zones labels */}
+                                    <div className="absolute top-0 right-0 p-6 text-[9px] font-black text-emerald-600/20 uppercase tracking-[0.3em]">Positive Semantic Space</div>
+                                    <div className="absolute bottom-0 left-0 p-6 text-[9px] font-black text-red-600/20 uppercase tracking-[0.3em]">Negative Semantic Space</div>
+
+                                    {/* Word/Sentence Dots */}
+                                    {Object.entries(coords).map(([word, pos]) => (
+                                        <div 
+                                            key={word} 
+                                            className={`absolute dot-transition flex flex-col items-center pointer-events-none ${(['good', 'thrilling', 'T2 Review'].includes(word)) ? 'z-30' : 'z-10'}`}
+                                            style={{ left: `${pos.x}%`, top: `${pos.y}%` }}
+                                        >
+                                            <div className={`w-3 h-3 rounded-full shadow-sm mb-1 ${
+                                                ['good', 'amazing', 'enjoyable', 'thrilling', 'T2 Review', 'Masterpiece', 'Greatest Sequel'].includes(word) ? 'bg-emerald-500' : 'bg-red-500'
+                                            } ${(['good', 'thrilling', 'T2 Review'].includes(word)) ? 'w-5 h-5 ring-4 ring-emerald-200' : ''}`} />
+                                            <span className={`text-[10px] font-bold px-2 py-0.5 rounded shadow-sm bg-white border border-slate-100 whitespace-nowrap ${(['good', 'thrilling', 'T2 Review'].includes(word)) ? 'text-emerald-700 text-xs translate-y-1' : 'text-slate-400'}`}>
+                                                {modelType === 'sentence' && word === 'T2 Review' ? 'Current Sentence' : word}
+                                            </span>
+                                            {(['good', 'thrilling', 'T2 Review'].includes(word)) && isTraining && mode === 'fine-tuned' && (
+                                                <div className="absolute -top-1 w-8 h-8 rounded-full border-2 border-emerald-400 animate-ping opacity-75" />
+                                            )}
+                                        </div>
+                                    ))}
+
+                                    {/* Original Pos Markers for reference */}
+                                    {mode === 'fine-tuned' && (
+                                        <React.Fragment>
+                                            {modelType === 'word' ? (
+                                                <React.Fragment>
+                                                    <div className="absolute w-3 h-3 rounded-full border-2 border-slate-300 border-dashed" style={{ left: `${wordInitialCoords.good.x}%`, top: `${wordInitialCoords.good.y}%` }} />
+                                                    <div className="absolute w-3 h-3 rounded-full border-2 border-slate-300 border-dashed" style={{ left: `${wordInitialCoords.thrilling.x}%`, top: `${wordInitialCoords.thrilling.y}%` }} />
+                                                </React.Fragment>
+                                            ) : (
+                                                <div className="absolute w-3 h-3 rounded-full border-2 border-slate-300 border-dashed" style={{ left: `${sentenceInitialCoords["T2 Review"].x}%`, top: `${sentenceInitialCoords["T2 Review"].y}%` }} />
+                                            )}
+                                        </React.Fragment>
+                                    )}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            );
+        };
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>

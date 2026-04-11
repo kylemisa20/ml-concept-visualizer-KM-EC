@@ -49,6 +49,15 @@ Core concepts essential for understanding modern ML
 - Backpropagation and the chain rule
 - Mathematical foundations
 
+### 🗣️ NLP & Language Models
+
+Interactive visualizations spanning classical text representations to modern language models
+
+- Bag of Words, TF-IDF, and N-gram language modeling
+- Word embeddings, cosine similarity, and sentence embeddings
+- RNNs, LSTMs, Seq2Seq encoder-decoder pipelines, and cross-attention
+- Pretraining, transfer learning, BERT, and the historical progression of language models
+
 ### ⚡ GEMM Optimization
 
 General Matrix Multiply optimization techniques
@@ -120,6 +129,7 @@ Analyzing and predicting system performance
 ml-concept-visualizer/
 ├── index.html                          # Main landing page
 ├── fundamentals/                       # Core ML concepts
+├── nlp/                                # NLP, embeddings, sequence models, and language-model visualizations
 ├── classical-ml-classification/        # Traditional ML algorithms
 ├── cnn-architectures/                  # Deep learning & CNNs
 ├── gemm-optimization/                  # Matrix multiplication optimization

@@ -1,0 +1,885 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Enhancing BoW with TF-IDF</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&family=JetBrains+Mono:wght@400;700&display=swap');
+        
+        body {
+            font-family: 'Inter', sans-serif;
+            margin: 0;
+            overflow: hidden; 
+            background-color: #f8fafc;
+        }
+
+        .math-font {
+            font-family: 'JetBrains Mono', monospace;
+        }
+
+        /* Custom Scrollbar */
+        ::-webkit-scrollbar { width: 8px; height: 8px; }
+        ::-webkit-scrollbar-track { background: #f1f1f1; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+
+        .formula-box {
+            background-color: #fffbeb;
+            border-left: 4px solid #f59e0b;
+        }
+
+        canvas { display: block; width: 100%; height: 100%; }
+
+        .fade-in { animation: fadeIn 0.4s ease-in; }
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(3px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+    </style>
+</head>
+<body class="h-screen flex flex-col text-slate-800">
+
+    <!-- Header -->
+    <header class="bg-white border-b border-slate-200 p-4 flex justify-between items-center shadow-sm z-10 shrink-0">
+        <div>
+            <h1 class="text-2xl font-bold text-slate-900">Enhancing <span class="border-b-2 border-red-400 border-dotted pb-0.5">BoW</span> with TF-IDF</h1>
+            <p class="text-sm text-slate-500 mt-1">Interactive visualization of Text Vectorization mathematics</p>
+        </div>
+        <div class="flex space-x-2" id="step-indicators">
+            <!-- Step buttons injected by JS -->
+        </div>
+    </header>
+
+    <!-- Main Content Area -->
+    <div class="flex-1 flex overflow-hidden">
+        
+        <!-- Sidebar -->
+        <aside class="w-[500px] lg:w-[550px] max-w-[60vw] flex-shrink-0 bg-white border-r border-slate-200 flex flex-col z-10 shadow-[4px_0_24px_rgba(0,0,0,0.02)]">
+            
+            <div class="p-6 overflow-y-auto flex-1 flex flex-col" id="sidebar-content">
+                
+                <!-- Dynamic Corpus UI -->
+                <div class="mb-6 bg-slate-50 p-4 rounded-lg border border-slate-200 shadow-sm shrink-0">
+                    <div class="flex justify-between items-end mb-2">
+                        <h3 class="text-xs font-bold text-slate-500 uppercase tracking-wider">The Corpus (N = <span id="n-count">2</span>)</h3>
+                    </div>
+                    
+                    <div id="corpus-list" class="space-y-1.5 text-sm max-h-32 overflow-y-auto pr-2 mb-3 border-l-2 border-slate-300 pl-2">
+                        <!-- Populated dynamically -->
+                    </div>
+
+                    <div class="flex gap-2">
+                        <input type="text" id="new-doc-input" class="flex-1 text-sm border border-slate-300 rounded px-2 py-1.5 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500" placeholder="Type a new sentence...">
+                        <button id="add-doc-btn" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-1.5 rounded text-sm font-semibold transition-colors shadow-sm">Add</button>
+                    </div>
+
+                    <!-- Quick Add Sentences -->
+                    <div class="mt-3">
+                        <div class="flex justify-between items-center mb-1.5">
+                            <div class="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Quick Add:</div>
+                            <button id="reset-corpus-btn" class="text-[11px] font-bold text-red-500 hover:text-red-700 uppercase tracking-wider transition-colors">Reset Corpus</button>
+                        </div>
+                        <div class="flex flex-wrap gap-1.5" id="quick-add-container">
+                            <button class="quick-add-btn text-xs bg-white border border-slate-200 text-slate-600 px-2 py-1 rounded shadow-sm hover:bg-blue-50 hover:text-blue-700 hover:border-blue-200 transition-all text-left">the bird sat on the branch</button>
+                            <button class="quick-add-btn text-xs bg-white border border-slate-200 text-slate-600 px-2 py-1 rounded shadow-sm hover:bg-blue-50 hover:text-blue-700 hover:border-blue-200 transition-all text-left">the cat chased the bird</button>
+                            <button class="quick-add-btn text-xs bg-white border border-slate-200 text-slate-600 px-2 py-1 rounded shadow-sm hover:bg-blue-50 hover:text-blue-700 hover:border-blue-200 transition-all text-left">a dog barked at a log</button>
+                            <button class="quick-add-btn text-xs bg-white border border-slate-200 text-slate-600 px-2 py-1 rounded shadow-sm hover:bg-blue-50 hover:text-blue-700 hover:border-blue-200 transition-all text-left">the cat and the dog sat</button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Step Explanations -->
+                <div id="explanation-container" class="fade-in flex-1">
+                    <!-- Injected by JS -->
+                </div>
+
+                <!-- Core Settings / Formula Tracker -->
+                <div class="mt-8 pt-5 border-t border-slate-200 shrink-0">
+                    <div class="p-4 bg-amber-50 rounded-lg border border-amber-200">
+                        <h3 class="text-sm font-bold text-amber-900 mb-3 flex items-center justify-between">
+                            <span>Core Mathematical Settings</span>
+                            <span class="text-xs font-normal px-2 py-0.5 bg-amber-200 text-amber-800 rounded-full">Crucial</span>
+                        </h3>
+                        
+                        <label class="flex items-center font-bold text-slate-800 cursor-pointer mb-2">
+                            <input type="checkbox" id="toggle-log" checked class="w-4 h-4 text-blue-600 rounded border-gray-300 focus:ring-blue-500 mr-2">
+                            Apply Logarithm to IDF: <span class="math-font ml-2 font-normal text-sm bg-white px-1 border border-amber-100 rounded">log(N / DF)</span>
+                        </label>
+                        
+                        <p class="text-xs text-amber-800 leading-relaxed mb-4 pb-4 border-b border-amber-200/50" id="log-explanation">
+                            <strong>Why use Log?</strong> Without a log function, rare words receive exponentially massive weights as Corpus size (N) grows, overwhelming ML models. Log smooths out the scale so rare words remain important but manageable.
+                        </p>
+
+                        <label class="flex items-center font-bold text-slate-800 cursor-pointer mb-1">
+                            <input type="checkbox" id="toggle-stopwords" class="w-4 h-4 text-blue-600 rounded border-gray-300 focus:ring-blue-500 mr-2">
+                            Remove Stop Words <span class="ml-1 font-normal text-xs text-slate-500">(the, a, on, at...)</span>
+                        </label>
+                        <p class="text-xs text-amber-800 leading-relaxed pl-6">
+                            Removes common grammatical words before math is applied. Notice how TF-IDF naturally mimics this manual cleanup process!
+                        </p>
+                    </div>
+                </div>
+
+            </div>
+            
+            <!-- Step Controls -->
+            <div class="p-4 border-t border-slate-200 bg-slate-50 flex justify-between items-center shrink-0">
+                <button id="btn-prev" class="px-4 py-2 text-sm font-medium text-slate-600 bg-white border border-slate-300 rounded hover:bg-slate-50 disabled:opacity-50 transition-colors shadow-sm">
+                    &larr; Previous
+                </button>
+                <span id="step-counter" class="text-sm font-medium text-slate-500">Step 1 / 5</span>
+                <button id="btn-next" class="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded hover:bg-blue-700 disabled:opacity-50 transition-colors shadow-sm">
+                    Next &rarr;
+                </button>
+            </div>
+        </aside>
+
+        <!-- Canvas Area -->
+        <main class="flex-1 relative bg-slate-50 overflow-hidden" id="canvas-container">
+            <canvas id="vizCanvas"></canvas>
+            
+            <!-- Visualization Controls Overlay -->
+            <div class="absolute top-4 left-4 z-20 flex items-center bg-white rounded-md shadow-sm border border-slate-200 px-3 py-2">
+                <label class="flex items-center text-sm font-semibold text-slate-600 cursor-pointer">
+                    <input type="checkbox" id="toggle-sort" class="w-4 h-4 text-blue-600 rounded border-gray-300 focus:ring-blue-500 mr-2">
+                    Sort Bars by Score
+                </label>
+            </div>
+
+            <!-- Document Toggle Control -->
+            <div class="absolute top-4 right-4 z-20 flex items-center bg-white rounded-md shadow-sm border border-slate-200 px-3 py-2">
+                <label for="doc-selector" class="text-sm font-semibold text-slate-500 mr-2">Plot Vector for:</label>
+                <select id="doc-selector" class="text-sm border-none bg-transparent outline-none font-bold text-blue-700 cursor-pointer focus:ring-0">
+                    <!-- Options injected by JS -->
+                </select>
+            </div>
+
+            <!-- Tooltip -->
+            <div id="tooltip" class="absolute pointer-events-none opacity-0 bg-slate-900 text-slate-100 text-xs p-3 rounded-lg shadow-xl transition-opacity duration-150 transform -translate-x-1/2 -translate-y-full z-30 min-w-[160px]">
+                <!-- Tooltip content -->
+            </div>
+        </main>
+    </div>
+
+    <script>
+        // --- DYNAMIC DATA & STATE ---
+        const initialCorpus = [
+            { id: 1, text: "the cat sat on the mat" },
+            { id: 2, text: "the dog sat on the log" }
+        ];
+        let corpus = [...initialCorpus.map(d => ({...d}))];
+        
+        let vocab = [];
+        let data = { tf: {}, df: {}, idf: {}, idf_raw: {}, tfidf: {}, tfidf_raw: {} };
+        let N = corpus.length;
+
+        // Constants & Config
+        const stopWordsList = new Set(['the', 'a', 'an', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for', 'with', 'of', 'is', 'are']);
+
+        // App State
+        let currentStep = 0;
+        const totalSteps = 5;
+        let isAnimating = true;
+        let focusDoc = 1;
+        let useLog = true;
+        let removeStopWords = false;
+        let isSorted = false;
+        
+        // Mouse State
+        let mouseX = -1;
+        let mouseY = -1;
+        let hoveredWord = null;
+
+        function recalculateData() {
+            N = corpus.length;
+            const vocabSet = new Set();
+            data = { tf: {}, df: {}, idf: {}, idf_raw: {}, tfidf: {}, tfidf_raw: {} };
+
+            // 1. Calculate TF and build Vocabulary
+            corpus.forEach(doc => {
+                // Tokenization + optional stop words filtering
+                const words = doc.text.replace(/[.,!?]/g, '').toLowerCase().split(/\s+/)
+                    .filter(w => w.length > 0 && (!removeStopWords || !stopWordsList.has(w)));
+                
+                data.tf[doc.id] = {};
+                words.forEach(w => {
+                    vocabSet.add(w);
+                    data.tf[doc.id][w] = (data.tf[doc.id][w] || 0) + 1;
+                });
+            });
+
+            vocab = Array.from(vocabSet).sort(); // Base sort alphabetically
+
+            // 2. Fill missing TF zeroes and calculate DF
+            vocab.forEach(w => {
+                data.df[w] = 0;
+                corpus.forEach(doc => {
+                    if (!data.tf[doc.id]) data.tf[doc.id] = {};
+                    if (!data.tf[doc.id][w]) data.tf[doc.id][w] = 0;
+                    if (data.tf[doc.id][w] > 0) data.df[w]++;
+                });
+            });
+
+            // 3. Calculate IDF and TF-IDF
+            vocab.forEach(w => {
+                data.idf_raw[w] = N / data.df[w];
+                data.idf[w] = Math.log(N / data.df[w]); 
+
+                corpus.forEach(doc => {
+                    if(!data.tfidf[doc.id]) data.tfidf[doc.id] = {};
+                    if(!data.tfidf_raw[doc.id]) data.tfidf_raw[doc.id] = {};
+
+                    data.tfidf[doc.id][w] = data.tf[doc.id][w] * data.idf[w];
+                    data.tfidf_raw[doc.id][w] = data.tf[doc.id][w] * data.idf_raw[w];
+                });
+            });
+        }
+
+        function getSortedVocab() {
+            if (!isSorted) return vocab; // Alphabetical
+            
+            let sorted = [...vocab];
+            sorted.sort((a, b) => {
+                let valA = 0, valB = 0;
+                if (currentStep === 1 || currentStep === 2) {
+                    valA = data.tf[focusDoc][a]; valB = data.tf[focusDoc][b];
+                } else if (currentStep === 3) {
+                    valA = useLog ? data.idf[a] : data.idf_raw[a];
+                    valB = useLog ? data.idf[b] : data.idf_raw[b];
+                } else if (currentStep >= 4) {
+                    valA = useLog ? data.tfidf[focusDoc][a] : data.tfidf_raw[focusDoc][a];
+                    valB = useLog ? data.tfidf[focusDoc][b] : data.tfidf_raw[focusDoc][b];
+                }
+                
+                if (valB !== valA) return valB - valA; // Descending values
+                return a.localeCompare(b); // Alphabetical tie-breaker
+            });
+            return sorted;
+        }
+
+        // Initialize math on load
+        recalculateData();
+
+
+        // --- VISUALIZATION SETUP (CANVAS) ---
+        const canvas = document.getElementById('vizCanvas');
+        const ctx = canvas.getContext('2d');
+        const container = document.getElementById('canvas-container');
+        let cw, ch;
+        
+        function resize() {
+            cw = container.clientWidth;
+            ch = container.clientHeight;
+            const dpr = window.devicePixelRatio || 1;
+            canvas.width = cw * dpr;
+            canvas.height = ch * dpr;
+            ctx.scale(dpr, dpr);
+            // Don't fully re-init nodes, just force layout update
+            updateCanvasState(); 
+        }
+        window.addEventListener('resize', resize);
+
+        // Coloring logic
+        const colors = {
+            common: { fill: '#e2e8f0', stroke: '#cbd5e1', text: '#64748b' },      // Grey
+            informative: { fill: '#dbeafe', stroke: '#3b82f6', text: '#1e40af' }, // Blue
+            inactive: { fill: '#f8fafc', stroke: '#f1f5f9', text: '#cbd5e1' }     // Faded
+        };
+
+        function getWordType(w) {
+            if (!data.tf[focusDoc] || data.tf[focusDoc][w] === 0) return 'inactive'; // Not in current doc
+            if (data.df[w] === N && N > 1) return 'common';    // Present everywhere
+            if (data.df[w] > N * 0.6) return 'common';         // Mostly common
+            return 'informative';                              // Rare/Specific
+        }
+
+        class BarNode {
+            constructor(word) {
+                this.word = word;
+                this.x = -1; // init flag for lerping
+                this.targetX = 0;
+                
+                this.currentH = 0;
+                this.targetH = 0;
+                this.currentOpacity = 0;
+                this.targetOpacity = 0;
+                
+                this.updateTypeAndColor();
+            }
+
+            updateTypeAndColor() {
+                this.type = getWordType(this.word);
+                this.color = colors[this.type];
+            }
+
+            updateLayout(sortedVocab) {
+                if(sortedVocab.length === 0) return;
+
+                const padding = 50;
+                const availableW = cw - (padding * 2);
+                const barSpacing = availableW / sortedVocab.length;
+                const barWidth = Math.min(barSpacing * 0.6, 50);
+                
+                let displayIndex = sortedVocab.indexOf(this.word);
+                this.targetX = padding + (displayIndex * barSpacing) + (barSpacing / 2) - (barWidth / 2);
+                this.w = barWidth;
+                this.baseY = ch - 100;
+
+                // Snap to initial position if just created
+                if (this.x === -1) this.x = this.targetX;
+                
+                // Determine scale dynamically based on selected logic
+                this.maxPixels = ch * 0.6; 
+                let maxVal = 0;
+                vocab.forEach(w => {
+                    let val = (currentStep >= 3) 
+                                ? (useLog ? data.tfidf[focusDoc][w] : data.tfidf_raw[focusDoc][w])
+                                : data.tf[focusDoc][w];
+                    if (val > maxVal) maxVal = val;
+                });
+                maxVal = Math.max(maxVal, 2.5); // Minimum scale floor
+                
+                this.scaleFactor = this.maxPixels / maxVal;
+            }
+
+            setTarget(state) {
+                this.updateTypeAndColor();
+                this.targetOpacity = 1;
+
+                switch(state) {
+                    case 0:
+                        this.targetH = 0;
+                        this.targetOpacity = 0;
+                        break;
+                    case 1:
+                    case 2:
+                        this.targetH = data.tf[focusDoc][this.word] * this.scaleFactor;
+                        break;
+                    case 3:
+                    case 4:
+                        let val = useLog ? data.tfidf[focusDoc][this.word] : data.tfidf_raw[focusDoc][this.word];
+                        this.targetH = val * this.scaleFactor;
+                        break;
+                }
+            }
+
+            draw(ctx) {
+                // Lerp values
+                this.x += (this.targetX - this.x) * 0.15; // Smooth Horizontal Sorting
+                this.currentH += (this.targetH - this.currentH) * 0.1;
+                this.currentOpacity += (this.targetOpacity - this.currentOpacity) * 0.1;
+
+                if (this.currentOpacity < 0.01) return;
+
+                const y = this.baseY - this.currentH;
+                const isHovered = (mouseX >= this.x && mouseX <= this.x + this.w && mouseY >= y - 20 && mouseY <= this.baseY);
+                
+                if (isHovered && this.currentOpacity > 0.5) {
+                    hoveredWord = this.word;
+                    ctx.globalAlpha = 1; 
+                    canvas.style.cursor = 'pointer';
+                } else {
+                    ctx.globalAlpha = (hoveredWord && hoveredWord !== this.word) ? this.currentOpacity * 0.3 : this.currentOpacity;
+                }
+
+                // Draw Bar
+                ctx.fillStyle = isHovered ? this.color.stroke : this.color.fill;
+                ctx.strokeStyle = this.color.stroke;
+                ctx.lineWidth = 2;
+                
+                ctx.beginPath();
+                ctx.moveTo(this.x, this.baseY);
+                ctx.lineTo(this.x, y + 4);
+                ctx.quadraticCurveTo(this.x, y, this.x + 4, y);
+                ctx.lineTo(this.x + this.w - 4, y);
+                ctx.quadraticCurveTo(this.x + this.w, y, this.x + this.w, y + 4);
+                ctx.lineTo(this.x + this.w, this.baseY);
+                ctx.fill();
+                ctx.stroke();
+
+                // Draw Word Label 
+                ctx.fillStyle = '#475569';
+                
+                // Rotate long words if vocab is large
+                ctx.save();
+                ctx.translate(this.x + this.w/2, this.baseY + 15);
+                if (vocab.length > 10) {
+                    ctx.rotate(-Math.PI/4);
+                    ctx.textAlign = 'right';
+                    ctx.font = '400 12px Inter';
+                    ctx.fillText(this.word, 0, 0);
+                } else {
+                    ctx.textAlign = 'center';
+                    ctx.font = '600 14px Inter';
+                    ctx.fillText(this.word, 0, 10);
+                }
+                ctx.restore();
+
+                // Value Label 
+                if (this.currentH > 5 || this.targetH > 5) {
+                    let rawVal = this.currentH / this.scaleFactor;
+                    let valToDisplay = rawVal.toFixed(3);
+                    if (valToDisplay.endsWith("000")) valToDisplay = Math.round(rawVal).toString();
+                    
+                    ctx.fillStyle = this.color.text;
+                    ctx.font = '600 12px Inter';
+                    ctx.textAlign = 'center';
+                    ctx.fillText(valToDisplay, this.x + this.w/2, y - 8);
+                }
+
+                ctx.globalAlpha = 1;
+            }
+        }
+
+        let graphNodes = [];
+
+        function initGraphNodes() {
+            // Keep existing nodes to retain animation positions, add new ones, remove old
+            const newVocabSet = new Set(vocab);
+            graphNodes = graphNodes.filter(node => newVocabSet.has(node.word));
+            
+            const existingWords = new Set(graphNodes.map(n => n.word));
+            vocab.forEach(w => {
+                if(!existingWords.has(w)) {
+                    graphNodes.push(new BarNode(w));
+                }
+            });
+
+            updateCanvasState();
+        }
+
+        function drawAxes(ctx) {
+            if (currentStep < 1 || vocab.length === 0) {
+                if (vocab.length === 0) {
+                    ctx.fillStyle = '#94a3b8';
+                    ctx.font = '16px Inter';
+                    ctx.textAlign = 'center';
+                    ctx.fillText("No words in vocabulary. Try adding a document!", cw/2, ch/2);
+                }
+                return;
+            }
+            
+            ctx.globalAlpha = Math.min(1, currentStep * 2);
+            const padding = 50;
+            const bottomY = ch - 100;
+
+            // X Axis
+            ctx.beginPath();
+            ctx.moveTo(padding/2, bottomY);
+            ctx.lineTo(cw - padding/2, bottomY);
+            ctx.strokeStyle = '#94a3b8';
+            ctx.lineWidth = 2;
+            ctx.stroke();
+
+            // Y Axis Line
+            ctx.beginPath();
+            ctx.moveTo(padding/2, bottomY);
+            ctx.lineTo(padding/2, ch * 0.15);
+            ctx.stroke();
+
+            // Y Axis Label
+            ctx.fillStyle = '#94a3b8';
+            ctx.font = '12px Inter';
+            let yLabel = "Term Frequency (Count)";
+            if (currentStep >= 3) yLabel = useLog ? "TF-IDF Score (Log Scaled)" : "TF-IDF Score (RAW - Exploding!)";
+            
+            ctx.save();
+            ctx.translate(padding/2 - 15, ch/2);
+            ctx.rotate(-Math.PI/2);
+            ctx.textAlign = 'center';
+            ctx.fillText(yLabel, 0, 0);
+            ctx.restore();
+
+            // Title
+            ctx.fillStyle = '#1e293b';
+            ctx.font = 'bold 18px Inter';
+            ctx.textAlign = 'center';
+            ctx.fillText(`Vector Space for Document ${focusDoc}`, cw/2, 40);
+
+            // Warning if Raw
+            if (!useLog && currentStep >= 3) {
+                 ctx.fillStyle = '#ef4444';
+                 ctx.font = 'bold 14px Inter';
+                 ctx.fillText(`⚠️ Warning: Raw values scale differently. Max scale is high.`, cw/2, 65);
+            }
+
+            ctx.globalAlpha = 1;
+        }
+
+        function updateTooltipDisplay() {
+            const tooltip = document.getElementById('tooltip');
+            if (!hoveredWord || currentStep === 0) {
+                tooltip.style.opacity = '0';
+                return;
+            }
+
+            const node = graphNodes.find(n => n.word === hoveredWord);
+            if (!node) return;
+
+            const tfVal = data.tf[focusDoc][hoveredWord];
+            const dfVal = data.df[hoveredWord];
+            const idfVal = (useLog ? data.idf[hoveredWord] : data.idf_raw[hoveredWord]).toFixed(3);
+            const tfidfVal = (useLog ? data.tfidf[focusDoc][hoveredWord] : data.tfidf_raw[focusDoc][hoveredWord]).toFixed(3);
+
+            let content = `<div class="font-bold text-sm mb-2 text-white pb-1 border-b border-slate-700">Word: "<span class="text-amber-400">${hoveredWord}</span>"</div>`;
+            
+            if (currentStep >= 1) content += `<div class="flex justify-between mt-1"><span class="text-slate-400 mr-4">TF:</span> <span class="text-blue-300 font-mono">${tfVal}</span></div>`;
+            if (currentStep >= 2) content += `<div class="flex justify-between mt-1"><span class="text-slate-400 mr-4">DF:</span> <span class="text-purple-300 font-mono">${dfVal}/${N} docs</span></div>`;
+            if (currentStep >= 3) {
+                let formulaStr = useLog ? `log(${N}/${dfVal})` : `${N}/${dfVal}`;
+                content += `<div class="flex justify-between mt-1"><span class="text-slate-400 mr-4">IDF <span class="text-[10px]">(${formulaStr})</span>:</span> <span class="text-amber-300 font-mono">${idfVal}</span></div>`;
+            }
+            if (currentStep >= 4) content += `<div class="flex justify-between mt-2 pt-2 border-t border-slate-700 font-bold"><span class="text-white">TF-IDF:</span> <span class="text-green-400 font-mono">${tfidfVal}</span></div>`;
+
+            tooltip.innerHTML = content;
+            tooltip.style.opacity = '1';
+            
+            const tipX = node.x + node.w / 2;
+            const tipY = node.baseY - node.currentH - 10;
+            tooltip.style.left = `${tipX}px`;
+            tooltip.style.top = `${tipY}px`;
+        }
+
+        function animate() {
+            ctx.clearRect(0, 0, cw, ch);
+            hoveredWord = null;
+            canvas.style.cursor = 'default';
+            
+            drawAxes(ctx);
+            
+            let currentSortedVocab = getSortedVocab();
+            
+            graphNodes.forEach(node => {
+                node.updateLayout(currentSortedVocab); 
+                node.draw(ctx);
+            });
+
+            updateTooltipDisplay();
+
+            if(isAnimating) requestAnimationFrame(animate);
+        }
+
+        // --- UI & LOGIC ---
+
+        function getStepsContent() {
+            if(vocab.length === 0) return Array(5).fill({title: "Empty Corpus", content: "<p>Add documents to see math.</p>"});
+
+            // Helper to generate a visual table for Term Frequencies
+            const tfTable = `
+                <div class="overflow-x-auto my-3 border border-slate-200 rounded">
+                    <table class="w-full text-xs text-center border-collapse">
+                        <thead><tr class="bg-slate-50 text-slate-500">${vocab.map(w => `<th class="p-2 border-b border-slate-200">${w}</th>`).join('')}</tr></thead>
+                        <tbody><tr>${vocab.map(w => {
+                            let val = data.tf[focusDoc][w];
+                            let highlight = val > 0 ? 'bg-blue-50 text-blue-700 font-bold' : 'text-slate-400';
+                            return `<td class="p-2 border-r last:border-r-0 border-slate-100 ${highlight}">${val}</td>`;
+                        }).join('')}</tr></tbody>
+                    </table>
+                </div>`;
+
+            // Helper to generate a visual table for Document Frequencies
+            const dfTable = `
+                <div class="overflow-x-auto my-3 border border-slate-200 rounded">
+                    <p class="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Global DF Values:</p>
+                    <table class="w-full text-xs text-center border-collapse">
+                        <thead><tr class="bg-slate-50 text-slate-500">${vocab.map(w => `<th class="p-2 border-b border-slate-200">${w}</th>`).join('')}</tr></thead>
+                        <tbody><tr>${vocab.map(w => {
+                            let val = data.df[w];
+                            let highlight = val < N ? 'bg-purple-50 text-purple-700 font-bold' : 'text-slate-400';
+                            return `<td class="p-2 border-r last:border-r-0 border-slate-100 ${highlight}">${val}</td>`;
+                        }).join('')}</tr></tbody>
+                    </table>
+                </div>`;
+
+            // Helper to generate a visual table for Inverse Document Frequencies
+            const idfTable = `
+                <div class="overflow-x-auto my-3 border border-slate-200 rounded">
+                    <p class="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Global IDF Weights:</p>
+                    <table class="w-full text-xs text-center border-collapse">
+                        <thead><tr class="bg-slate-50 text-slate-500">${vocab.map(w => `<th class="p-2 border-b border-slate-200">${w}</th>`).join('')}</tr></thead>
+                        <tbody><tr>${vocab.map(w => {
+                            let val = useLog ? data.idf[w] : data.idf_raw[w];
+                            let valStr = val.toFixed(2);
+                            let highlight = val > 0.05 ? 'bg-amber-50 text-amber-700 font-bold' : 'text-slate-400';
+                            return `<td class="p-2 border-r last:border-r-0 border-slate-100 ${highlight}">${valStr}</td>`;
+                        }).join('')}</tr></tbody>
+                    </table>
+                </div>`;
+
+            // Identify a rare word specifically in focus doc for examples
+            const docWords = Object.keys(data.tf[focusDoc]).filter(w => data.tf[focusDoc][w] > 0);
+            let rareWord = docWords.sort((a, b) => data.df[a] - data.df[b])[0] || vocab[0];
+            let commonWord = docWords.sort((a, b) => data.df[b] - data.df[a])[0] || vocab[0];
+
+            return [
+                {
+                    title: "1. The Vocabulary",
+                    content: `
+                        <p class="mb-4 text-slate-600">First, we extract all unique words across <strong>all ${N} documents</strong> to build our global vocabulary.</p>
+                        <div class="flex flex-wrap gap-2 mb-4">
+                            ${vocab.map(w => `<span class="px-2 py-1 bg-slate-100 text-slate-700 text-xs font-mono rounded border border-slate-200">${w}</span>`).join('')}
+                        </div>
+                        <p class="text-sm text-slate-500 italic">Total unique words: ${vocab.length}. Each document will be represented as a vector of this size.</p>
+                    `
+                },
+                {
+                    title: "2. Bag of Words (Term Frequency)",
+                    content: `
+                        <p class="mb-2 text-slate-600">The simplest approach is to count word occurrences. This is <strong>Term Frequency (TF)</strong>.</p>
+                        
+                        <div class="formula-box p-3 rounded mb-3">
+                            <code class="text-sm text-amber-900 font-bold">TF(w) = Count of word 'w' in Document</code>
+                        </div>
+
+                        <p class="text-sm font-semibold text-slate-800">TF Vector for Doc ${focusDoc}:</p>
+                        ${tfTable}
+                        
+                        <div class="p-3 bg-red-50 text-red-800 text-sm border-l-4 border-red-400 rounded mt-4">
+                            <strong>The Problem:</strong> Words like <code>"${commonWord}"</code> usually get high scores just because they are frequent, even if they don't carry specific meaning!
+                        </div>
+                    `
+                },
+                {
+                    title: "3. Document Frequency (DF)",
+                    content: `
+                        <p class="mb-2 text-slate-600">To fix this, we analyze the whole corpus to see which words are globally common. This is <strong>Document Frequency (DF)</strong>.</p>
+                        
+                        <div class="formula-box p-3 rounded mb-4">
+                            <code class="text-sm text-amber-900 font-bold">DF(w) = Number of docs containing 'w'</code>
+                        </div>
+                        
+                        ${dfTable}
+
+                        <div class="grid grid-cols-2 gap-4 text-sm mb-4">
+                            <div class="border border-slate-200 rounded p-2 bg-white">
+                                <strong class="text-slate-500 block mb-1">Common Words (High DF)</strong>
+                                <div>"${commonWord}" appears in ${data.df[commonWord]} of ${N} docs.</div>
+                            </div>
+                            <div class="border border-blue-200 rounded p-2 bg-blue-50">
+                                <strong class="text-blue-700 block mb-1">Rare Words (Low DF)</strong>
+                                <div>"${rareWord}" appears in ${data.df[rareWord]} of ${N} docs.</div>
+                            </div>
+                        </div>
+
+                        <p class="text-sm text-slate-600"><em>Notice on the graph: we still see TF heights, but DF is analyzing the global dataset.</em></p>
+                    `
+                },
+                {
+                    title: "4. Inverse Document Frequency (IDF)",
+                    content: `
+                        <p class="mb-2 text-slate-600">We invert DF to create a penalty weight. Rare words get high weights; common words get low weights.</p>
+                        
+                        <div class="formula-box p-3 rounded mb-4">
+                            ${useLog 
+                                ? `<code class="text-sm text-amber-900 font-bold block mb-1">IDF(w) = log( N / DF(w) )</code>` 
+                                : `<code class="text-sm text-red-700 font-bold block mb-1">IDF(w) = N / DF(w)  <span class="text-xs font-normal">(Raw / No Log)</span></code>`
+                            }
+                            <span class="text-xs text-amber-800">Where N = ${N} (Total Docs)</span>
+                        </div>
+                        
+                        ${idfTable}
+
+                        <div class="space-y-3 text-sm">
+                            <div class="flex justify-between items-center p-2 bg-slate-100 rounded border border-slate-200">
+                                <span><strong>IDF</strong> for "${commonWord}"</span>
+                                <span class="math-font font-bold text-slate-600">${(useLog ? data.idf[commonWord] : data.idf_raw[commonWord]).toFixed(3)}</span>
+                            </div>
+                            <div class="flex justify-between items-center p-2 bg-amber-50 rounded border border-amber-200">
+                                <span class="text-amber-800"><strong>IDF</strong> for "${rareWord}"</span>
+                                <span class="math-font font-bold text-amber-700">${(useLog ? data.idf[rareWord] : data.idf_raw[rareWord]).toFixed(3)}</span>
+                            </div>
+                        </div>
+                    `
+                },
+                {
+                    title: "5. The Final TF-IDF Vector",
+                    content: `
+                        <p class="mb-4 text-slate-600">Finally, multiply <strong class="text-blue-600">TF</strong> by <strong class="text-amber-600">IDF</strong>.</p>
+                        
+                        <div class="mb-3">
+                            <p class="text-xs font-semibold text-slate-500 mb-1">Original BoW (TF):</p>
+                            <div class="font-mono text-[11px] bg-slate-100 p-2 rounded text-slate-500 break-all">[${vocab.map(w => data.tf[focusDoc][w]).join(', ')}]</div>
+                        </div>
+
+                        <div class="mb-6">
+                            <p class="text-xs font-semibold text-green-700 mb-1">New TF-IDF:</p>
+                            <div class="font-mono text-[12px] bg-green-50 border border-green-200 p-2 rounded text-green-800 font-bold break-all">
+                                [${vocab.map(w => {
+                                    let v = useLog ? data.tfidf[focusDoc][w] : data.tfidf_raw[focusDoc][w];
+                                    return v.toFixed(2);
+                                }).join(', ')}]
+                            </div>
+                        </div>
+                        
+                        <p class="text-sm text-slate-700 font-medium">The vector is now heavily focused on the words that actually matter to Document ${focusDoc}!</p>
+                    `
+                }
+            ];
+        }
+
+        // --- BINDINGS & INIT ---
+
+        const btnPrev = document.getElementById('btn-prev');
+        const btnNext = document.getElementById('btn-next');
+        const counter = document.getElementById('step-counter');
+        const explanationContainer = document.getElementById('explanation-container');
+        const stepIndicatorsContainer = document.getElementById('step-indicators');
+        const corpusListDiv = document.getElementById('corpus-list');
+        const docSelector = document.getElementById('doc-selector');
+
+        function renderCorpusAndDropdowns() {
+            document.getElementById('n-count').innerText = N;
+            
+            // Render Sidebar list
+            corpusListDiv.innerHTML = corpus.map(doc => 
+                `<div class="flex items-start mb-1"><span class="font-bold text-slate-400 w-12 shrink-0">Doc ${doc.id}:</span> <span class="text-slate-700 italic">"${doc.text}"</span></div>`
+            ).join('');
+
+            // Render Canvas Dropdown
+            docSelector.innerHTML = corpus.map(doc => 
+                `<option value="${doc.id}">Doc ${doc.id}</option>`
+            ).join('');
+            docSelector.value = focusDoc;
+        }
+
+        function initUI() {
+            // Setup Log Toggle
+            document.getElementById('toggle-log').addEventListener('change', (e) => {
+                useLog = e.target.checked;
+                updateCanvasState();
+                updateUI();
+            });
+
+            // Setup Stop Words Toggle
+            document.getElementById('toggle-stopwords').addEventListener('change', (e) => {
+                removeStopWords = e.target.checked;
+                recalculateData();
+                renderCorpusAndDropdowns();
+                initGraphNodes();
+                updateUI();
+            });
+
+            // Setup Sort Toggle
+            document.getElementById('toggle-sort').addEventListener('change', (e) => {
+                isSorted = e.target.checked;
+                updateCanvasState(); // This alone will trigger re-layout in the animate loop
+            });
+
+            // Setup Add Document
+            document.getElementById('add-doc-btn').addEventListener('click', () => {
+                const input = document.getElementById('new-doc-input');
+                const text = input.value.trim();
+                if (text) {
+                    corpus.push({ id: corpus.length + 1, text: text });
+                    input.value = '';
+                    recalculateData();
+                    renderCorpusAndDropdowns();
+                    initGraphNodes();
+                    updateUI();
+                }
+            });
+
+            document.getElementById('new-doc-input').addEventListener('keypress', (e) => {
+                if(e.key === 'Enter') document.getElementById('add-doc-btn').click();
+            });
+
+            // Setup Quick Add Buttons
+            document.querySelectorAll('.quick-add-btn').forEach(btn => {
+                btn.addEventListener('click', (e) => {
+                    const text = e.target.innerText;
+                    corpus.push({ id: corpus.length + 1, text: text });
+                    recalculateData();
+                    renderCorpusAndDropdowns();
+                    initGraphNodes();
+                    updateUI();
+                    
+                    e.target.style.display = 'none';
+                });
+            });
+
+            // Reset Corpus Button
+            document.getElementById('reset-corpus-btn').addEventListener('click', () => {
+                corpus = [...initialCorpus.map(d => ({...d}))];
+                focusDoc = 1;
+                document.querySelectorAll('.quick-add-btn').forEach(btn => btn.style.display = 'block');
+                recalculateData();
+                renderCorpusAndDropdowns();
+                initGraphNodes();
+                updateUI();
+            });
+
+            // Setup Steps
+            for(let i=0; i<totalSteps; i++) {
+                const dot = document.createElement('button');
+                dot.className = `w-8 h-8 rounded-full border-2 text-xs font-bold flex items-center justify-center transition-colors ${i === 0 ? 'border-blue-600 bg-blue-600 text-white' : 'border-slate-300 text-slate-400 bg-white hover:border-blue-400'}`;
+                dot.innerText = i + 1;
+                dot.onclick = () => setStep(i);
+                stepIndicatorsContainer.appendChild(dot);
+            }
+
+            btnPrev.addEventListener('click', () => { if(currentStep > 0) setStep(currentStep - 1); });
+            btnNext.addEventListener('click', () => { if(currentStep < totalSteps - 1) setStep(currentStep + 1); });
+
+            // Setup Doc Dropdown on Canvas
+            docSelector.addEventListener('change', (e) => {
+                focusDoc = parseInt(e.target.value);
+                updateCanvasState();
+                updateUI();
+            });
+
+            // Canvas Mouse interactions
+            canvas.addEventListener('mousemove', (e) => {
+                const rect = container.getBoundingClientRect();
+                mouseX = e.clientX - rect.left;
+                mouseY = e.clientY - rect.top;
+            });
+            canvas.addEventListener('mouseleave', () => { mouseX = -1; mouseY = -1; });
+
+            renderCorpusAndDropdowns();
+            updateUI();
+            resize();
+            initGraphNodes();
+            requestAnimationFrame(animate);
+        }
+
+        function updateCanvasState() {
+            graphNodes.forEach(node => {
+                node.setTarget(currentStep);
+            });
+        }
+
+        function setStep(stepIndex) {
+            currentStep = stepIndex;
+            updateUI();
+            updateCanvasState();
+        }
+
+        function updateUI() {
+            btnPrev.disabled = currentStep === 0;
+            btnNext.disabled = currentStep === totalSteps - 1;
+            counter.innerText = `Step ${currentStep + 1} of ${totalSteps}`;
+
+            const dots = stepIndicatorsContainer.children;
+            for(let i=0; i<dots.length; i++) {
+                if(i === currentStep) dots[i].className = 'w-8 h-8 rounded-full border-2 text-xs font-bold flex items-center justify-center transition-colors border-blue-600 bg-blue-600 text-white';
+                else if (i < currentStep) dots[i].className = 'w-8 h-8 rounded-full border-2 text-xs font-bold flex items-center justify-center transition-colors border-blue-600 bg-white text-blue-600';
+                else dots[i].className = 'w-8 h-8 rounded-full border-2 text-xs font-bold flex items-center justify-center transition-colors border-slate-300 text-slate-400 bg-white hover:border-blue-400';
+            }
+
+            explanationContainer.classList.remove('fade-in');
+            void explanationContainer.offsetWidth; // Force reflow
+            
+            const stepData = getStepsContent()[currentStep];
+            explanationContainer.innerHTML = `
+                <h2 class="text-xl font-bold text-slate-800 mb-4">${stepData.title}</h2>
+                ${stepData.content}
+            `;
+            explanationContainer.classList.add('fade-in');
+        }
+
+        window.onload = initUI;
+    </script>
+</body>
+</html>

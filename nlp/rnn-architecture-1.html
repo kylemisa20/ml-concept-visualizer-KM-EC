@@ -1,0 +1,489 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Recurrent Neural Networks (RNN) - Unrolled</title>
+  
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  
+  <!-- React & ReactDOM -->
+  <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  
+  <!-- Babel for JSX -->
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+  <!-- KaTeX for LaTeX rendering -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/katex.min.css">
+  <script src="https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/katex.min.js"></script>
+
+  <style>
+    .math-font { font-family: 'Cambria Math', 'Times New Roman', serif; }
+    .fade-enter { opacity: 0; transform: translateX(-10px); }
+    .fade-enter-active { opacity: 1; transform: translateX(0); transition: opacity 300ms, transform 300ms; }
+    
+    /* SVG Animation classes */
+    .flow-line { stroke-dasharray: 6; animation: dash 1s linear infinite; }
+    @keyframes dash { to { stroke-dashoffset: -12; } }
+  </style>
+</head>
+<body class="bg-gray-50 text-slate-800 font-sans">
+  <div id="root"></div>
+
+  <script type="text/babel">
+    const { useState, useMemo } = React;
+
+    const Latex = ({ math, inline = true }) => {
+      const html = katex.renderToString(math, { throwOnError: false, displayMode: !inline });
+      return <span dangerouslySetInnerHTML={{ __html: html }} />;
+    };
+
+    function App() {
+      // State for Part 1: Weight Highlighting
+      const [highlightWeight, setHighlightWeight] = useState(null); // 'W1', 'W2', 'W3', or null
+
+      // State for Part 2: Gradient Problem
+      const [w3Value, setW3Value] = useState(2.0);
+
+      // State for Part 3: Output Architectures
+      const [outputMode, setOutputMode] = useState('many-to-one'); // 'many-to-one' or 'many-to-many'
+
+      // Colors matching the slides
+      const cInput = "#fde047"; // Yellow
+      const cHidden = "#93c5fd"; // Blue
+      const cRelu = "#bbf7d0"; // Green
+      const cOutput = "#fdba74"; // Orange
+      const cLine = "#94a3b8"; // Slate line
+      const cW3 = "#60a5fa"; // Blue line for W3
+      const cHighlight = "#dc2626"; // Red for highlights
+
+      // Marker definitions for SVG arrows
+      const SvgDefs = () => (
+        <defs>
+          <marker id="arrowLine" markerWidth="6" markerHeight="6" refX="5" refY="3" orient="auto">
+            <path d="M0,0 L0,6 L6,3 z" fill={cLine} />
+          </marker>
+          <marker id="arrowW3" markerWidth="6" markerHeight="6" refX="5" refY="3" orient="auto">
+            <path d="M0,0 L0,6 L6,3 z" fill={cW3} />
+          </marker>
+          <marker id="arrowHighlight" markerWidth="6" markerHeight="6" refX="5" refY="3" orient="auto">
+            <path d="M0,0 L0,6 L6,3 z" fill={cHighlight} />
+          </marker>
+          <marker id="arrowFaded" markerWidth="6" markerHeight="6" refX="5" refY="3" orient="auto">
+            <path d="M0,0 L0,6 L6,3 z" fill="#e2e8f0" />
+          </marker>
+        </defs>
+      );
+
+      // Gradient calculations
+      const gradientMultiplier = Math.pow(w3Value, 4); // 5 steps means 4 connections
+      const isExploding = w3Value > 1.0;
+      const isVanishing = w3Value < 1.0;
+
+      return (
+        <div className="max-w-5xl mx-auto p-6 md:p-12 space-y-16 pb-32">
+          
+          <header className="border-b border-slate-200 pb-8">
+            <h1 className="text-5xl font-sans text-slate-900 mb-2 tracking-tight">Recurrent Neural Network</h1>
+            <p className="text-xl text-slate-500">Unrolled architecture & gradient flow analysis.</p>
+          </header>
+
+          {/* =====================================================================
+              PART 1: UNROLLED ARCHITECTURE & WEIGHT SHARING
+              ===================================================================== */}
+          <section className="bg-white rounded-3xl shadow-lg border border-slate-200 p-8 md:p-12">
+            <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4">
+              <div>
+                <h2 className="text-2xl font-bold text-slate-800">Unrolling Over Time</h2>
+                <p className="text-slate-600 mt-1">Hover over the buttons to see how the network reuses the same parameters.</p>
+              </div>
+              <div className="flex gap-2 bg-slate-100 p-1.5 rounded-lg shadow-inner">
+                <button 
+                  onMouseEnter={() => setHighlightWeight('W1')} onMouseLeave={() => setHighlightWeight(null)}
+                  className={`px-4 py-2 rounded-md text-sm font-bold transition-all ${highlightWeight === 'W1' ? 'bg-white text-red-600 shadow-sm' : 'text-slate-500 hover:text-slate-800'}`}
+                >
+                  Highlight W₁
+                </button>
+                <button 
+                  onMouseEnter={() => setHighlightWeight('W3')} onMouseLeave={() => setHighlightWeight(null)}
+                  className={`px-4 py-2 rounded-md text-sm font-bold transition-all ${highlightWeight === 'W3' ? 'bg-white text-red-600 shadow-sm' : 'text-slate-500 hover:text-slate-800'}`}
+                >
+                  Highlight W₃
+                </button>
+                <button 
+                  onMouseEnter={() => setHighlightWeight('W2')} onMouseLeave={() => setHighlightWeight(null)}
+                  className={`px-4 py-2 rounded-md text-sm font-bold transition-all ${highlightWeight === 'W2' ? 'bg-white text-red-600 shadow-sm' : 'text-slate-500 hover:text-slate-800'}`}
+                >
+                  Highlight W₂
+                </button>
+              </div>
+            </div>
+
+            <div className="w-full overflow-x-auto">
+              <div className="min-w-[800px] h-[500px] relative">
+                <svg width="100%" height="100%" viewBox="0 0 900 500" className="absolute inset-0 font-sans">
+                  <SvgDefs />
+
+                  {/* RED HIGHLIGHT ARROWS - "Same Weights!" */}
+                  <g className={`transition-opacity duration-300 ${highlightWeight ? 'opacity-100' : 'opacity-0'}`}>
+                    <text x="30" y="220" fill={cHighlight} fontSize="20" fontWeight="bold">Same Weights!</text>
+                    
+                    {/* Arrows to W1 */}
+                    <g className={highlightWeight === 'W1' ? 'opacity-100' : 'opacity-0'}>
+                      <path d="M 180 210 L 320 100" fill="none" stroke={cHighlight} strokeWidth="1.5" strokeDasharray="4" markerEnd="url(#arrowHighlight)" />
+                      <path d="M 180 220 L 320 260" fill="none" stroke={cHighlight} strokeWidth="1.5" strokeDasharray="4" markerEnd="url(#arrowHighlight)" />
+                      <path d="M 180 230 L 320 420" fill="none" stroke={cHighlight} strokeWidth="1.5" strokeDasharray="4" markerEnd="url(#arrowHighlight)" />
+                    </g>
+
+                    {/* Arrows to W3 */}
+                    <g className={highlightWeight === 'W3' ? 'opacity-100' : 'opacity-0'}>
+                      <path d="M 180 210 L 490 195" fill="none" stroke={cHighlight} strokeWidth="1.5" strokeDasharray="4" markerEnd="url(#arrowHighlight)" />
+                      <path d="M 180 220 L 490 355" fill="none" stroke={cHighlight} strokeWidth="1.5" strokeDasharray="4" markerEnd="url(#arrowHighlight)" />
+                    </g>
+
+                    {/* Arrows to W2 */}
+                    <g className={highlightWeight === 'W2' ? 'opacity-100' : 'opacity-0'}>
+                      <path d="M 180 210 L 550 100" fill="none" stroke={cHighlight} strokeWidth="1.5" strokeDasharray="4" markerEnd="url(#arrowHighlight)" />
+                      <path d="M 180 220 L 550 260" fill="none" stroke={cHighlight} strokeWidth="1.5" strokeDasharray="4" markerEnd="url(#arrowHighlight)" />
+                      <path d="M 180 230 L 550 420" fill="none" stroke={cHighlight} strokeWidth="1.5" strokeDasharray="4" markerEnd="url(#arrowHighlight)" />
+                    </g>
+                  </g>
+
+                  {/* ROW 1: t-2 */}
+                  <g transform="translate(0, 0)">
+                    <text x="100" y="85" fill="#64748b" fontSize="16" fontWeight="bold" textAnchor="end">The day before</text>
+                    <text x="100" y="105" fill="#64748b" fontSize="16" fontWeight="bold" textAnchor="end">Yesterday</text>
+                    
+                    {/* I t-2 */}
+                    <text x="240" y="65" className="math-font" fontSize="20" fontStyle="italic" textAnchor="middle">I<tspan fontSize="12" dy="5">t-2</tspan></text>
+                    <circle cx="240" cy="100" r="22" fill={cInput} stroke="#ca8a04" strokeWidth="1.5" />
+                    
+                    {/* W1 */}
+                    <line x1="262" y1="100" x2="385" y2="100" stroke={highlightWeight === 'W1' ? cHighlight : cLine} strokeWidth={highlightWeight === 'W1' ? 3 : 1.5} markerEnd={highlightWeight === 'W1' ? 'url(#arrowHighlight)' : 'url(#arrowLine)'} />
+                    <text x="320" y="85" className="math-font" fontSize="20" fontStyle="italic" fill={highlightWeight === 'W1' ? cHighlight : cLine}>W<tspan fontSize="12" dy="5">1</tspan></text>
+                    
+                    {/* Hidden & ReLU */}
+                    <circle cx="410" cy="100" r="20" fill={cHidden} stroke="#3b82f6" strokeWidth="1.5" />
+                    <line x1="430" y1="100" x2="455" y2="100" stroke={cLine} strokeWidth="1.5" markerEnd="url(#arrowLine)" />
+                    <rect x="460" y="85" width="40" height="30" rx="4" fill={cRelu} stroke="#22c55e" strokeWidth="1.5" />
+                    <text x="480" y="104" fill="#16a34a" fontSize="10" fontWeight="bold" textAnchor="middle">ReLU</text>
+                    
+                    {/* W2 */}
+                    <circle cx="510" cy="100" r="4" fill="#1e293b" /> {/* black dot */}
+                    <line x1="514" y1="100" x2="635" y2="100" stroke={highlightWeight === 'W2' ? cHighlight : cLine} strokeWidth={highlightWeight === 'W2' ? 3 : 1.5} markerEnd={highlightWeight === 'W2' ? 'url(#arrowHighlight)' : 'url(#arrowLine)'} />
+                    <text x="560" y="85" className="math-font" fontSize="20" fontStyle="italic" fill={highlightWeight === 'W2' ? cHighlight : cLine}>W<tspan fontSize="12" dy="5">2</tspan></text>
+                    
+                    {/* Output */}
+                    <text x="660" y="65" className="math-font" fontSize="20" fontStyle="italic" fill="#94a3b8" textAnchor="middle">O<tspan fontSize="12" dy="5">t-2</tspan></text>
+                    <circle cx="660" cy="100" r="22" fill={cOutput} stroke="#ea580c" strokeWidth="1.5" />
+                    <text x="695" y="105" fill="#64748b" fontSize="16" fontWeight="bold">Predicted value for yesterday</text>
+                  </g>
+
+                  {/* W3 Connection 1 -> 2 */}
+                  <path d="M 480 115 C 480 180, 410 140, 410 235" fill="none" stroke={highlightWeight === 'W3' ? cHighlight : cW3} strokeWidth={highlightWeight === 'W3' ? 3 : 1.5} markerEnd={highlightWeight === 'W3' ? 'url(#arrowHighlight)' : 'url(#arrowW3)'} />
+                  <text x="485" y="180" className="math-font" fontSize="20" fontStyle="italic" fill={highlightWeight === 'W3' ? cHighlight : '#1e293b'}>W<tspan fontSize="12" dy="5">3</tspan></text>
+
+                  {/* ROW 2: t-1 */}
+                  <g transform="translate(0, 160)">
+                    <text x="100" y="105" fill="#64748b" fontSize="16" fontWeight="bold" textAnchor="end">Yesterday</text>
+                    
+                    <text x="240" y="65" className="math-font" fontSize="20" fontStyle="italic" textAnchor="middle">I<tspan fontSize="12" dy="5">t-1</tspan></text>
+                    <circle cx="240" cy="100" r="22" fill={cInput} stroke="#ca8a04" strokeWidth="1.5" />
+                    
+                    <line x1="262" y1="100" x2="385" y2="100" stroke={highlightWeight === 'W1' ? cHighlight : cLine} strokeWidth={highlightWeight === 'W1' ? 3 : 1.5} markerEnd={highlightWeight === 'W1' ? 'url(#arrowHighlight)' : 'url(#arrowLine)'} />
+                    <text x="320" y="85" className="math-font" fontSize="20" fontStyle="italic" fill={highlightWeight === 'W1' ? cHighlight : cLine}>W<tspan fontSize="12" dy="5">1</tspan></text>
+                    
+                    <circle cx="410" cy="100" r="20" fill={cHidden} stroke="#3b82f6" strokeWidth="1.5" />
+                    <line x1="430" y1="100" x2="455" y2="100" stroke={cLine} strokeWidth="1.5" markerEnd="url(#arrowLine)" />
+                    <rect x="460" y="85" width="40" height="30" rx="4" fill={cRelu} stroke="#22c55e" strokeWidth="1.5" />
+                    <text x="480" y="104" fill="#16a34a" fontSize="10" fontWeight="bold" textAnchor="middle">ReLU</text>
+                    
+                    <circle cx="510" cy="100" r="4" fill="#1e293b" />
+                    <line x1="514" y1="100" x2="635" y2="100" stroke={highlightWeight === 'W2' ? cHighlight : cLine} strokeWidth={highlightWeight === 'W2' ? 3 : 1.5} markerEnd={highlightWeight === 'W2' ? 'url(#arrowHighlight)' : 'url(#arrowLine)'} />
+                    <text x="560" y="85" className="math-font" fontSize="20" fontStyle="italic" fill={highlightWeight === 'W2' ? cHighlight : cLine}>W<tspan fontSize="12" dy="5">2</tspan></text>
+                    
+                    <text x="660" y="65" className="math-font" fontSize="20" fontStyle="italic" fill="#94a3b8" textAnchor="middle">O<tspan fontSize="12" dy="5">t-1</tspan></text>
+                    <circle cx="660" cy="100" r="22" fill={cOutput} stroke="#ea580c" strokeWidth="1.5" />
+                    <text x="695" y="105" fill="#64748b" fontSize="16" fontWeight="bold">Predicted value for today</text>
+                  </g>
+
+                  {/* W3 Connection 2 -> 3 */}
+                  <path d="M 480 275 C 480 340, 410 300, 410 395" fill="none" stroke={highlightWeight === 'W3' ? cHighlight : cW3} strokeWidth={highlightWeight === 'W3' ? 3 : 1.5} markerEnd={highlightWeight === 'W3' ? 'url(#arrowHighlight)' : 'url(#arrowW3)'} />
+                  <text x="485" y="340" className="math-font" fontSize="20" fontStyle="italic" fill={highlightWeight === 'W3' ? cHighlight : '#1e293b'}>W<tspan fontSize="12" dy="5">3</tspan></text>
+
+                  {/* ROW 3: t */}
+                  <g transform="translate(0, 320)">
+                    <text x="100" y="105" fill="#64748b" fontSize="16" fontWeight="bold" textAnchor="end">Today</text>
+                    
+                    <text x="240" y="65" className="math-font" fontSize="20" fontStyle="italic" textAnchor="middle">I<tspan fontSize="12" dy="5">t</tspan></text>
+                    <circle cx="240" cy="100" r="22" fill={cInput} stroke="#ca8a04" strokeWidth="1.5" />
+                    
+                    <line x1="262" y1="100" x2="385" y2="100" stroke={highlightWeight === 'W1' ? cHighlight : cLine} strokeWidth={highlightWeight === 'W1' ? 3 : 1.5} markerEnd={highlightWeight === 'W1' ? 'url(#arrowHighlight)' : 'url(#arrowLine)'} />
+                    <text x="320" y="85" className="math-font" fontSize="20" fontStyle="italic" fill={highlightWeight === 'W1' ? cHighlight : cLine}>W<tspan fontSize="12" dy="5">1</tspan></text>
+                    
+                    <circle cx="410" cy="100" r="20" fill={cHidden} stroke="#3b82f6" strokeWidth="1.5" />
+                    <line x1="430" y1="100" x2="455" y2="100" stroke={cLine} strokeWidth="1.5" markerEnd="url(#arrowLine)" />
+                    <rect x="460" y="85" width="40" height="30" rx="4" fill={cRelu} stroke="#22c55e" strokeWidth="1.5" />
+                    <text x="480" y="104" fill="#16a34a" fontSize="10" fontWeight="bold" textAnchor="middle">ReLU</text>
+                    
+                    <circle cx="510" cy="100" r="4" fill="#1e293b" />
+                    <line x1="514" y1="100" x2="635" y2="100" stroke={highlightWeight === 'W2' ? cHighlight : cLine} strokeWidth={highlightWeight === 'W2' ? 3 : 1.5} markerEnd={highlightWeight === 'W2' ? 'url(#arrowHighlight)' : 'url(#arrowLine)'} />
+                    <text x="560" y="85" className="math-font" fontSize="20" fontStyle="italic" fill={highlightWeight === 'W2' ? cHighlight : cLine}>W<tspan fontSize="12" dy="5">2</tspan></text>
+                    
+                    <text x="660" y="65" className="math-font" fontSize="20" fontStyle="italic" textAnchor="middle">O<tspan fontSize="12" dy="5">t</tspan></text>
+                    <circle cx="660" cy="100" r="22" fill={cOutput} stroke="#ea580c" strokeWidth="1.5" />
+                    <text x="695" y="105" fill="#64748b" fontSize="16" fontWeight="bold">Predicted value for tomorrow</text>
+                  </g>
+
+                </svg>
+              </div>
+            </div>
+          </section>
+
+          {/* =====================================================================
+              PART 2: VANISHING / EXPLODING GRADIENT PROBLEM
+              ===================================================================== */}
+          <section className="bg-white rounded-3xl shadow-lg border border-slate-200 p-8 md:p-12 overflow-hidden">
+            <h2 className="text-4xl font-sans text-slate-900 mb-8 tracking-tight">Vanishing/Exploding Gradient Problem</h2>
+            
+            <div className="flex flex-col xl:flex-row gap-12">
+              
+              {/* SVG Visualization */}
+              <div className="w-full xl:w-2/3 overflow-x-auto bg-slate-50 rounded-2xl border border-slate-100 py-6">
+                <div className="min-w-[600px] h-[550px] relative mx-auto">
+                  <svg width="100%" height="100%" viewBox="0 0 680 550" className="absolute inset-0 font-sans">
+                    <SvgDefs />
+
+                    {/* Render 5 rows */}
+                    {[1, 2, 3, 4, 5].map((row, index) => {
+                      const yOffset = index * 100;
+                      // Only label the first input
+                      const isFirst = index === 0;
+                      // Highlight the signal path from I_1 down
+                      const signalActive = true; 
+                      
+                      return (
+                        <g key={row} transform={`translate(0, ${yOffset})`}>
+                          {/* Input */}
+                          {isFirst && <text x="110" y="65" className="math-font" fontSize="20" fontStyle="italic" textAnchor="middle">I<tspan fontSize="12" dy="5">1</tspan></text>}
+                          <circle cx="140" cy="60" r="20" fill={cInput} stroke="#ca8a04" strokeWidth="1.5" />
+                          
+                          <line x1="160" y1="60" x2="255" y2="60" stroke={cLine} strokeWidth="1.5" markerEnd="url(#arrowLine)" />
+                          <text x="207" y="45" className="math-font" fontSize="20" fontStyle="italic" fill="#cbd5e1" textAnchor="middle">W<tspan fontSize="12" dy="5">1</tspan></text>
+                          
+                          {/* Hidden & ReLU */}
+                          <circle cx="280" cy="60" r="20" fill={cHidden} stroke="#3b82f6" strokeWidth="1.5" />
+                          <line x1="300" y1="60" x2="325" y2="60" stroke={cLine} strokeWidth="1.5" markerEnd="url(#arrowLine)" />
+                          <rect x="330" y="45" width="40" height="30" rx="4" fill={cRelu} stroke="#22c55e" strokeWidth="1.5" />
+                          <text x="350" y="64" fill="#16a34a" fontSize="10" fontWeight="bold" textAnchor="middle">ReLU</text>
+                          
+                          <circle cx="385" cy="60" r="4" fill="#1e293b" />
+                          <line x1="389" y1="60" x2="495" y2="60" stroke={cLine} strokeWidth="1.5" markerEnd="url(#arrowLine)" />
+                          <text x="442" y="45" className="math-font" fontSize="20" fontStyle="italic" fill="#cbd5e1" textAnchor="middle">W<tspan fontSize="12" dy="5">2</tspan></text>
+                          
+                          {/* Output */}
+                          <circle cx="520" cy="60" r="20" fill={cOutput} stroke="#ea580c" strokeWidth="1.5" />
+
+                          {/* Gradient Signal Value Display */}
+                          <text x="550" y="65" fontSize="14" fill={isExploding && index > 0 ? '#ef4444' : isVanishing && index > 0 ? '#f59e0b' : '#64748b'} className="font-mono font-bold">
+                            Signal: {Math.pow(w3Value, index).toFixed(4)}
+                          </text>
+
+                          {/* W3 Connection down (except last row) */}
+                          {index < 4 && (
+                            <g>
+                              <path 
+                                d={`M 350 75 C 350 110, 280 110, 280 155`} 
+                                fill="none" 
+                                stroke={cW3} 
+                                strokeWidth="2" 
+                                className={signalActive ? "flow-line" : ""}
+                                markerEnd="url(#arrowW3)" 
+                              />
+                              <text x="355" y="110" className="math-font" fontSize="20" fontStyle="italic" fill="#1e293b">W<tspan fontSize="12" dy="5">3</tspan></text>
+                            </g>
+                          )}
+                        </g>
+                      );
+                    })}
+
+                  </svg>
+                </div>
+              </div>
+
+              {/* Controls and Math Panel */}
+              <div className="w-full xl:w-1/3 flex flex-col justify-center space-y-8">
+                
+                <div className="bg-slate-100 p-6 rounded-2xl border border-slate-200 shadow-inner">
+                  <h3 className="text-sm font-bold text-slate-500 uppercase tracking-widest mb-4">Adjust W₃ Parameter</h3>
+                  
+                  <div className="flex justify-between text-xs font-bold text-slate-400 mb-2 px-1">
+                    <span className={isVanishing ? "text-amber-500" : ""}>Vanishing (0.5)</span>
+                    <span className={isExploding ? "text-red-500" : ""}>Exploding (2.0)</span>
+                  </div>
+                  
+                  <input 
+                    type="range" min="0.5" max="2.0" step="1.5" // Only allows 0.5 or 2.0 to match slides perfectly
+                    value={w3Value}
+                    onChange={(e) => setW3Value(parseFloat(e.target.value))}
+                    className="w-full h-2 bg-slate-300 rounded-lg appearance-none cursor-pointer accent-blue-600 mb-6"
+                  />
+
+                  <div className="text-center">
+                    <span className="text-lg font-bold text-slate-700">Selected <Latex math="W_3 =" /> </span>
+                    <span className={`text-2xl font-black font-mono ml-2 ${isExploding ? 'text-red-600' : 'text-amber-500'}`}>
+                      {w3Value.toFixed(1)}
+                    </span>
+                  </div>
+                </div>
+
+                <div className="text-center space-y-6">
+                  <div className="text-xl font-sans text-slate-800">
+                    If <Latex math={`W_3=${w3Value}`} />, this input has <Latex math={`I_1 \\times ${gradientMultiplier}`} />
+                  </div>
+
+                  <div className={`p-4 rounded-xl font-bold text-lg ${isExploding ? 'bg-red-50 text-red-700 border border-red-200' : 'bg-amber-50 text-amber-700 border border-amber-200'}`}>
+                    If we use 100 days of data, <Latex math="I_1" /> will be amplified 
+                    <span className="mx-2 font-black font-mono">
+                      {isExploding ? '2^{100}' : '2^{-100}'}
+                    </span> 
+                    times!
+                  </div>
+
+                  <p className="text-sm text-slate-500 italic mt-4">
+                    This exponential multiplication over long sequences destroys the network's ability to learn long-term dependencies.
+                  </p>
+                </div>
+
+              </div>
+            </div>
+
+          </section>
+
+          {/* =====================================================================
+              PART 3: OUTPUT ARCHITECTURES (How are outputs used?)
+              ===================================================================== */}
+          <section className="bg-white rounded-3xl shadow-lg border border-slate-200 p-8 md:p-12 overflow-hidden">
+            <h2 className="text-4xl font-sans text-slate-900 mb-8 tracking-tight">Output Architectures</h2>
+            
+            <div className="flex flex-col xl:flex-row gap-12">
+              <div className="w-full xl:w-1/3 space-y-6">
+                <p className="text-slate-600 text-lg">
+                  If we aren't generating new words (autoregression), what happens to the outputs at each step? Are they just left "hanging"? 
+                </p>
+                
+                <div className="flex flex-col gap-3">
+                  <button 
+                    onClick={() => setOutputMode('many-to-one')}
+                    className={`p-4 rounded-xl border-2 font-bold text-left transition-all ${outputMode === 'many-to-one' ? 'bg-blue-50 border-blue-400 text-blue-800 shadow-md' : 'bg-white border-slate-200 text-slate-500 hover:bg-slate-50'}`}
+                  >
+                    Many-to-One
+                    <span className="block text-sm font-normal mt-1 opacity-80">e.g., Sentiment Analysis</span>
+                  </button>
+                  <button 
+                    onClick={() => setOutputMode('many-to-many')}
+                    className={`p-4 rounded-xl border-2 font-bold text-left transition-all ${outputMode === 'many-to-many' ? 'bg-blue-50 border-blue-400 text-blue-800 shadow-md' : 'bg-white border-slate-200 text-slate-500 hover:bg-slate-50'}`}
+                  >
+                    Many-to-Many
+                    <span className="block text-sm font-normal mt-1 opacity-80">e.g., Part-of-Speech Tagging</span>
+                  </button>
+                </div>
+
+                <div className="bg-amber-50 border border-amber-200 p-4 rounded-xl">
+                  {outputMode === 'many-to-one' ? (
+                    <p className="text-sm text-amber-800">
+                      <strong>YES! We ignore them!</strong> In Many-to-One tasks, intermediate outputs (<Latex math="O_1, O_2, O_3" inline={true}/>) are simply discarded. The final hidden state (<Latex math="H_4" inline={true}/>) has compressed the entire sentence memory, so we only compute <Latex math="O_4" inline={true}/> to make our final prediction.
+                    </p>
+                  ) : (
+                    <p className="text-sm text-amber-800">
+                      <strong>Every output is used!</strong> In Many-to-Many (non-autoregressive) tasks, we want a prediction for every single word in the sequence. None of the outputs are discarded; each one is routed to a classifier.
+                    </p>
+                  )}
+                </div>
+              </div>
+
+              <div className="w-full xl:w-2/3 bg-slate-50 rounded-2xl border border-slate-100 py-8 overflow-x-auto flex justify-center items-center relative">
+                <svg width="700" height="300" viewBox="0 0 700 300" className="font-sans">
+                  <SvgDefs />
+                  
+                  {/* Sequence definition */}
+                  {[1, 2, 3, 4].map((step, i) => {
+                    const xPos = 100 + (i * 160);
+                    const isLast = step === 4;
+                    const wordsManyToOne = ["The", "movie", "was", "great!"];
+                    const wordsManyToMany = ["The", "dog", "ran", "fast"];
+                    const tags = ["DET", "NOUN", "VERB", "ADV"];
+                    
+                    // Determine if output should be drawn as faded (discarded)
+                    const isOutputFaded = outputMode === 'many-to-one' && !isLast;
+
+                    return (
+                      <g key={step}>
+                        {/* Inputs */}
+                        <circle cx={xPos} cy="220" r="22" fill={cInput} stroke="#ca8a04" strokeWidth="1.5" />
+                        <text x={xPos} y="225" className="math-font" fontSize="16" fontStyle="italic" textAnchor="middle">I<tspan fontSize="10" dy="5">{step}</tspan></text>
+                        <text x={xPos} y="265" fontSize="14" fill="#64748b" fontWeight="bold" textAnchor="middle">
+                           "{outputMode === 'many-to-one' ? wordsManyToOne[i] : wordsManyToMany[i]}"
+                        </text>
+
+                        {/* Connection I to H */}
+                        <line x1={xPos} y1="198" x2={xPos} y2="162" stroke={cLine} strokeWidth="1.5" markerEnd="url(#arrowLine)" />
+
+                        {/* Hidden States */}
+                        <circle cx={xPos} cy="140" r="22" fill={cHidden} stroke="#3b82f6" strokeWidth="1.5" />
+                        <text x={xPos} y="145" className="math-font" fontSize="16" fontStyle="italic" textAnchor="middle">H<tspan fontSize="10" dy="5">{step}</tspan></text>
+
+                        {/* Recurrent Connection (H to H) */}
+                        {!isLast && (
+                          <line x1={xPos + 22} y1="140" x2={xPos + 138} y2="140" stroke={cW3} strokeWidth="2" markerEnd="url(#arrowW3)" />
+                        )}
+
+                        {/* Connection H to O */}
+                        <line 
+                          x1={xPos} y1="118" x2={xPos} y2="82" 
+                          stroke={isOutputFaded ? "#e2e8f0" : cLine} 
+                          strokeWidth="1.5" 
+                          strokeDasharray={isOutputFaded ? "4" : "0"}
+                          markerEnd={isOutputFaded ? "url(#arrowFaded)" : "url(#arrowLine)"} 
+                        />
+
+                        {/* Outputs */}
+                        <circle cx={xPos} cy="60" r="22" fill={isOutputFaded ? "transparent" : cOutput} stroke={isOutputFaded ? "#e2e8f0" : "#ea580c"} strokeDasharray={isOutputFaded ? "4" : "0"} strokeWidth="1.5" className="transition-all duration-300" />
+                        <text x={xPos} y="65" className="math-font transition-all duration-300" fontSize="16" fontStyle="italic" textAnchor="middle" fill={isOutputFaded ? "#cbd5e1" : "#1e293b"}>O<tspan fontSize="10" dy="5">{step}</tspan></text>
+
+                        {/* Predictions/Classifiers */}
+                        {outputMode === 'many-to-one' && isLast && (
+                          <g className="animate-in fade-in duration-500">
+                             <rect x={xPos - 50} y="10" width="100" height="25" rx="4" fill="#22c55e" />
+                             <text x={xPos} y="27" fill="white" fontSize="12" fontWeight="bold" textAnchor="middle">Positive!</text>
+                          </g>
+                        )}
+                        {outputMode === 'many-to-one' && !isLast && (
+                          <text x={xPos} y="25" fill="#cbd5e1" fontSize="10" fontStyle="italic" textAnchor="middle" className="transition-all duration-300">Ignored</text>
+                        )}
+
+                        {outputMode === 'many-to-many' && (
+                          <g className="animate-in fade-in duration-500">
+                             <rect x={xPos - 35} y="10" width="70" height="25" rx="4" fill="#8b5cf6" />
+                             <text x={xPos} y="27" fill="white" fontSize="12" fontWeight="bold" textAnchor="middle">{tags[i]}</text>
+                          </g>
+                        )}
+                      </g>
+                    );
+                  })}
+                </svg>
+              </div>
+            </div>
+          </section>
+
+        </div>
+      );
+    }
+
+    const root = ReactDOM.createRoot(document.getElementById('root'));
+    root.render(<App />);
+  </script>
+</body>
+</html>

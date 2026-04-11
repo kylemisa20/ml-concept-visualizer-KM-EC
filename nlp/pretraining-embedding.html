@@ -1,0 +1,568 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pretraining Visualization</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- React & ReactDOM -->
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <!-- Babel for in-browser JSX compilation -->
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+</head>
+<body class="bg-slate-50">
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState } = React;
+
+        // --- Safelist for Tailwind JIT (ensures dynamic colors compile correctly) ---
+        // bg-emerald-100 text-emerald-700 border-emerald-500 bg-emerald-500 text-emerald-600 bg-emerald-50 border-emerald-200 text-emerald-800
+        // bg-blue-100 text-blue-700 border-blue-500 bg-blue-500 text-blue-600 bg-blue-50 border-blue-200 text-blue-800
+        // bg-slate-100 text-slate-700 border-slate-500 bg-slate-500 text-slate-600 bg-slate-50 border-slate-200 text-slate-800
+        // bg-red-100 text-red-700 border-red-500 bg-red-500 text-red-600 bg-red-50 border-red-200 text-red-800
+
+        // --- Inline Icon Components (Replacing lucide-react) ---
+        const IconBrain = ({ className }) => <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M12 5a3 3 0 1 0-5.997.125 4 4 0 0 0-2.526 5.77 4 4 0 0 0 .556 6.588A4 4 0 1 0 12 18Z"/><path d="M12 5a3 3 0 1 1 5.997.125 4 4 0 0 1 2.526 5.77 4 4 0 0 1-.556 6.588A4 4 0 1 1 12 18Z"/><path d="M15 13a4.5 4.5 0 0 1-3-4 4.5 4.5 0 0 1-3 4"/><path d="M17.599 6.5a3 3 0 0 0 .399-1.375"/></svg>;
+        const IconDatabase = ({ className }) => <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5V19A9 3 0 0 0 21 19V5"/><path d="M3 12A9 3 0 0 0 21 12"/></svg>;
+        const IconActivity = ({ className }) => <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>;
+        const IconTarget = ({ className }) => <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg>;
+        const IconZap = ({ className }) => <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>;
+        const IconAlertTriangle = ({ className }) => <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg>;
+        const IconCheckCircle2 = ({ className }) => <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><path d="m9 11 3 3L22 4"/></svg>;
+        const IconBookOpen = ({ className }) => <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg>;
+        const IconTrendingDown = ({ className }) => <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><polyline points="22 17 13.5 8.5 8.5 13.5 2 7"/><polyline points="16 17 22 17 22 11"/></svg>;
+        const IconType = ({ className }) => <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><polyline points="4 7 4 4 20 4 20 7"/><line x1="9" x2="15" y1="20" y2="20"/><line x1="12" x2="12" y1="4" y2="20"/></svg>;
+        const IconGitBranch = ({ className }) => <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><line x1="6" x2="6" y1="3" y2="15"/><circle cx="18" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M18 9a9 9 0 0 1-9 9"/></svg>;
+        const IconArrowRight = ({ className }) => <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg>;
+        const IconLayers = ({ className }) => <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 12 12 17 22 12"/><polyline points="2 17 12 22 22 17"/></svg>;
+        const IconSettings = ({ className }) => <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg>;
+        const IconNetwork = ({ className }) => <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><rect x="16" y="16" width="6" height="6" rx="1"/><rect x="2" y="16" width="6" height="6" rx="1"/><rect x="9" y="2" width="6" height="6" rx="1"/><path d="M5 16v-3a1 1 0 0 1 1-1h12a1 1 0 0 1 1 1v3"/><path d="M12 12V8"/></svg>;
+        const IconLink = ({ className }) => <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>;
+
+        const App = () => {
+          // ---------------------------------------------------------
+          // STATE: 1. Context Explorer
+          // ---------------------------------------------------------
+          const [activeWord, setActiveWord] = useState('bank');
+          const [contextMode, setContextMode] = useState('c1');
+
+          const wordData = {
+            bank: {
+              c1: { 
+                id: 'financial', label: 'Financial Context', 
+                text: 'I deposited my money in the', highlighted: 'bank', textAfter: 'today.',
+                vector: [0.82, -0.45, 0.91, 0.12, -0.77],
+                coords: { x: 85, y: 20 },
+                relatedWords: [{w: 'money', x: 80, y: 10}, {w: 'vault', x: 95, y: 25}],
+                color: 'emerald'
+              },
+              c2: { 
+                id: 'river', label: 'River Context', 
+                text: 'I sat by the river', highlighted: 'bank', textAfter: 'and watched ducks.',
+                vector: [-0.65, 0.88, -0.12, 0.94, 0.33],
+                coords: { x: 15, y: 80 },
+                relatedWords: [{w: 'water', x: 10, y: 90}, {w: 'mud', x: 25, y: 75}],
+                color: 'blue'
+              }
+            },
+            apple: {
+              c1: { 
+                id: 'tech', label: 'Tech Context', 
+                text: 'I bought a new laptop from', highlighted: 'Apple', textAfter: 'yesterday.',
+                vector: [0.95, 0.66, -0.22, 0.44, 0.88],
+                coords: { x: 80, y: 80 },
+                relatedWords: [{w: 'phone', x: 90, y: 75}, {w: 'computer', x: 75, y: 90}],
+                color: 'slate'
+              },
+              c2: { 
+                id: 'fruit', label: 'Fruit Context', 
+                text: 'I ate a crisp, juicy', highlighted: 'apple', textAfter: 'for a snack.',
+                vector: [-0.34, -0.81, 0.62, -0.55, -0.41],
+                coords: { x: 20, y: 20 },
+                relatedWords: [{w: 'fruit', x: 10, y: 15}, {w: 'tree', x: 30, y: 25}],
+                color: 'red'
+              }
+            }
+          };
+
+          const currentCtx = wordData[activeWord][contextMode];
+
+          // ---------------------------------------------------------
+          // STATE: 2. Domain Matcher & Tokenization
+          // ---------------------------------------------------------
+          const [activeTask, setActiveTask] = useState(null);
+          const [matchResult, setMatchResult] = useState(null);
+
+          const checkMatch = (model) => {
+            if (!activeTask) return;
+            if ((activeTask === 'medical' && model === 'BioBERT') || 
+                (activeTask === 'general' && model === 'BERT')) {
+              setMatchResult({ status: 'success', model, task: activeTask });
+            } else {
+              setMatchResult({ status: 'fail', model, task: activeTask });
+            }
+          };
+
+          // ---------------------------------------------------------
+          // STATE: 3. Pretraining Engine & Loss Curve & MLM
+          // ---------------------------------------------------------
+          const [corpusSize, setCorpusSize] = useState(20);
+          const [params, setParams] = useState(20);
+          const [duration, setDuration] = useState(20);
+          const qualityScore = Math.round((corpusSize + params + duration) / 3);
+          
+          const [mlmModel, setMlmModel] = useState('standard');
+
+          const mlmPredictions = {
+            poor: { word: 'apples', conf: 12 },
+            standard: { word: 'medicine', conf: 45 },
+            domain: { word: 'antibiotics', conf: 89 }
+          };
+
+          const [objectiveTab, setObjectiveTab] = useState('mlm');
+          const [nspModel, setNspModel] = useState('standard');
+          
+          const nspPredictions = {
+            poor: { isNext: 52, notNext: 48 },
+            standard: { isNext: 85, notNext: 15 },
+            domain: { isNext: 99, notNext: 1 }
+          };
+
+          // Calculate SVG Path for Loss Curve based on Quality Score
+          const startY = 10;
+          const endY = 10 + (qualityScore * 0.8); // Maps 0-100 to 10-90 in SVG coordinates
+          const controlY = 10 + (qualityScore * 0.5);
+          const lossPath = `M 0 ${startY} Q 40 ${controlY}, 100 ${endY}`;
+
+          return (
+            <div className="min-h-screen p-6 font-sans text-slate-800">
+              <div className="max-w-6xl mx-auto space-y-8">
+                
+                {/* Header */}
+                <header className="bg-white rounded-2xl p-8 shadow-sm border border-slate-100 text-center relative overflow-hidden">
+                  <div className="absolute top-0 left-0 w-full h-2 bg-gradient-to-r from-blue-500 via-indigo-500 to-purple-500"></div>
+                  <div className="inline-flex items-center justify-center p-3 bg-blue-100 text-blue-600 rounded-full mb-4">
+                    <IconBrain className="w-8 h-8" />
+                  </div>
+                  <h1 className="text-3xl md:text-4xl font-bold text-slate-900 mb-4">
+                    Why Pretraining Matters in Contextual Embeddings
+                  </h1>
+                  <p className="text-lg text-slate-600 max-w-2xl mx-auto">
+                    Unlike older models, modern architectures (like BERT or RoBERTa) generate dynamic representations based on context, trained on massive datasets.
+                  </p>
+                </header>
+
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                  
+                  {/* Card 1: Context Explorer */}
+                  <div className="bg-white rounded-2xl p-6 shadow-sm border border-slate-100 flex flex-col">
+                    <h2 className="text-xl font-bold mb-2 flex items-center gap-2">
+                      <IconZap className="w-5 h-5 text-amber-500" />
+                      1. Context Generates the Vector
+                    </h2>
+                    <p className="text-sm text-slate-500 mb-6">
+                      See how the mathematical representation changes based on the surrounding sentence.
+                    </p>
+
+                    {/* Word Selection */}
+                    <div className="flex gap-2 mb-4">
+                      <span className="text-sm font-medium text-slate-700 py-2">Target Word:</span>
+                      <button onClick={() => { setActiveWord('bank'); setContextMode('c1'); }} className={`px-3 py-1 rounded-full text-sm font-medium transition-all ${activeWord === 'bank' ? 'bg-slate-800 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}>Bank</button>
+                      <button onClick={() => { setActiveWord('apple'); setContextMode('c1'); }} className={`px-3 py-1 rounded-full text-sm font-medium transition-all ${activeWord === 'apple' ? 'bg-slate-800 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}>Apple</button>
+                    </div>
+
+                    {/* Context Toggles */}
+                    <div className="flex gap-2 mb-4">
+                      <button 
+                        onClick={() => setContextMode('c1')}
+                        className={`flex-1 py-2 px-4 rounded-lg font-medium text-sm transition-all border-2 ${
+                          contextMode === 'c1' ? `bg-${wordData[activeWord].c1.color}-100 text-${wordData[activeWord].c1.color}-700 border-${wordData[activeWord].c1.color}-500` : 'bg-slate-50 text-slate-500 border-transparent hover:bg-slate-100'
+                        }`}
+                      >
+                        {wordData[activeWord].c1.label}
+                      </button>
+                      <button 
+                        onClick={() => setContextMode('c2')}
+                        className={`flex-1 py-2 px-4 rounded-lg font-medium text-sm transition-all border-2 ${
+                          contextMode === 'c2' ? `bg-${wordData[activeWord].c2.color}-100 text-${wordData[activeWord].c2.color}-700 border-${wordData[activeWord].c2.color}-500` : 'bg-slate-50 text-slate-500 border-transparent hover:bg-slate-100'
+                        }`}
+                      >
+                        {wordData[activeWord].c2.label}
+                      </button>
+                    </div>
+
+                    {/* Sentence Display */}
+                    <div className="p-4 rounded-xl bg-slate-50 border border-slate-200 text-center text-lg mb-6 flex-shrink-0">
+                      <p>{currentCtx.text} <span className={`font-bold text-${currentCtx.color}-600 bg-${currentCtx.color}-100 px-2 rounded`}>{currentCtx.highlighted}</span> {currentCtx.textAfter}</p>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-4 mt-auto">
+                      {/* Vector Bar Chart */}
+                      <div className="p-4 bg-slate-50 rounded-xl border border-slate-100">
+                        <p className="text-xs font-semibold uppercase text-slate-400 mb-4 text-center">Vector Data</p>
+                        <div className="flex gap-1 justify-center h-24 items-end">
+                          {currentCtx.vector.map((val, i) => (
+                            <div key={i} className="flex flex-col items-center">
+                              <div 
+                                className={`w-6 rounded-t-sm transition-all duration-500 flex items-end justify-center pb-1 text-[10px] text-white font-bold bg-${currentCtx.color}-500`}
+                                style={{ height: `${Math.abs(val) * 80 + 10}px` }}
+                              >
+                                {Math.abs(val).toFixed(1)}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* 2D Projection Concept */}
+                      <div className="p-4 bg-slate-50 rounded-xl border border-slate-100 relative overflow-hidden">
+                        <p className="text-xs font-semibold uppercase text-slate-400 mb-2 text-center z-10 relative">2D Semantic Space</p>
+                        <div className="relative w-full aspect-square border-l-2 border-b-2 border-slate-200 mt-2">
+                          {/* Semantic Clusters */}
+                          {wordData[activeWord].c1.relatedWords.map((w, i) => (
+                            <div key={`c1-${i}`} className="absolute text-[10px] text-slate-400" style={{ left: `${w.x}%`, top: `${w.y}%` }}>{w.w}</div>
+                          ))}
+                          {wordData[activeWord].c2.relatedWords.map((w, i) => (
+                            <div key={`c2-${i}`} className="absolute text-[10px] text-slate-400" style={{ left: `${w.x}%`, top: `${w.y}%` }}>{w.w}</div>
+                          ))}
+                          {/* Target Word Dot */}
+                          <div 
+                            className={`absolute w-3 h-3 rounded-full bg-${currentCtx.color}-500 shadow-lg transition-all duration-700 ease-in-out`}
+                            style={{ left: `calc(${currentCtx.coords.x}% - 6px)`, top: `calc(${currentCtx.coords.y}% - 6px)` }}
+                          >
+                            <div className={`absolute -top-5 -left-4 text-xs font-bold text-${currentCtx.color}-600 bg-white px-1 rounded shadow-sm whitespace-nowrap`}>
+                              "{currentCtx.highlighted}"
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Card 2: Domain Specificity */}
+                  <div className="bg-white rounded-2xl p-6 shadow-sm border border-slate-100 flex flex-col">
+                    <h2 className="text-xl font-bold mb-2 flex items-center gap-2">
+                      <IconTarget className="w-5 h-5 text-indigo-500" />
+                      2. Domain Specificity & Tokenization
+                    </h2>
+                    <p className="text-sm text-slate-500 mb-6">
+                      General models splinter complex domain words into meaningless sub-tokens. Domain models understand them whole.
+                    </p>
+
+                    <div className="space-y-5">
+                      <div>
+                        <p className="text-sm font-medium text-slate-700 mb-2">Step 1: Select a Task</p>
+                        <div className="flex gap-2">
+                          <button 
+                            onClick={() => { setActiveTask('general'); setMatchResult(null); }}
+                            className={`flex-1 p-2 rounded-lg border-2 text-sm text-center transition-all ${
+                              activeTask === 'general' ? 'border-indigo-500 bg-indigo-50 text-indigo-700 font-bold' : 'border-slate-200 text-slate-600 hover:border-indigo-300'
+                            }`}
+                          >
+                            Analyze Wikipedia
+                          </button>
+                          <button 
+                            onClick={() => { setActiveTask('medical'); setMatchResult(null); }}
+                            className={`flex-1 p-2 rounded-lg border-2 text-sm text-center transition-all ${
+                              activeTask === 'medical' ? 'border-indigo-500 bg-indigo-50 text-indigo-700 font-bold' : 'border-slate-200 text-slate-600 hover:border-indigo-300'
+                            }`}
+                          >
+                            Analyze Clinical Notes
+                          </button>
+                        </div>
+                      </div>
+
+                      <div className={`transition-opacity duration-300 ${activeTask ? 'opacity-100' : 'opacity-30 pointer-events-none'}`}>
+                        <p className="text-sm font-medium text-slate-700 mb-2">Step 2: Assign to Model</p>
+                        <div className="flex gap-4">
+                          <button onClick={() => checkMatch('BERT')} className="flex-1 flex items-center gap-3 p-3 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-xl transition-all">
+                            <IconDatabase className="w-6 h-6 text-slate-400" />
+                            <div className="text-left">
+                              <div className="font-bold text-sm">Standard BERT</div>
+                              <div className="text-[10px] text-slate-500">General Web Text</div>
+                            </div>
+                          </button>
+                          <button onClick={() => checkMatch('BioBERT')} className="flex-1 flex items-center gap-3 p-3 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-xl transition-all">
+                            <IconActivity className="w-6 h-6 text-indigo-400" />
+                            <div className="text-left">
+                              <div className="font-bold text-sm">BioBERT</div>
+                              <div className="text-[10px] text-slate-500">PubMed Corpus</div>
+                            </div>
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Match Result & Tokenization Insight */}
+                      <div className={`mt-auto transition-all duration-500 h-40 ${matchResult ? 'opacity-100 scale-100' : 'opacity-0 scale-95 pointer-events-none'}`}>
+                        {matchResult && (
+                          <div className={`h-full p-4 rounded-xl flex flex-col gap-3 border ${
+                            matchResult.status === 'success' ? 'bg-emerald-50 border-emerald-200' : 'bg-red-50 border-red-200'
+                          }`}>
+                            <div className="flex items-start gap-3">
+                              {matchResult.status === 'success' ? <IconCheckCircle2 className="w-5 h-5 mt-0.5 shrink-0 text-emerald-600" /> : <IconAlertTriangle className="w-5 h-5 mt-0.5 shrink-0 text-red-600" />}
+                              <div className="flex-1">
+                                <p className={`font-bold ${matchResult.status === 'success' ? 'text-emerald-800' : 'text-red-800'}`}>
+                                  {matchResult.status === 'success' ? 'Great Match!' : 'Poor Performance Warning'}
+                                </p>
+                                
+                                {/* The Tokenization Visualization Feature */}
+                                {matchResult.task === 'medical' && (
+                                  <div className="mt-2 bg-white/60 p-2 rounded text-sm border border-black/5">
+                                    <p className="text-xs font-semibold text-slate-600 mb-1 flex items-center gap-1"><IconGitBranch className="w-3 h-3"/> Tokenization Example: <span className="font-mono">"Echocardiogram"</span></p>
+                                    {matchResult.model === 'BERT' ? (
+                                      <div className="flex gap-1 mt-1 text-xs font-mono">
+                                        <span className="bg-red-100 text-red-700 px-1 rounded">Echo</span>
+                                        <span className="bg-red-100 text-red-700 px-1 rounded">##card</span>
+                                        <span className="bg-red-100 text-red-700 px-1 rounded">##io</span>
+                                        <span className="bg-red-100 text-red-700 px-1 rounded">##gram</span>
+                                      </div>
+                                    ) : (
+                                      <div className="flex gap-1 mt-1 text-xs font-mono">
+                                        <span className="bg-emerald-100 text-emerald-700 px-1 rounded">Echocardiogram</span>
+                                      </div>
+                                    )}
+                                    <p className="text-[10px] mt-1 text-slate-500">
+                                      {matchResult.model === 'BERT' ? 'General model shreds unknown words, losing clinical meaning.' : 'Domain model recognizes the intact clinical entity.'}
+                                    </p>
+                                  </div>
+                                )}
+
+                                {matchResult.task === 'general' && (
+                                  <p className={`text-sm mt-1 ${matchResult.status === 'success' ? 'text-emerald-700' : 'text-red-700'}`}>
+                                    {matchResult.status === 'success' 
+                                      ? 'Standard BERT is perfectly optimized for everyday language.'
+                                      : 'BioBERT is over-specialized and may struggle with general idioms and slang compared to Standard BERT.'}
+                                  </p>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+
+                    </div>
+                  </div>
+                </div>
+
+                {/* Card 3: Pretraining Quality Factors */}
+                <div className="bg-white rounded-2xl p-6 md:p-8 shadow-sm border border-slate-100">
+                  <div className="flex flex-col lg:flex-row gap-8 items-stretch">
+                    
+                    <div className="flex-1 space-y-8 w-full flex flex-col justify-between">
+                      <div>
+                        <h2 className="text-2xl font-bold mb-2 flex items-center gap-2">
+                          <IconDatabase className="w-6 h-6 text-purple-500" />
+                          3. What determines Quality?
+                        </h2>
+                        <p className="text-slate-600">
+                          Pretraining is resource-intensive. Adjust sliders to lower the loss curve and improve predictive accuracy.
+                        </p>
+                      </div>
+
+                      {/* Sliders */}
+                      <div className="space-y-5 bg-slate-50 p-5 rounded-xl border border-slate-100">
+                        <div>
+                          <div className="flex justify-between text-sm font-medium mb-1">
+                            <span className="text-slate-700">Corpus Size (Billions of Words)</span>
+                            <span className="text-purple-600">{corpusSize}%</span>
+                          </div>
+                          <input type="range" min="0" max="100" value={corpusSize} onChange={(e) => setCorpusSize(parseInt(e.target.value))} className="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-purple-500" />
+                        </div>
+                        
+                        <div>
+                          <div className="flex justify-between text-sm font-medium mb-1">
+                            <span className="text-slate-700">Parameters (Model Depth)</span>
+                            <span className="text-purple-600">{params}%</span>
+                          </div>
+                          <input type="range" min="0" max="100" value={params} onChange={(e) => setParams(parseInt(e.target.value))} className="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-purple-500" />
+                        </div>
+
+                        <div>
+                          <div className="flex justify-between text-sm font-medium mb-1">
+                            <span className="text-slate-700">Training Duration (Compute Steps)</span>
+                            <span className="text-purple-600">{duration}%</span>
+                          </div>
+                          <input type="range" min="0" max="100" value={duration} onChange={(e) => setDuration(parseInt(e.target.value))} className="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-purple-500" />
+                        </div>
+                      </div>
+                      
+                      {/* Interactive Training Objectives */}
+                      <div className="bg-indigo-50/50 rounded-xl p-5 border border-indigo-100">
+                        <div className="flex gap-2 mb-4 border-b border-indigo-200 pb-2">
+                          <button onClick={() => setObjectiveTab('mlm')} className={`text-sm font-bold flex items-center gap-2 px-2 py-1 transition-all ${objectiveTab === 'mlm' ? 'text-indigo-900 border-b-2 border-indigo-600' : 'text-indigo-400 hover:text-indigo-600'}`}>
+                            <IconType className="w-4 h-4" /> MLM
+                          </button>
+                          <button onClick={() => setObjectiveTab('nsp')} className={`text-sm font-bold flex items-center gap-2 px-2 py-1 transition-all ${objectiveTab === 'nsp' ? 'text-indigo-900 border-b-2 border-indigo-600' : 'text-indigo-400 hover:text-indigo-600'}`}>
+                            <IconLink className="w-4 h-4" /> NSP
+                          </button>
+                        </div>
+                        
+                        {objectiveTab === 'mlm' ? (
+                          <div className="animate-in fade-in duration-300">
+                            <p className="text-xs text-indigo-700/80 mb-3">
+                              Models learn by guessing hidden words. See how different training impacts predictions:
+                            </p>
+                            
+                            <div className="bg-white p-3 rounded-lg border border-indigo-100 text-center font-medium text-slate-700 mb-3 shadow-sm">
+                              The doctor prescribed <span className="bg-indigo-600 text-white px-2 py-0.5 rounded text-sm mx-1">[MASK]</span> for the infection.
+                            </div>
+
+                            <div className="flex gap-2">
+                              <button onClick={() => setMlmModel('poor')} className={`flex-1 py-1.5 text-xs font-semibold rounded border transition-all ${mlmModel === 'poor' ? 'bg-red-100 text-red-700 border-red-300' : 'bg-white text-slate-500 border-slate-200 hover:bg-slate-50'}`}>Poorly Trained</button>
+                              <button onClick={() => setMlmModel('standard')} className={`flex-1 py-1.5 text-xs font-semibold rounded border transition-all ${mlmModel === 'standard' ? 'bg-blue-100 text-blue-700 border-blue-300' : 'bg-white text-slate-500 border-slate-200 hover:bg-slate-50'}`}>Standard BERT</button>
+                              <button onClick={() => setMlmModel('domain')} className={`flex-1 py-1.5 text-xs font-semibold rounded border transition-all ${mlmModel === 'domain' ? 'bg-emerald-100 text-emerald-700 border-emerald-300' : 'bg-white text-slate-500 border-slate-200 hover:bg-slate-50'}`}>Domain BERT</button>
+                            </div>
+
+                            <div className="mt-3 flex items-center justify-between bg-white px-3 py-2 rounded border border-slate-100">
+                              <span className="text-xs text-slate-500 uppercase font-semibold">Top Prediction:</span>
+                              <div className="flex items-center gap-2">
+                                <span className={`font-bold ${mlmModel === 'poor' ? 'text-red-500' : mlmModel === 'domain' ? 'text-emerald-600' : 'text-blue-600'}`}>"{mlmPredictions[mlmModel].word}"</span>
+                                <span className="text-xs bg-slate-100 px-1.5 py-0.5 rounded text-slate-500">{mlmPredictions[mlmModel].conf}% conf</span>
+                              </div>
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="animate-in fade-in duration-300">
+                            <p className="text-xs text-indigo-700/80 mb-3">
+                              Models learn document flow by predicting if Sentence B naturally follows Sentence A.
+                            </p>
+                            
+                            <div className="bg-white p-3 rounded-lg border border-indigo-100 text-sm font-medium text-slate-700 mb-3 shadow-sm flex flex-col gap-2">
+                              <div><span className="text-xs font-bold text-slate-400 mr-2">Sent A:</span> The patient presented with a severe headache.</div>
+                              <div><span className="text-xs font-bold text-indigo-500 mr-2">Sent B:</span> An MRI scan was immediately ordered.</div>
+                            </div>
+
+                            <div className="flex gap-2 mb-3">
+                              <button onClick={() => setNspModel('poor')} className={`flex-1 py-1.5 text-xs font-semibold rounded border transition-all ${nspModel === 'poor' ? 'bg-red-100 text-red-700 border-red-300' : 'bg-white text-slate-500 border-slate-200 hover:bg-slate-50'}`}>Poorly Trained</button>
+                              <button onClick={() => setNspModel('standard')} className={`flex-1 py-1.5 text-xs font-semibold rounded border transition-all ${nspModel === 'standard' ? 'bg-blue-100 text-blue-700 border-blue-300' : 'bg-white text-slate-500 border-slate-200 hover:bg-slate-50'}`}>Standard BERT</button>
+                              <button onClick={() => setNspModel('domain')} className={`flex-1 py-1.5 text-xs font-semibold rounded border transition-all ${nspModel === 'domain' ? 'bg-emerald-100 text-emerald-700 border-emerald-300' : 'bg-white text-slate-500 border-slate-200 hover:bg-slate-50'}`}>Domain BERT</button>
+                            </div>
+
+                            <div className="flex gap-2 bg-white px-3 py-2 rounded border border-slate-100 items-center">
+                              <span className="text-xs text-slate-500 uppercase font-semibold w-1/3">"IsNext" Prob:</span>
+                              <div className="flex-1 bg-slate-200 rounded-full h-3 overflow-hidden flex">
+                                <div className={`h-full transition-all duration-500 ${nspModel === 'poor' ? 'bg-red-400' : nspModel === 'domain' ? 'bg-emerald-500' : 'bg-blue-500'}`} style={{width: `${nspPredictions[nspModel].isNext}%`}}></div>
+                              </div>
+                              <span className={`text-xs font-bold w-8 text-right ${nspModel === 'poor' ? 'text-red-500' : nspModel === 'domain' ? 'text-emerald-600' : 'text-blue-600'}`}>{nspPredictions[nspModel].isNext}%</span>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+
+                    </div>
+
+                    {/* Quality & Loss Curve Visualization */}
+                    <div className="w-full lg:w-2/5 flex flex-col items-center justify-center p-6 bg-slate-900 rounded-2xl relative overflow-hidden group">
+                      <div className="absolute inset-0 opacity-20" style={{ 
+                        backgroundImage: 'radial-gradient(circle at center, #8b5cf6 0%, transparent 70%)',
+                        transform: `scale(${0.5 + (qualityScore / 100)})`,
+                        transition: 'transform 0.5s ease-out'
+                      }}></div>
+                      
+                      <div className="flex justify-between w-full z-10 items-start mb-6">
+                         {/* Mini Loss Curve SVG */}
+                         <div className="w-1/2 p-2 bg-slate-800/50 rounded-lg border border-slate-700/50">
+                            <p className="text-[10px] text-slate-400 uppercase font-semibold flex items-center gap-1 mb-2">
+                              <IconTrendingDown className="w-3 h-3" /> Training Loss
+                            </p>
+                            <svg viewBox="0 0 100 100" className="w-full h-16 overflow-visible">
+                              {/* Grid lines */}
+                              <line x1="0" y1="20" x2="100" y2="20" stroke="#334155" strokeWidth="0.5" strokeDasharray="2" />
+                              <line x1="0" y1="50" x2="100" y2="50" stroke="#334155" strokeWidth="0.5" strokeDasharray="2" />
+                              <line x1="0" y1="80" x2="100" y2="80" stroke="#334155" strokeWidth="0.5" strokeDasharray="2" />
+                              {/* The Curve */}
+                              <path 
+                                d={lossPath}
+                                fill="none" 
+                                stroke={qualityScore > 75 ? '#34d399' : qualityScore > 40 ? '#fbbf24' : '#f87171'} 
+                                strokeWidth="3" 
+                                strokeLinecap="round"
+                                className="transition-all duration-500 ease-out"
+                              />
+                            </svg>
+                         </div>
+                         
+                         <div className="text-right">
+                            <IconBrain className={`w-12 h-12 ml-auto mb-1 transition-all duration-500 ${qualityScore > 75 ? 'text-purple-400 drop-shadow-[0_0_15px_rgba(168,85,247,0.8)]' : qualityScore > 40 ? 'text-purple-600' : 'text-slate-600'}`} />
+                         </div>
+                      </div>
+                      
+                      <div className="text-center relative z-10 w-full mt-4 border-t border-slate-700/50 pt-6">
+                        <p className="text-slate-400 text-sm font-medium mb-1">Model Capability Score</p>
+                        <div className="text-6xl font-bold text-white mb-2 tracking-tight">
+                          {qualityScore}<span className="text-2xl text-slate-500 font-normal">/100</span>
+                        </div>
+                        
+                        <p className="text-xs font-medium px-3 py-1 rounded-full inline-block mt-2 transition-colors duration-300" style={{
+                          backgroundColor: qualityScore > 75 ? '#064e3b' : qualityScore > 40 ? '#713f12' : '#7f1d1d',
+                          color: qualityScore > 75 ? '#34d399' : qualityScore > 40 ? '#fde047' : '#fca5a5'
+                        }}>
+                          {qualityScore > 75 ? 'Highly Accurate (Converged)' : qualityScore > 40 ? 'Basic Understanding' : 'Underfitted / Poor Predictions'}
+                        </p>
+                      </div>
+                    </div>
+
+                  </div>
+                </div>
+
+                {/* Card 4: Pretraining vs. Fine-Tuning Pipeline */}
+                <div className="bg-white rounded-2xl p-6 md:p-8 shadow-sm border border-slate-100 mb-8 mt-4">
+                  <h2 className="text-2xl font-bold mb-6 flex items-center gap-2">
+                    <IconNetwork className="w-6 h-6 text-emerald-500" />
+                    4. The Full Lifecycle: Pretraining vs. Fine-Tuning
+                  </h2>
+                  
+                  <div className="flex flex-col md:flex-row items-center justify-between gap-4 relative">
+                    {/* Connecting Line */}
+                    <div className="hidden md:block absolute top-[40%] left-0 w-full h-1 bg-slate-100 -z-10 -translate-y-1/2"></div>
+                    
+                    {/* Phase 1 */}
+                    <div className="flex-1 bg-white p-5 rounded-xl border-2 border-slate-200 hover:border-purple-400 transition-colors cursor-pointer group text-center w-full z-10 shadow-sm">
+                      <div className="w-12 h-12 bg-purple-100 text-purple-600 rounded-full flex items-center justify-center mx-auto mb-3 group-hover:scale-110 transition-transform">
+                        <IconDatabase className="w-6 h-6" />
+                      </div>
+                      <h3 className="font-bold text-slate-800 mb-1">1. Pretraining</h3>
+                      <p className="text-xs text-slate-500 mb-3 h-8">Massive Unlabeled Text (Wikipedia, Books)</p>
+                      <div className="text-[10px] uppercase font-bold text-purple-600 bg-purple-50 border border-purple-100 inline-block px-2 py-1 rounded">Months of Compute</div>
+                    </div>
+                    
+                    <IconArrowRight className="hidden md:block w-8 h-8 text-slate-300 flex-shrink-0" />
+                    
+                    {/* Phase 2 */}
+                    <div className="flex-1 bg-white p-5 rounded-xl border-2 border-slate-200 hover:border-blue-400 transition-colors cursor-pointer group text-center w-full z-10 shadow-sm">
+                      <div className="w-12 h-12 bg-blue-100 text-blue-600 rounded-full flex items-center justify-center mx-auto mb-3 group-hover:scale-110 transition-transform">
+                        <IconLayers className="w-6 h-6" />
+                      </div>
+                      <h3 className="font-bold text-slate-800 mb-1">2. Base Model</h3>
+                      <p className="text-xs text-slate-500 mb-3 h-8">General Language Understanding (e.g. Base BERT)</p>
+                      <div className="text-[10px] uppercase font-bold text-blue-600 bg-blue-50 border border-blue-100 inline-block px-2 py-1 rounded">Understands Context</div>
+                    </div>
+                    
+                    <IconArrowRight className="hidden md:block w-8 h-8 text-slate-300 flex-shrink-0" />
+                    
+                    {/* Phase 3 */}
+                    <div className="flex-1 bg-white p-5 rounded-xl border-2 border-emerald-400 shadow-md group text-center w-full z-10 relative overflow-hidden">
+                      <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-emerald-400 to-teal-400"></div>
+                      <div className="w-12 h-12 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center mx-auto mb-3 group-hover:scale-110 transition-transform">
+                        <IconSettings className="w-6 h-6" />
+                      </div>
+                      <h3 className="font-bold text-slate-800 mb-1">3. Fine-Tuning</h3>
+                      <p className="text-xs text-slate-500 mb-3 h-8">Small Labeled Dataset (e.g. Sentiment, Clinical Tasks)</p>
+                      <div className="text-[10px] uppercase font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 inline-block px-2 py-1 rounded">Minutes to Hours</div>
+                    </div>
+                  </div>
+                </div>
+
+              </div>
+            </div>
+          );
+        };
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>

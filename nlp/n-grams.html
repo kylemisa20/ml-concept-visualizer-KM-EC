@@ -1,0 +1,363 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>N-Grams and the Markov Assumption</title>
+  
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  
+  <!-- React & ReactDOM -->
+  <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  
+  <!-- Babel for JSX -->
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+  <!-- KaTeX for LaTeX rendering -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/katex.min.css">
+  <script src="https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/katex.min.js"></script>
+
+  <style>
+    .math-font { font-family: 'Cambria Math', 'Times New Roman', serif; }
+    .fade-enter { opacity: 0; transform: translateY(10px); }
+    .fade-enter-active { opacity: 1; transform: translateY(0); transition: opacity 300ms, transform 300ms; }
+    @keyframes slide {
+      from { transform: translateX(0); }
+      to { transform: translateX(-20px); }
+    }
+  </style>
+</head>
+<body class="bg-gray-50 min-h-screen text-slate-800">
+  <div id="root"></div>
+
+  <script type="text/babel">
+    const { useState, useMemo } = React;
+
+    const sentence = ["The", "cat", "sat", "on", "the", "mat"];
+
+    // Latex Helper Component
+    const Latex = ({ math, inline = true }) => {
+      const html = katex.renderToString(math, { throwOnError: false, displayMode: !inline });
+      return <span dangerouslySetInnerHTML={{ __html: html }} />;
+    };
+
+    // Mock corpus data for enhancement: showing MLE sparsity
+    const mockCorpus = {
+      "the": 15000, "cat": 3000, "sat": 2500, "on": 12000, "mat": 1000,
+      "the cat": 400, "cat sat": 150, "sat on": 800, "on the": 4000, "the mat": 300,
+      "the cat sat": 12, "cat sat on": 10, "sat on the": 85, "on the mat": 25,
+      "the cat sat on": 0, "cat sat on the": 0, "sat on the mat": 0,
+      "the cat sat on the": 0, "cat sat on the mat": 0,
+      "the cat sat on the mat": 0
+    };
+
+    const getCount = (words) => {
+      if (words.length === 0) return 1000000; // total corpus words
+      const phrase = words.join(" ").toLowerCase();
+      return mockCorpus[phrase] || 0;
+    };
+
+    function App() {
+      // Simulator State
+      const [nGramSize, setNGramSize] = useState(2);
+      const [useMarkov, setUseMarkov] = useState(true);
+      const [hoveredIndex, setHoveredIndex] = useState(null);
+
+      // Limitation Section State
+      const [longSentenceIndex, setLongSentenceIndex] = useState(13); // Need to predict word at 13
+      const longSentence = "Remember the white cute cat, which was saw yesterday? He suddenly decided to sit on the".split(" ");
+      
+      // Determine the mathematical terms based on the current N-Gram size or Markov toggle
+      const terms = useMemo(() => {
+        return sentence.map((word, i) => {
+          if (useMarkov && nGramSize === 1) return { word, context: [], targetIndex: i, contextIndices: [] };
+          const actualN = !useMarkov ? sentence.length : nGramSize; 
+          const contextStart = Math.max(0, i - actualN + 1);
+          const context = sentence.slice(contextStart, i);
+          return { word, context, targetIndex: i, contextIndices: Array.from({length: i - contextStart}, (_, k) => contextStart + k) };
+        });
+      }, [nGramSize, useMarkov]);
+
+      const totalProbability = useMemo(() => {
+        let prob = 1.0;
+        terms.forEach(term => {
+          const num = getCount([...term.context, term.word]);
+          const den = getCount(term.context);
+          if (den === 0) prob = 0;
+          else prob *= (num / den);
+        });
+        return prob;
+      }, [terms]);
+
+      const getHighlightClass = (idx) => {
+        if (hoveredIndex === null) return "bg-white border-slate-200 text-slate-800";
+        if (idx === hoveredIndex) return "bg-blue-600 border-blue-700 text-white shadow-lg scale-110 z-10 font-bold";
+        const activeTerm = terms[hoveredIndex];
+        if (activeTerm.contextIndices?.includes(idx)) return "bg-amber-200 border-amber-400 text-amber-900 shadow-md scale-105 z-0";
+        return "bg-slate-100 border-slate-200 text-slate-400 opacity-50";
+      };
+
+      return (
+        <div className="max-w-5xl mx-auto p-8 pb-24 space-y-12">
+          <header className="text-center">
+            <h1 className="text-4xl md:text-5xl font-extrabold text-slate-900 mb-4 tracking-tight">
+              Language Models: <span className="text-blue-600">The Markov Assumption</span>
+            </h1>
+            <p className="text-lg text-slate-600 max-w-3xl mx-auto">
+              The Chain Rule requires calculating probabilities using the <i>entire</i> history of a sentence. 
+              Because we don't have enough data to calculate long histories, we use the <b>Markov Assumption</b> to limit our context to the last <Latex math="N-1" /> words.
+            </p>
+          </header>
+
+          {/* SECTION 1: INTERACTIVE SIMULATOR */}
+          <section className="bg-white rounded-3xl shadow-xl border border-slate-200 overflow-hidden">
+            <div className="bg-slate-900 p-8 text-white">
+              <div className="flex flex-col md:flex-row justify-between items-center gap-6">
+                <div>
+                  <h2 className="text-2xl font-bold mb-1">Simulator</h2>
+                  <p className="text-slate-400 text-sm">Toggle the Markov assumption or adjust the context window.</p>
+                </div>
+                <div className="flex flex-col md:flex-row items-center gap-6 w-full md:w-auto">
+                  <div className="flex items-center gap-3 bg-slate-800 p-3 rounded-xl border border-slate-700">
+                    <span className={`text-sm font-medium ${!useMarkov ? 'text-white font-bold' : 'text-slate-400'}`}>Exact (No Markov)</span>
+                    <button onClick={() => setUseMarkov(!useMarkov)} className={`relative inline-flex h-6 w-12 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:ring-offset-slate-900 ${useMarkov ? 'bg-blue-500' : 'bg-slate-600'}`}>
+                      <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${useMarkov ? 'translate-x-7' : 'translate-x-1'}`} />
+                    </button>
+                    <span className={`text-sm font-medium ${useMarkov ? 'text-white font-bold' : 'text-slate-400'}`}>Use Markov</span>
+                  </div>
+                  <div className={`flex flex-col items-center w-48 transition-opacity ${!useMarkov ? 'opacity-30 pointer-events-none' : 'opacity-100'}`}>
+                    <div className="flex justify-between w-full mb-2 px-1 text-xs font-bold text-slate-300">
+                      <span>N=1</span><span>N=2</span><span>N=3</span>
+                    </div>
+                    <input type="range" min="1" max="3" step="1" value={nGramSize} onChange={(e) => setNGramSize(parseInt(e.target.value))} className="w-full h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-blue-500"/>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="p-8 md:p-12 bg-slate-50 relative">
+              <div className="flex flex-wrap justify-center gap-3 md:gap-4 mb-16 mt-8">
+                {sentence.map((word, idx) => (
+                  <div key={idx} onMouseEnter={() => setHoveredIndex(idx)} onMouseLeave={() => setHoveredIndex(null)} className={`px-4 py-3 md:px-6 md:py-4 rounded-xl border-2 text-lg md:text-2xl transition-all duration-300 cursor-default flex items-center justify-center ${getHighlightClass(idx)}`}>
+                    {word}
+                  </div>
+                ))}
+              </div>
+
+              <div className="flex justify-center gap-6 mb-12 text-sm font-bold">
+                <div className="flex items-center gap-2">
+                  <div className="w-4 h-4 bg-blue-600 rounded"></div>
+                  <span className="text-slate-600">Target Word (<Latex math="w_i" />)</span>
+                </div>
+                {(!useMarkov || nGramSize > 1) && (
+                  <div className="flex items-center gap-2">
+                    <div className="w-4 h-4 bg-amber-200 border border-amber-400 rounded"></div>
+                    <span className="text-slate-600">Context Window</span>
+                  </div>
+                )}
+              </div>
+
+              <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-inner">
+                <div className="math-font text-lg md:text-2xl text-center leading-relaxed flex flex-wrap justify-center items-center gap-x-2 gap-y-4">
+                  <span className="font-bold text-slate-800">P(The, cat, sat, on, the, mat)</span> 
+                  <span className="mx-2 text-slate-500">{!useMarkov ? '=' : '≈'}</span>
+                  {terms.map((term, idx) => (
+                    <div key={idx} onMouseEnter={() => setHoveredIndex(idx)} onMouseLeave={() => setHoveredIndex(null)} className={`inline-flex items-center transition-all duration-300 cursor-pointer px-2 py-1 rounded-lg ${hoveredIndex === idx ? 'bg-blue-50 ring-2 ring-blue-300 scale-110 shadow-sm' : 'hover:bg-slate-100'}`}>
+                      <span className="text-slate-700">P(</span>
+                      <span className={`font-bold ${hoveredIndex === idx ? 'text-blue-700' : 'text-slate-900'}`}>{term.word}</span>
+                      {term.context.length > 0 && (
+                        <React.Fragment>
+                          <span className="mx-1 text-slate-400">|</span>
+                          <span className={`italic ${hoveredIndex === idx ? 'text-amber-600' : 'text-slate-600'}`}>{term.context.join(", ")}</span>
+                        </React.Fragment>
+                      )}
+                      <span className="text-slate-700">)</span>
+                      {idx < terms.length - 1 && <span className="ml-2 text-slate-400">×</span>}
+                    </div>
+                  ))}
+                </div>
+                <div className="mt-10 pt-6 border-t border-slate-100 flex flex-col items-center">
+                  <div className="text-xs font-bold text-slate-400 uppercase mb-2">Final Joint Probability <Latex math="P(W)" /></div>
+                  <div className={`text-3xl font-black font-mono transition-colors duration-500 ${totalProbability === 0 ? 'text-red-500' : 'text-green-600'}`}>
+                    {totalProbability === 0 ? "0.0000" : totalProbability.toExponential(4)}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="mt-6 min-h-[280px]">
+              <div className={`bg-white border-2 border-indigo-200 rounded-xl p-6 shadow-lg max-w-3xl mx-auto transition-all duration-500 relative ${hoveredIndex === null ? 'opacity-50 grayscale' : 'opacity-100'}`}>
+                <h4 className="text-indigo-800 font-bold mb-4 flex items-center gap-2">
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
+                  Mock Corpus Database Lookup
+                </h4>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div className="bg-indigo-50 p-4 rounded-lg border border-indigo-100 min-h-[110px]">
+                    <div className="text-xs text-indigo-500 font-bold uppercase mb-2">Numerator Phrase:</div>
+                    <div className="font-mono text-sm mb-1 bg-white px-2 py-1 rounded h-7 flex items-center">
+                      {hoveredIndex !== null ? `"${[...terms[hoveredIndex].context, terms[hoveredIndex].word].join(" ")}"` : "..."}
+                    </div>
+                    <div className="text-lg font-black text-indigo-900">Count: {hoveredIndex !== null ? getCount([...terms[hoveredIndex].context, terms[hoveredIndex].word]) : "-"}</div>
+                  </div>
+                  <div className="bg-amber-50 p-4 rounded-lg border border-amber-100 min-h-[110px]">
+                    <div className="text-xs text-amber-600 font-bold uppercase mb-2">Denominator Phrase:</div>
+                    <div className="font-mono text-sm mb-1 bg-white px-2 py-1 rounded h-7 flex items-center overflow-x-auto whitespace-nowrap">
+                      {hoveredIndex !== null ? (terms[hoveredIndex].context.length > 0 ? `"${terms[hoveredIndex].context.join(" ")}"` : "(Total Words)") : "..."}
+                    </div>
+                    <div className="text-lg font-black text-amber-900">Count: {hoveredIndex !== null ? getCount(terms[hoveredIndex].context) : "-"}</div>
+                  </div>
+                </div>
+                <div className="mt-4 text-center h-10 flex justify-center items-center">
+                  {hoveredIndex !== null ? (
+                    <div className="inline-block bg-slate-100 px-4 py-2 rounded-lg font-mono text-sm text-slate-700 shadow-inner">
+                      P({terms[hoveredIndex].word} | {terms[hoveredIndex].context.join(" ")}) = <span className={`ml-2 font-bold ${getCount(terms[hoveredIndex].context) === 0 ? 'text-red-600' : 'text-green-600'}`}>{getCount(terms[hoveredIndex].context) === 0 ? "Div by Zero!" : (getCount([...terms[hoveredIndex].context, terms[hoveredIndex].word]) / getCount(terms[hoveredIndex].context)).toFixed(4)}</span>
+                    </div>
+                  ) : <div className="text-slate-400 text-sm italic">Hover over a probability term to see lookup</div>}
+                </div>
+              </div>
+            </div>
+
+            <div className="bg-blue-50 p-8 border-t border-blue-100 text-sm">
+              <h3 className="text-lg font-bold text-blue-900 mb-2">Quick Reference</h3>
+              <p className="text-blue-800"><b>Markov ON:</b> Limits context window. Fixes the "sparsity problem" but loses long-term memory. <br/> <b>Markov OFF:</b> Uses full history. Mathematically exact but requires impossible amounts of data to be useful.</p>
+            </div>
+          </section>
+
+          {/* SECTION 2: VISUALIZING PROBLEMS */}
+          <section className="space-y-8">
+            <div className="text-center">
+              <h2 className="text-3xl font-black text-slate-900">Limitations of N-Gram Models</h2>
+              <p className="text-slate-500">Why we eventually moved to Neural Networks and Transformers.</p>
+            </div>
+
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+              {/* PROBLEM 1: LIMITED CONTEXT */}
+              <div className="bg-white p-8 rounded-3xl border border-red-200 shadow-lg flex flex-col h-full">
+                <h3 className="text-xl font-bold text-red-600 mb-4 flex items-center gap-2">
+                  <span className="w-8 h-8 rounded-full bg-red-100 flex items-center justify-center text-sm">1</span>
+                  Limited Context Memory
+                </h3>
+                <p className="text-slate-600 text-sm mb-8 leading-relaxed">
+                  N-grams only look at the last <Latex math="N-1" /> words. In long sentences, the model "forgets" crucial information from the beginning.
+                </p>
+
+                <div className="bg-slate-50 p-6 rounded-2xl border border-slate-100 flex-grow">
+                   <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-4">The Scenario</div>
+                   <div className="relative overflow-hidden p-4 bg-white rounded-xl border shadow-inner">
+                      <div className="flex flex-wrap gap-2 text-sm">
+                         {longSentence.map((w, i) => {
+                           const inWindow = i >= (longSentenceIndex - (nGramSize - 1)) && i < longSentenceIndex;
+                           const isTarget = i === longSentenceIndex;
+                           return (
+                             <span key={i} className={`px-1.5 py-0.5 rounded transition-all duration-300 ${isTarget ? 'bg-blue-600 text-white font-bold scale-110' : inWindow ? 'bg-amber-200 text-amber-900' : 'text-slate-300'}`}>
+                               {w}
+                             </span>
+                           );
+                         })}
+                         <span className="text-blue-600 font-bold">... ?</span>
+                      </div>
+                   </div>
+
+                   <div className="mt-8 space-y-4">
+                      <div className="flex items-start gap-4">
+                        <div className="w-1/2 p-3 bg-red-50 border border-red-100 rounded-lg">
+                           <div className="text-[10px] font-bold text-red-400 uppercase">Hidden Context (Forgotten)</div>
+                           <p className="text-xs text-red-800 mt-1 italic">"...white cute cat..."</p>
+                        </div>
+                        <div className="w-1/2 p-3 bg-green-50 border border-green-100 rounded-lg">
+                           <div className="text-[10px] font-bold text-green-400 uppercase">Visible N-Gram (N={nGramSize})</div>
+                           <p className="text-xs text-green-800 mt-1 font-bold">
+                             "...{longSentence.slice(Math.max(0, longSentenceIndex - (nGramSize-1)), longSentenceIndex).join(" ")}"
+                           </p>
+                        </div>
+                      </div>
+                      <div className="p-4 bg-white border border-slate-200 rounded-xl text-center">
+                        <p className="text-xs text-slate-500">Prediction Problem:</p>
+                        <p className="text-sm font-bold text-slate-800 mt-1 uppercase tracking-tight">
+                           P(mat | {longSentence.slice(Math.max(0, longSentenceIndex - (nGramSize-1)), longSentenceIndex).join(" ")})
+                        </p>
+                        <p className="text-[10px] text-slate-400 mt-2">
+                          Because "cat" is {longSentenceIndex - 4} words away, an N=3 model has no idea the subject was a cat! It might predict "floor" or "chair" with equal probability.
+                        </p>
+                      </div>
+                   </div>
+                </div>
+              </div>
+
+              {/* PROBLEM 2: DISCONNECTION */}
+              <div className="bg-white p-8 rounded-3xl border border-orange-200 shadow-lg flex flex-col h-full">
+                <h3 className="text-xl font-bold text-orange-600 mb-4 flex items-center gap-2">
+                  <span className="w-8 h-8 rounded-full bg-orange-100 flex items-center justify-center text-sm">2</span>
+                  The Semantic Gap
+                </h3>
+                <p className="text-slate-600 text-sm mb-6 leading-relaxed">
+                  To an N-gram model, "kitten," "cat," and "pet" are completely unrelated tokens. Learning about one does not help the model understand the others.
+                </p>
+
+                <div className="space-y-4">
+                   <div className="bg-orange-50 p-4 rounded-xl border border-orange-100">
+                      <div className="text-[10px] font-bold text-orange-400 uppercase mb-2">Training Data contains:</div>
+                      <ul className="text-xs space-y-1 text-orange-900 font-medium list-disc pl-4">
+                        <li>"The cat rested on the carpet."</li>
+                      </ul>
+                   </div>
+
+                   <div className="bg-slate-900 p-5 rounded-2xl border-4 border-slate-800 shadow-inner">
+                      <div className="text-[10px] font-bold text-slate-500 uppercase mb-3 tracking-widest">Querying the Model</div>
+                      <div className="space-y-3">
+                         <div className="flex justify-between items-center bg-slate-800 p-2 rounded">
+                            <span className="text-[10px] text-white font-mono">P(carpet | The cat rested on the)</span>
+                            <span className="text-green-400 font-bold text-xs">0.85 (Known)</span>
+                         </div>
+                         <div className="flex justify-between items-center bg-slate-800 p-2 rounded">
+                            <span className="text-[10px] text-white font-mono opacity-60">P(carpet | The kitten settled on the)</span>
+                            <span className="text-red-500 font-bold text-xs">0.00 (Zero!)</span>
+                         </div>
+                         <div className="flex justify-between items-center bg-slate-800 p-2 rounded">
+                            <span className="text-[10px] text-white font-mono opacity-60">P(carpet | The pet lounged on the)</span>
+                            <span className="text-red-500 font-bold text-xs">0.00 (Zero!)</span>
+                         </div>
+                      </div>
+                   </div>
+
+                   <div className="p-4 bg-amber-50 rounded-xl border border-amber-200">
+                      <p className="text-xs text-amber-800 leading-relaxed italic">
+                        "Even though these sentences have almost identical meanings, the model treats them as separate and unrelated. It doesn't know that a 'kitten' is a 'cat' or that 'rug' and 'carpet' are synonyms."
+                      </p>
+                   </div>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          {/* Deep Dive into MLE limitation */}
+          {!useMarkov && (
+            <div className="mt-8 bg-amber-50 p-6 rounded-2xl border border-amber-200 animate-[fadeIn_0.5s_ease-out]">
+              <h3 className="font-bold text-amber-900 mb-2 flex items-center gap-2">
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path></svg>
+                The Sparse Data Problem (MLE)
+              </h3>
+              <p className="text-sm text-amber-800 mb-3">
+                To calculate <Latex inline={true} math="\mathbf{P(mat \mid The, cat, sat, on, the)}" /> using Maximum Likelihood Estimation, we do:
+              </p>
+              <div className="bg-white p-4 rounded-lg font-mono text-xs md:text-sm text-center border border-amber-200 shadow-sm overflow-x-auto">
+                <div className="border-b border-amber-900 pb-2 mb-2 inline-block text-slate-800">Count("The cat sat on the mat")</div>
+                <br />
+                <div className="inline-block text-slate-800">Count("The cat sat on the")</div>
+              </div>
+              <p className="text-sm text-amber-800 mt-3 italic">
+                This exact problem is exactly why N-Gram models were limited—the longer the sequence, the rarer it becomes, until probabilities just collapse to zero.
+              </p>
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    const root = ReactDOM.createRoot(document.getElementById('root'));
+    root.render(<App />);
+  </script>
+</body>
+</html>

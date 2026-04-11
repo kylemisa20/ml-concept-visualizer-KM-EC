@@ -1,0 +1,624 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BERT: The Bidirectional Revolution</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <style>
+        .transformer-block {
+            background: linear-gradient(135deg, #6366f1 0%, #a855f7 100%);
+        }
+        .bidirectional-arrow {
+            transition: all 0.3s ease;
+        }
+        .fade-in { animation: fadeIn 0.4s ease-out forwards; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+        
+        input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 18px;
+            height: 18px;
+            background: #6366f1;
+            cursor: pointer;
+            border-radius: 50%;
+        }
+    </style>
+</head>
+<body class="bg-slate-50 text-slate-900">
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect } = React;
+
+        // --- Icons ---
+        const IconBrain = () => <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" /></svg>;
+        const IconPuzzle = () => <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 4a2 2 0 114 0v1a1 1 0 001 1h3a1 1 0 011 1v3a1 1 0 01-1 1h-1a2 2 0 100 4h1a1 1 0 011 1v3a1 1 0 01-1 1h-3a1 1 0 01-1-1v-1a2 2 0 10-4 0v1a1 1 0 01-1 1H7a1 1 0 01-1-1v-3a1 1 0 00-1-1H4a2 2 0 110-4h1a1 1 0 001-1V7a1 1 0 011-1h3a1 1 0 001-1V4z" /></svg>;
+        const IconZap = () => <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>;
+        const IconGitBranch = () => <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7h8a2 2 0 012 2v9m-10 0H6a2 2 0 01-2-2V9a2 2 0 012-2h2m3 0V5a2 2 0 012-2h2a2 2 0 012 2v2M9 21h6" /></svg>;
+        const IconCheck = () => <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>;
+        const IconInfo = () => <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>;
+        const IconArrowDown = () => <svg className="w-6 h-6 text-indigo-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 14l-7 7m0 0l-7-7m7 7V3" /></svg>;
+
+        const App = () => {
+            const [tab, setTab] = useState('features');
+
+            return (
+                <div className="min-h-screen max-w-6xl mx-auto p-4 md:p-8">
+                    <header className="mb-10 text-center">
+                        <div className="inline-block px-4 py-1 bg-indigo-100 text-indigo-700 rounded-full text-sm font-bold mb-4 tracking-wide uppercase">Deep Learning Guide</div>
+                        <h1 className="text-4xl md:text-5xl font-black text-slate-900 tracking-tight mb-4">BERT Explorer</h1>
+                        <p className="text-lg text-slate-600 max-w-3xl mx-auto leading-relaxed">
+                            Google's <span className="text-indigo-600 font-bold underline decoration-indigo-200">Bidirectional Encoder Representations from Transformers</span> changed NLP forever in 2018.
+                        </p>
+                    </header>
+
+                    <div className="flex flex-wrap justify-center gap-2 mb-10 bg-white p-2 rounded-2xl shadow-sm border border-slate-200 w-fit mx-auto">
+                        <NavBtn active={tab === 'features'} onClick={() => setTab('features')} icon={<IconBrain />} label="Architecture" />
+                        <NavBtn active={tab === 'pretraining'} onClick={() => setTab('pretraining')} icon={<IconPuzzle />} label="Pretraining" />
+                        <NavBtn active={tab === 'capabilities'} onClick={() => setTab('capabilities')} icon={<IconZap />} label="Capabilities" />
+                        <NavBtn active={tab === 'variations'} onClick={() => setTab('variations')} icon={<IconGitBranch />} label="Variations" />
+                    </div>
+
+                    <div className="bg-white rounded-3xl shadow-xl border border-slate-100 overflow-hidden min-h-[600px]">
+                        {tab === 'features' && <TabArchitecture />}
+                        {tab === 'pretraining' && <TabPretraining />}
+                        {tab === 'capabilities' && <TabCapabilities />}
+                        {tab === 'variations' && <TabVariations />}
+                    </div>
+                </div>
+            );
+        };
+
+        const NavBtn = ({ active, onClick, icon, label }) => (
+            <button 
+                onClick={onClick}
+                className={`flex items-center gap-2 px-6 py-3 rounded-xl font-bold transition-all ${active ? 'bg-indigo-600 text-white shadow-lg' : 'text-slate-500 hover:bg-slate-50'}`}
+            >
+                {icon}
+                <span>{label}</span>
+            </button>
+        );
+
+        const TabArchitecture = () => {
+            const [hoveredIdx, setHoveredIdx] = useState(null);
+            const tokens = ["The", "bank", "was", "flooded"];
+            
+            const getAttentionWeight = (from, to) => {
+                if (from === null) return 0.2;
+                if (from === to) return 1.0;
+                if (from === 1 && to === 3) return 0.9;
+                if (from === 2 && to === 1) return 0.85;
+                if (from === 3 && to === 1) return 0.8;
+                if (from === 3 && to === 2) return 0.7;
+                return 0.3;
+            };
+
+            return (
+                <div className="p-8 fade-in">
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-12">
+                        <div className="space-y-8">
+                            <div>
+                                <h2 className="text-3xl font-bold mb-4 text-slate-800 text-indigo-600">Self-Attention Mechanism</h2>
+                                <p className="text-slate-600 mb-6 leading-relaxed">
+                                    In BERT, each word "looks" at every other word in the sentence to understand its own meaning and its role in the grammar.
+                                </p>
+                                <div className="bg-indigo-50 border border-indigo-100 p-4 rounded-xl text-sm text-indigo-800">
+                                    <span className="font-bold">Interaction:</span> Hover over a word in the <strong>top row</strong>. Notice how verbs like "was" or "flooded" now correctly identify "bank" as their subject.
+                                </div>
+                            </div>
+
+                            <div className="p-6 bg-slate-50 rounded-2xl border border-slate-200">
+                                <h3 className="font-bold text-slate-800 mb-2 flex items-center gap-2 uppercase text-xs tracking-widest text-slate-500">
+                                    Constructing the Input Vector
+                                </h3>
+                                <p className="text-xs text-slate-500 mb-4">Before BERT processes a word, it mathematically adds three separate vectors together to capture its full context.</p>
+                                <div className="space-y-2">
+                                    <EmbeddingStep 
+                                        label="Token Embeddings" 
+                                        desc="Captures the base dictionary meaning of the word/sub-word." 
+                                        example='Lookup "bank" → [0.14, -0.82, 0.55...]'
+                                        colorClass={{ border: 'border-l-indigo-500', bg: 'bg-indigo-50', text: 'text-indigo-700' }}
+                                    />
+                                    <div className="text-center font-bold text-slate-300 leading-none">+</div>
+                                    <EmbeddingStep 
+                                        label="Segment Embeddings" 
+                                        desc="A learned vector added to distinguish Sentence A from Sentence B." 
+                                        example='Add vector for "Sentence A" → [0.04, 0.11, -0.02...]'
+                                        colorClass={{ border: 'border-l-purple-500', bg: 'bg-purple-50', text: 'text-purple-700' }}
+                                    />
+                                    <div className="text-center font-bold text-slate-300 leading-none">+</div>
+                                    <EmbeddingStep 
+                                        label="Position Embeddings" 
+                                        desc="A learned vector added to mark the word's exact sequential order." 
+                                        example='Add vector for "Position 2" → [-0.01, 0.08, 0.15...]'
+                                        colorClass={{ border: 'border-l-pink-500', bg: 'bg-pink-50', text: 'text-pink-700' }}
+                                    />
+                                    <div className="text-center font-bold text-slate-300 leading-none">=</div>
+                                    <div className="p-3 bg-slate-800 border border-slate-700 rounded-xl shadow-sm flex flex-col gap-1 transition-all border-l-4 border-l-emerald-500">
+                                        <span className="text-sm font-bold text-white">Final Input Vector</span>
+                                        <span className="text-[11px] text-slate-400 leading-relaxed">The combined array of numbers fed into BERT's first layer.</span>
+                                        <span className="text-[10px] font-mono p-1.5 rounded mt-1 bg-slate-900 text-emerald-400">Sum → [0.17, -0.63, 0.68...]</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div className="bg-slate-900 rounded-2xl p-8 relative flex flex-col items-center justify-between overflow-hidden">
+                            <div className="text-center text-white font-bold text-[10px] tracking-[0.2em] uppercase opacity-40 mb-4">Self-Attention Map (Visualizing Head 1)</div>
+                            
+                            <div className="w-full flex justify-around relative z-20">
+                                {tokens.map((t, i) => (
+                                    <div 
+                                        key={`src-${i}`} 
+                                        onMouseEnter={() => setHoveredIdx(i)}
+                                        onMouseLeave={() => setHoveredIdx(null)}
+                                        className={`w-20 py-2 rounded-lg border-2 text-center transition-all cursor-pointer font-bold text-sm shadow-lg ${hoveredIdx === i ? 'bg-indigo-600 border-indigo-400 text-white scale-110' : 'bg-slate-800 border-white/10 text-slate-400'}`}
+                                    >
+                                        {t}
+                                    </div>
+                                ))}
+                            </div>
+
+                            <div className="flex-1 w-full relative min-h-[200px]">
+                                <svg className="w-full h-full absolute inset-0 overflow-visible" viewBox="0 0 400 200" preserveAspectRatio="none">
+                                    {tokens.map((_, i) => (
+                                        tokens.map((__, j) => {
+                                            const weight = getAttentionWeight(hoveredIdx, j);
+                                            const isActive = hoveredIdx === i;
+                                            const startX = 50 + (i * 100);
+                                            const endX = 50 + (j * 100);
+                                            return (
+                                                <line 
+                                                    key={`${i}-${j}`}
+                                                    x1={startX} y1="0" 
+                                                    x2={endX} y2="200" 
+                                                    stroke={isActive ? '#818cf8' : '#ffffff'} 
+                                                    strokeWidth={isActive ? weight * 4 : 0.2} 
+                                                    strokeOpacity={isActive ? weight : 0.05}
+                                                    className="bidirectional-arrow"
+                                                />
+                                            );
+                                        })
+                                    ))}
+                                </svg>
+                            </div>
+
+                            <div className="w-full flex justify-around relative z-20">
+                                {tokens.map((t, j) => {
+                                    const weight = getAttentionWeight(hoveredIdx, j);
+                                    const isActive = hoveredIdx !== null;
+                                    const isHighlighted = isActive && weight > 0.6;
+                                    return (
+                                        <div 
+                                            key={`target-${j}`} 
+                                            className={`w-20 py-2 rounded-lg border text-center transition-all font-mono text-xs ${isHighlighted ? 'bg-indigo-900/50 border-indigo-500 text-indigo-200' : 'bg-slate-800/50 border-white/5 text-slate-500'}`}
+                                        >
+                                            {t}
+                                        </div>
+                                    );
+                                })}
+                            </div>
+
+                            <div className="text-[10px] text-slate-500 mt-6 italic">The thicker the line, the more context gathered from that word.</div>
+                        </div>
+                    </div>
+                </div>
+            );
+        };
+
+        const EmbeddingStep = ({ label, desc, example, colorClass }) => (
+            <div className={`p-3 bg-white border border-slate-100 rounded-xl shadow-sm flex flex-col gap-1.5 transition-all border-l-4 ${colorClass.border} hover:shadow-md`}>
+                <span className="text-sm font-bold text-slate-700">{label}</span>
+                <span className="text-[11px] text-slate-500 leading-relaxed">{desc}</span>
+                {example && <span className={`text-[10px] font-mono p-1.5 rounded mt-1 ${colorClass.bg} ${colorClass.text}`}>{example}</span>}
+            </div>
+        );
+
+        const TabPretraining = () => {
+            const [maskRevealed, setMaskRevealed] = useState(false);
+            const [tokenInput, setTokenInput] = useState("embedding");
+            
+            // --- Next Sentence Prediction State & Logic ---
+            const [nspIndex, setNspIndex] = useState(0);
+            const [nspFeedback, setNspFeedback] = useState(null); // 'correct', 'wrong', null
+            
+            const nspPairs = [
+                { a: "The man went to the store.", b: "He bought a gallon of milk.", isNext: true },
+                { a: "I love playing guitar.", b: "The stock market crashed today.", isNext: false },
+                { a: "She opened the window.", b: "A cool breeze blew into the room.", isNext: true }
+            ];
+
+            const handleNspGuess = (guessIsNext) => {
+                const currentPair = nspPairs[nspIndex];
+                if (guessIsNext === currentPair.isNext) {
+                    setNspFeedback('correct');
+                    setTimeout(() => {
+                        setNspFeedback(null);
+                        setNspIndex((prev) => (prev + 1) % nspPairs.length);
+                    }, 1500);
+                } else {
+                    setNspFeedback('wrong');
+                    setTimeout(() => setNspFeedback(null), 1500);
+                }
+            };
+
+            const getSubwords = (word) => {
+                if (word.toLowerCase() === "embedding") return ["em", "##bed", "##ding"];
+                if (word.toLowerCase() === "unhappily") return ["un", "##happi", "##ly"];
+                return [word.toLowerCase()];
+            };
+
+            return (
+                <div className="p-8 fade-in">
+                    <div className="flex flex-col gap-12">
+                        {/* Structural Tokens Explanation */}
+                        <div className="bg-indigo-900 text-white rounded-3xl p-8 shadow-xl">
+                            <div className="flex flex-col md:flex-row gap-8 items-start">
+                                <div className="md:w-1/3">
+                                    <h2 className="text-2xl font-bold mb-4 flex items-center gap-2">
+                                        <IconInfo className="w-6 h-6 text-indigo-300" />
+                                        Special Tokens: [CLS] & [SEP]
+                                    </h2>
+                                    <p className="text-sm text-indigo-100 leading-relaxed mb-4">
+                                        BERT doesn't just receive raw words. It uses special "structural" markers to understand the boundaries and intent of the input.
+                                    </p>
+                                    <div className="space-y-4">
+                                        <div className="bg-indigo-800/50 p-3 rounded-xl border border-indigo-700">
+                                            <span className="font-mono font-bold text-indigo-300">[CLS]</span>
+                                            <p className="text-[11px] mt-1 text-indigo-200">
+                                                Short for <strong>"Classification"</strong>. Always the first token. Its final hidden state is used as the "summary" of the entire sequence for tasks like sentiment analysis.
+                                            </p>
+                                        </div>
+                                        <div className="bg-indigo-800/50 p-3 rounded-xl border border-indigo-700">
+                                            <span className="font-mono font-bold text-indigo-300">[SEP]</span>
+                                            <p className="text-[11px] mt-1 text-indigo-200">
+                                                Short for <strong>"Separator"</strong>. It marks the end of a sentence or the boundary between two different sentences (Sentence A vs. Sentence B).
+                                            </p>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div className="md:w-2/3 w-full">
+                                    <div className="text-[10px] uppercase font-bold text-indigo-400 mb-3 tracking-widest text-center md:text-left">Typical Input Sequence Anatomy</div>
+                                    <div className="bg-indigo-950/50 p-6 rounded-2xl border border-indigo-800 flex flex-wrap gap-2 items-center justify-center">
+                                        <Token label="[CLS]" highlight="indigo" />
+                                        <Token label="The" />
+                                        <Token label="man" />
+                                        <Token label="walks" />
+                                        <Token label="[SEP]" highlight="purple" />
+                                        <Token label="He" />
+                                        <Token label="is" />
+                                        <Token label="tired" />
+                                        <Token label="[SEP]" highlight="purple" />
+                                    </div>
+                                    <div className="mt-6 grid grid-cols-1 md:grid-cols-2 gap-4 text-[11px]">
+                                        <div className="flex gap-2">
+                                            <div className="w-1 h-full bg-indigo-500 rounded-full"></div>
+                                            <span className="text-indigo-200 italic">Sentence A is encapsulated by [CLS] and the first [SEP].</span>
+                                        </div>
+                                        <div className="flex gap-2">
+                                            <div className="w-1 h-full bg-purple-500 rounded-full"></div>
+                                            <span className="text-indigo-200 italic">Sentence B follows the first [SEP] and ends with another [SEP].</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            {/* Visualizing the [CLS] Summary in Action */}
+                            <div className="mt-8 border-t border-indigo-800/50 pt-8">
+                                <h3 className="text-center text-sm font-bold text-indigo-300 mb-6 flex items-center justify-center gap-2">
+                                    <IconZap /> 
+                                    Visualizing the [CLS] Summary in Action
+                                </h3>
+                                
+                                <div className="flex flex-col items-center bg-indigo-950/30 p-6 rounded-2xl border border-indigo-800/50 overflow-x-auto">
+                                    
+                                    <div className="grid grid-cols-4 gap-4 w-full max-w-md mx-auto text-center justify-items-center min-w-[350px]">
+                                        {/* Row 1: Tokens */}
+                                        <Token label="[CLS]" highlight="indigo" />
+                                        <Token label="Great" />
+                                        <Token label="movie" />
+                                        <Token label="[SEP]" highlight="purple" />
+                                    </div>
+
+                                    <IconArrowDown className="w-5 h-5 text-indigo-500 my-4" />
+
+                                    <div className="w-full max-w-md mx-auto h-12 bg-gradient-to-r from-indigo-900 to-purple-900 rounded-xl border border-white/10 flex items-center justify-center text-xs font-black tracking-widest text-white mb-4 shadow-inner min-w-[350px]">
+                                        BERT ENCODER LAYERS
+                                    </div>
+
+                                    <div className="grid grid-cols-4 gap-4 w-full max-w-md mx-auto text-center justify-items-center relative min-w-[350px]">
+                                        {/* Row 2: Final States */}
+                                        <div className="flex flex-col items-center z-10">
+                                            <IconArrowDown className="w-5 h-5 text-indigo-400 mb-2 animate-bounce" />
+                                            <div className="w-14 h-8 bg-indigo-600 rounded border border-indigo-400 flex items-center justify-center text-[11px] font-mono text-white shadow-[0_0_15px_rgba(79,70,229,0.5)]">
+                                                H_[CLS]
+                                            </div>
+                                        </div>
+                                        <div className="flex flex-col items-center opacity-30 grayscale mt-7 z-10">
+                                            <div className="w-14 h-8 bg-slate-700 rounded border border-slate-600 flex items-center justify-center text-[11px] font-mono text-white">H_1</div>
+                                        </div>
+                                        <div className="flex flex-col items-center opacity-30 grayscale mt-7 z-10">
+                                            <div className="w-14 h-8 bg-slate-700 rounded border border-slate-600 flex items-center justify-center text-[11px] font-mono text-white">H_2</div>
+                                        </div>
+                                        <div className="flex flex-col items-center opacity-30 grayscale mt-7 z-10">
+                                            <div className="w-14 h-8 bg-slate-700 rounded border border-slate-600 flex items-center justify-center text-[11px] font-mono text-white">H_[SEP]</div>
+                                        </div>
+                                        
+                                        {/* Discard line logic */}
+                                        <div className="absolute top-[60px] left-[35%] right-[5%] border-t-2 border-slate-600/50 pt-1 text-[9px] text-slate-400 uppercase tracking-widest font-bold hidden sm:block">
+                                            Discarded for Sequence Classification
+                                        </div>
+                                    </div>
+
+                                    <div className="grid grid-cols-4 gap-4 w-full max-w-md mx-auto text-center justify-items-center mt-2 min-w-[350px]">
+                                        <div className="flex flex-col items-center">
+                                            <IconArrowDown className="w-5 h-5 text-indigo-400 my-2" />
+                                            <div className="px-2 py-2 bg-slate-800 border border-slate-600 rounded-lg text-[10px] font-bold text-slate-300 w-24 text-center">
+                                                Classifier
+                                            </div>
+                                            <IconArrowDown className="w-5 h-5 text-emerald-400 my-2" />
+                                            <div className="bg-emerald-500 text-white text-[10px] px-3 py-1.5 rounded-full font-bold shadow-lg shadow-emerald-500/20 whitespace-nowrap text-center">
+                                                POSITIVE
+                                            </div>
+                                        </div>
+                                        <div className="col-span-3"></div> {/* Empty space for alignment */}
+                                    </div>
+
+                                    <p className="text-xs text-indigo-200 mt-8 text-center max-w-2xl leading-relaxed">
+                                        Because self-attention allows every word to look at every other word, the <span className="font-bold text-indigo-300">[CLS]</span> token dynamically gathers context from the entire sentence as it passes through BERT. At the final layer, its output vector (<span className="font-mono text-indigo-300">H_[CLS]</span>) contains a rich "summary" of the sequence, making it the perfect single input for classification tasks.
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div className="flex flex-col lg:flex-row gap-12">
+                            <div className="lg:w-2/3 space-y-8">
+                                <h2 className="text-3xl font-bold text-slate-800">2. Training Strategy</h2>
+                                
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                                    {/* MLM Card */}
+                                    <div className="bg-slate-50 p-6 rounded-3xl border border-slate-200 shadow-sm flex flex-col">
+                                        <h3 className="text-xl font-bold mb-4 flex items-center gap-2">
+                                            <div className="w-8 h-8 bg-indigo-600 text-white rounded-full flex items-center justify-center text-sm font-black shrink-0">1</div>
+                                            Masked LM
+                                        </h3>
+                                        <p className="text-xs text-slate-500 mb-4">BERT masks 15% of words and tries to guess them.</p>
+                                        <div className="bg-white p-6 rounded-2xl shadow-inner border border-slate-100 text-center flex-1 flex flex-col justify-center">
+                                            <div className="text-lg text-slate-700 leading-relaxed">
+                                                "The movie was so <span className={`px-2 py-1 rounded transition-all cursor-pointer ${maskRevealed ? 'bg-emerald-100 text-emerald-700 font-bold' : 'bg-slate-800 text-white animate-pulse'}`} onClick={() => setMaskRevealed(true)}>
+                                                    {maskRevealed ? 'exciting' : '[MASK]'}
+                                                </span> that I stayed awake."
+                                            </div>
+                                            {maskRevealed && <div className="text-xs text-emerald-600 font-bold animate-in zoom-in mt-4">Correct! (Conf: 92%)</div>}
+                                            {!maskRevealed && <div className="text-[10px] uppercase font-bold text-slate-400 tracking-wider mt-4">Click mask to reveal</div>}
+                                        </div>
+                                    </div>
+
+                                    {/* NSP Game Card */}
+                                    <div className="bg-slate-50 p-6 rounded-3xl border border-slate-200 shadow-sm flex flex-col">
+                                        <h3 className="text-xl font-bold mb-4 flex items-center gap-2">
+                                            <div className="w-8 h-8 bg-indigo-600 text-white rounded-full flex items-center justify-center text-sm font-black shrink-0">2</div>
+                                            Next Sentence Pred
+                                        </h3>
+                                        <p className="text-xs text-slate-500 mb-4">
+                                            Play the role of BERT! Look at the sentences below. Does Sentence B logically follow Sentence A in the original text?
+                                        </p>
+                                        <div className="space-y-3 flex-1 flex flex-col">
+                                            <div className="p-3 bg-white rounded-xl border border-slate-100 text-xs text-slate-600 shadow-sm min-h-[60px] flex items-center">
+                                                <span className="font-bold text-indigo-500 mr-2 shrink-0">[CLS]</span> 
+                                                <span>{nspPairs[nspIndex].a}</span>
+                                            </div>
+                                            <div className="p-3 bg-white rounded-xl border border-slate-100 text-xs text-slate-600 shadow-sm min-h-[60px] flex items-center">
+                                                <span className="font-bold text-purple-500 mr-2 shrink-0">[SEP]</span> 
+                                                <span>{nspPairs[nspIndex].b}</span>
+                                            </div>
+                                            
+                                            <div className="flex gap-2 pt-2 mt-auto relative">
+                                                <button 
+                                                    onClick={() => handleNspGuess(true)}
+                                                    className="flex-1 py-2 text-xs font-bold rounded-lg transition-all bg-white border-2 border-slate-200 hover:border-emerald-300 text-slate-700 active:scale-95"
+                                                >
+                                                    IsNext
+                                                </button>
+                                                <button 
+                                                    onClick={() => handleNspGuess(false)}
+                                                    className="flex-1 py-2 text-xs font-bold rounded-lg transition-all bg-white border-2 border-slate-200 hover:border-red-300 text-slate-700 active:scale-95"
+                                                >
+                                                    NotNext
+                                                </button>
+                                                
+                                                {/* Feedback Overlay */}
+                                                {nspFeedback && (
+                                                    <div className={`absolute -top-4 left-0 w-full h-full flex items-center justify-center ${nspFeedback === 'correct' ? 'text-emerald-500' : 'text-red-500'}`}>
+                                                        <div className={`px-4 py-2 rounded-full font-black text-lg shadow-lg bg-white border-2 animate-in zoom-in duration-200 ${nspFeedback === 'correct' ? 'border-emerald-500' : 'border-red-500'}`}>
+                                                            {nspFeedback === 'correct' ? 'CORRECT!' : 'INCORRECT!'}
+                                                        </div>
+                                                    </div>
+                                                )}
+                                            </div>
+                                            <div className="text-[10px] text-center text-slate-400 font-medium">Round {nspIndex + 1} of {nspPairs.length}</div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div className="lg:w-1/3 bg-white rounded-3xl p-6 border border-slate-200 shadow-sm">
+                                <h3 className="text-xl font-bold mb-4 flex items-center gap-2 text-indigo-600">
+                                    <IconType className="w-5 h-5" />
+                                    WordPiece Tokenizer
+                                </h3>
+                                <p className="text-xs text-slate-500 mb-6 leading-relaxed">
+                                    BERT breaks complex words into sub-tokens to handle vocabulary efficiently.
+                                </p>
+                                
+                                <div className="space-y-6">
+                                    <div>
+                                        <label className="text-[10px] uppercase font-black text-slate-400 block mb-2">Try a word</label>
+                                        <select 
+                                            value={tokenInput} 
+                                            onChange={(e) => setTokenInput(e.target.value)}
+                                            className="w-full bg-slate-50 border border-slate-200 p-2 rounded-lg text-sm outline-none focus:ring-2 focus:ring-indigo-500"
+                                        >
+                                            <option value="embedding">embedding</option>
+                                            <option value="unhappily">unhappily</option>
+                                            <option value="transformer">transformer</option>
+                                        </select>
+                                    </div>
+
+                                    <div className="flex flex-col items-center gap-4 mt-8">
+                                        <div className="text-2xl font-black text-slate-800">{tokenInput}</div>
+                                        <div className="text-indigo-400 rotate-90 scale-150">→</div>
+                                        <div className="flex flex-wrap gap-2 justify-center">
+                                            {getSubwords(tokenInput).map((sub, i) => (
+                                                <div key={i} className="px-3 py-1 bg-indigo-50 rounded-lg font-mono text-sm border border-indigo-100 text-indigo-700">
+                                                    {sub}
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            );
+        };
+
+        const Token = ({ label, highlight }) => (
+            <div className={`px-2 py-1.5 rounded-lg border font-mono text-xs font-bold shadow-sm transition-all text-center flex-1 min-w-[60px] whitespace-nowrap ${
+                highlight === 'indigo' ? 'bg-indigo-600 border-indigo-400 text-white' : 
+                highlight === 'purple' ? 'bg-purple-600 border-purple-400 text-white' : 
+                'bg-slate-800 border-white/20 text-white/70'
+            }`}>
+                {label}
+            </div>
+        );
+
+        const TabCapabilities = () => {
+            const [activeTask, setActiveTask] = useState('sentiment');
+            const tasks = {
+                sentiment: { title: "Sentiment Analysis", input: "The soundtrack was hauntingly beautiful.", output: "Positive (99.1%)", desc: "BERT looks at the whole sentence to understand nuances." },
+                qa: { title: "Question Answering", input: "Context: The sun is 93 million miles away. \nQ: How far is the sun?", output: "93 million miles", desc: "BERT pinpoints exact start/end positions of the answer." },
+                ner: { title: "Named Entities", input: "Google is headquartered in Mountain View.", output: "Google [ORG], Mountain View [LOC]", desc: "Classifies each word as Person, Org, or Location." }
+            };
+
+            return (
+                <div className="p-8 fade-in">
+                    <div className="flex flex-col lg:flex-row gap-8">
+                        <div className="lg:w-1/3 space-y-4">
+                            <h2 className="text-3xl font-bold text-slate-800 mb-2">Capabilities</h2>
+                            {Object.keys(tasks).map(t => (
+                                <button key={t} onClick={() => setActiveTask(t)} className={`w-full p-4 rounded-2xl text-left border-2 transition-all ${activeTask === t ? 'border-indigo-500 bg-indigo-50' : 'border-slate-100 hover:border-slate-200 bg-white'}`}>
+                                    <div className={`font-bold mb-1 ${activeTask === t ? 'text-indigo-700' : 'text-slate-700'}`}>{tasks[t].title}</div>
+                                    <div className="text-[10px] text-slate-400">{tasks[t].desc}</div>
+                                </button>
+                            ))}
+                        </div>
+                        <div className="lg:w-2/3 bg-slate-900 rounded-3xl p-8 text-white shadow-xl flex flex-col justify-between">
+                            <div className="space-y-6">
+                                <div>
+                                    <div className="text-[10px] uppercase font-bold text-indigo-400 mb-3 tracking-widest">Model Input</div>
+                                    <div className="font-mono text-lg p-5 bg-slate-800 rounded-2xl border border-white/5 shadow-inner">{tasks[activeTask].input}</div>
+                                </div>
+                                <div className="flex flex-col items-center justify-center gap-3">
+                                    <IconArrowDown className="w-6 h-6 text-indigo-400" />
+                                    <div className="bg-gradient-to-r from-indigo-600 to-purple-600 text-white font-black tracking-widest text-xs px-6 py-3 rounded-xl shadow-[0_0_20px_rgba(79,70,229,0.3)] border border-indigo-400 flex items-center gap-2">
+                                        <IconBrain /> BERT ENCODER + TASK HEAD
+                                    </div>
+                                    <IconArrowDown className="w-6 h-6 text-emerald-400" />
+                                </div>
+                                <div>
+                                    <div className="text-[10px] uppercase font-bold text-emerald-400 mb-3 tracking-widest">Model Output</div>
+                                    <div className="font-black text-3xl text-emerald-400 animate-in slide-in-from-left duration-500">{tasks[activeTask].output}</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            );
+        };
+
+        const TabVariations = () => {
+            const [size, setSize] = useState('base');
+            return (
+                <div className="p-8 fade-in">
+                    <div className="flex justify-between items-center mb-10">
+                        <h2 className="text-3xl font-bold text-slate-800">The BERT Family</h2>
+                        <div className="flex bg-slate-100 p-1 rounded-xl border border-slate-200">
+                            <button onClick={() => setSize('base')} className={`px-4 py-1.5 rounded-lg text-xs font-bold transition-all ${size === 'base' ? 'bg-white shadow-sm text-indigo-600' : 'text-slate-500'}`}>BERT-Base</button>
+                            <button onClick={() => setSize('large')} className={`px-4 py-1.5 rounded-lg text-xs font-bold transition-all ${size === 'large' ? 'bg-white shadow-sm text-indigo-600' : 'text-slate-500'}`}>BERT-Large</button>
+                        </div>
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-12">
+                        <StatCard label="Layers" val={size === 'base' ? 12 : 24} />
+                        <StatCard label="Hidden Size" val={size === 'base' ? 768 : 1024} />
+                        <StatCard label="Params" val={size === 'base' ? "110M" : "340M"} />
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 items-stretch">
+                        <VariationCard 
+                            title="RoBERTa" 
+                            company="Meta" 
+                            tag="Better" 
+                            desc="Researchers realized BERT was significantly undertrained. RoBERTa trains on 10x more data (160GB vs 16GB) for much longer, and proves that the 'Next Sentence Prediction' task actually hurt performance, so they removed it." 
+                            example="Consistently beats standard BERT on logic, reasoning, and reading comprehension benchmarks."
+                        />
+                        <VariationCard 
+                            title="DistilBERT" 
+                            company="HuggingFace" 
+                            tag="Faster" 
+                            desc="Uses a technique called 'Knowledge Distillation'. A small 'student' network learns to mimic the exact outputs of a large 'teacher' BERT network, dropping half the layers." 
+                            example="Perfect for deploying NLP features on smartphones or low-latency web servers where standard BERT is too slow."
+                        />
+                        <VariationCard 
+                            title="ALBERT" 
+                            company="Google" 
+                            tag="Efficient" 
+                            desc="A 'Lite' BERT. It drastically reduces memory usage by sharing the exact same mathematical weights across all of its 12 layers, rather than learning unique weights for each layer." 
+                            example="Allows researchers to train a BERT-Large scale model on standard consumer graphics cards without running out of memory."
+                        />
+                        <VariationCard 
+                            title="LegalBERT" 
+                            company="Niche / Domain" 
+                            tag="Specialized" 
+                            desc="A domain-specific BERT pretrained from scratch entirely on legal documents, contracts, and court cases instead of Wikipedia and romance novels." 
+                            example="Correctly understands that 'consideration' means a contractual exchange of value, not just 'being thoughtful'."
+                        />
+                    </div>
+                </div>
+            );
+        };
+
+        const VariationCard = ({ title, company, tag, desc, example }) => (
+            <div className="bg-white border-2 border-slate-100 p-6 rounded-3xl hover:border-indigo-200 transition-all flex flex-col h-full hover:shadow-lg">
+                <div className="text-[10px] font-bold text-indigo-500 mb-1 uppercase tracking-widest">{company}</div>
+                <h4 className="text-xl font-black text-slate-800">{title}</h4>
+                {tag && <div className="inline-block mt-2 px-2 py-0.5 bg-indigo-50 text-[10px] font-bold text-indigo-600 rounded-lg uppercase w-fit">{tag}</div>}
+                <p className="mt-4 text-xs text-slate-600 leading-relaxed flex-grow">{desc}</p>
+                {example && (
+                    <div className="mt-4 pt-4 border-t border-slate-100 text-[11px] text-slate-500 bg-slate-50 p-3 rounded-xl">
+                        <strong className="text-indigo-600">Example Use Case:</strong><br/>
+                        <span className="italic">{example}</span>
+                    </div>
+                )}
+            </div>
+        );
+
+        const StatCard = ({ label, val }) => (
+            <div className="bg-white p-6 rounded-3xl border border-slate-200 text-center shadow-sm">
+                <div className="text-[10px] uppercase font-bold text-slate-400 mb-1 tracking-widest">{label}</div>
+                <div className="text-3xl font-black text-slate-800">{val}</div>
+            </div>
+        );
+
+        const IconType = ({ className }) => <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 7V4h16v3M9 20h6M12 4v16" /></svg>;
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>

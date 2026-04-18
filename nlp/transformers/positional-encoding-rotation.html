@@ -1,0 +1,417 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Positional Encoding: Linear Transformation Visualizer</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        /* Custom scrollbar for a cleaner look */
+        ::-webkit-scrollbar { width: 8px; }
+        ::-webkit-scrollbar-track { background: #f1f5f9; }
+        ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+        
+        .math-block { font-family: 'Courier New', Courier, monospace; }
+        .matrix {
+            display: inline-grid;
+            grid-template-columns: auto auto;
+            gap: 4px 12px;
+            position: relative;
+            padding: 0 8px;
+            vertical-align: middle;
+        }
+        .matrix::before, .matrix::after {
+            content: "";
+            position: absolute;
+            top: -2px; bottom: -2px;
+            width: 6px;
+            border: 2px solid #334155;
+        }
+        .matrix::before { left: 0; border-right: none; }
+        .matrix::after { right: 0; border-left: none; }
+        
+        .vector {
+            display: inline-grid;
+            grid-template-columns: auto;
+            gap: 4px;
+            position: relative;
+            padding: 0 6px;
+            vertical-align: middle;
+        }
+        .vector::before, .vector::after {
+            content: "";
+            position: absolute;
+            top: -2px; bottom: -2px;
+            width: 4px;
+            border: 2px solid #334155;
+        }
+        .vector::before { left: 0; border-right: none; }
+        .vector::after { right: 0; border-left: none; }
+    </style>
+</head>
+<body class="bg-slate-100 text-slate-800 min-h-screen flex items-center justify-center p-4 lg:p-8">
+
+    <div class="max-w-5xl w-full bg-white rounded-2xl shadow-xl overflow-hidden flex flex-col md:flex-row">
+        
+        <!-- Left Panel: Controls & Explanation -->
+        <div class="w-full md:w-5/12 bg-slate-50 p-6 md:p-8 border-r border-slate-200 flex flex-col gap-6">
+            <div>
+                <h1 class="text-2xl font-bold text-slate-900 mb-2">Linear Transformation in PE</h1>
+                <p class="text-sm text-slate-600">
+                    The Transformer encodes position using pairs of Sine and Cosine functions at different frequencies. 
+                    This allows the encoding at <span class="font-bold text-rose-500">pos + k</span> to be found simply by rotating the encoding at <span class="font-bold text-blue-600">pos</span>.
+                </p>
+            </div>
+
+            <!-- Sliders -->
+            <div class="space-y-5 flex-grow">
+                <div>
+                    <div class="flex justify-between mb-1">
+                        <label class="text-sm font-semibold text-slate-700">Base Position (<span class="text-blue-600">pos</span>)</label>
+                        <span id="pos-val" class="text-sm font-mono font-bold text-blue-600">5</span>
+                    </div>
+                    <input type="range" id="pos-slider" min="0" max="50" value="5" class="w-full accent-blue-600">
+                </div>
+
+                <div>
+                    <div class="flex justify-between mb-1">
+                        <label class="text-sm font-semibold text-slate-700">Offset (<span class="text-emerald-600">k</span>)</label>
+                        <span id="k-val" class="text-sm font-mono font-bold text-emerald-600">3</span>
+                    </div>
+                    <input type="range" id="k-slider" min="0" max="20" value="3" class="w-full accent-emerald-500">
+                </div>
+
+                <div>
+                    <div class="flex justify-between mb-1">
+                        <label class="text-sm font-semibold text-slate-700">Dimension Index (<span class="text-purple-600">i</span>)</label>
+                        <span id="dim-val" class="text-sm font-mono font-bold text-purple-600">0</span>
+                    </div>
+                    <input type="range" id="dim-slider" min="0" max="31" value="0" class="w-full accent-purple-600">
+                    <p class="text-xs text-slate-500 mt-1">Higher dimensions have lower frequencies (slower rotation).</p>
+                </div>
+            </div>
+
+            <!-- Mathematical breakdown -->
+            <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm text-sm overflow-x-auto">
+                <div class="text-center font-semibold mb-3 text-slate-700">Rotation Matrix Math</div>
+                <div class="flex items-center justify-center gap-3 math-block text-xs">
+                    <div class="text-center">
+                        <div class="mb-1 text-emerald-600 font-bold">M(k)</div>
+                        <div class="matrix text-emerald-700 bg-emerald-50 rounded p-1" id="matrix-m">
+                            <span id="m00">1.00</span> <span id="m01">0.00</span>
+                            <span id="m10">0.00</span> <span id="m11">1.00</span>
+                        </div>
+                    </div>
+                    <div class="text-lg font-bold text-slate-400">×</div>
+                    <div class="text-center">
+                        <div class="mb-1 text-blue-600 font-bold">PE(pos)</div>
+                        <div class="vector text-blue-700 bg-blue-50 rounded p-1" id="matrix-v1">
+                            <span id="v10">1.00</span>
+                            <span id="v11">0.00</span>
+                        </div>
+                    </div>
+                    <div class="text-lg font-bold text-slate-400">=</div>
+                    <div class="text-center">
+                        <div class="mb-1 text-rose-500 font-bold">PE(pos+k)</div>
+                        <div class="vector text-rose-600 bg-rose-50 rounded p-1" id="matrix-v2">
+                            <span id="v20">1.00</span>
+                            <span id="v21">0.00</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Heatmap Visualization of the Full D-Dimensional Vector -->
+            <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm mt-2">
+                <div class="flex justify-between items-end mb-2">
+                    <h3 class="text-sm font-semibold text-slate-700">Full 128-D Vector (Heatmap)</h3>
+                    <div class="flex gap-2 text-[10px] items-center">
+                        <span class="flex items-center gap-1"><span class="w-2 h-2 bg-red-500 inline-block rounded-sm"></span> -1</span>
+                        <span class="flex items-center gap-1"><span class="w-2 h-2 border border-slate-300 inline-block rounded-sm"></span> 0</span>
+                        <span class="flex items-center gap-1"><span class="w-2 h-2 bg-blue-500 inline-block rounded-sm"></span> +1</span>
+                    </div>
+                </div>
+                <p class="text-xs text-slate-500 mb-2 leading-tight">
+                    The full vector consists of <span class="font-bold">64 pairs</span> of coordinates bundled together. The highlighted box shows the <span class="text-purple-600 font-bold">single pair (2 dimensions)</span> currently plotted on the right.
+                </p>
+                <div class="flex mt-1">
+                    <div class="flex flex-col justify-around text-[10px] font-mono text-slate-500 pr-2 h-12">
+                        <div>PE(pos)</div>
+                        <div>PE(pos+k)</div>
+                    </div>
+                    <div class="relative w-full h-12">
+                        <canvas id="vector-heatmap" class="w-full h-full rounded shadow-inner border border-slate-200"></canvas>
+                    </div>
+                </div>
+                <div class="flex justify-between text-[10px] text-slate-400 mt-1 pl-12">
+                    <span>Dim 0</span>
+                    <span>Dim 64</span>
+                    <span>Dim 127</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Right Panel: Canvas -->
+        <div class="w-full md:w-7/12 p-6 md:p-8 flex flex-col items-center justify-center relative bg-white">
+            <h2 class="text-lg font-semibold text-slate-700 mb-4 self-start">2D Projection of Dimension <span id="dim-label" class="text-purple-600">0 & 1</span></h2>
+            
+            <div class="relative w-full max-w-md aspect-square">
+                <!-- Tooltips/Legend -->
+                <div class="absolute top-0 right-0 bg-white/80 backdrop-blur border border-slate-200 p-3 rounded-lg shadow-sm text-xs space-y-2 z-10">
+                    <div class="flex items-center gap-2">
+                        <div class="w-3 h-3 rounded-full bg-blue-600"></div>
+                        <span>Vector at <strong class="text-blue-600">pos</strong></span>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <div class="w-3 h-3 rounded-full bg-rose-500"></div>
+                        <span>Vector at <strong class="text-rose-500">pos + k</strong></span>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <div class="w-3 h-3 rounded-full bg-emerald-400 opacity-50"></div>
+                        <span>Rotation angle (<strong class="text-emerald-600">ω·k</strong>)</span>
+                    </div>
+                </div>
+
+                <canvas id="pe-canvas" class="w-full h-full"></canvas>
+            </div>
+            
+            <p class="text-center text-sm text-slate-500 mt-6 max-w-sm">
+                Notice how changing the <span class="font-bold text-emerald-600">Offset (k)</span> only changes the <i>angle of rotation</i>. 
+                The model can learn a weight matrix to apply this exact rotation to detect relative distances!
+            </p>
+        </div>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('pe-canvas');
+        const ctx = canvas.getContext('2d');
+        
+        // UI Elements
+        const posSlider = document.getElementById('pos-slider');
+        const kSlider = document.getElementById('k-slider');
+        const dimSlider = document.getElementById('dim-slider');
+        
+        const posVal = document.getElementById('pos-val');
+        const kVal = document.getElementById('k-val');
+        const dimVal = document.getElementById('dim-val');
+        const dimLabel = document.getElementById('dim-label');
+
+        // Math Elements
+        const m00 = document.getElementById('m00'); const m01 = document.getElementById('m01');
+        const m10 = document.getElementById('m10'); const m11 = document.getElementById('m11');
+        const v10 = document.getElementById('v10'); const v11 = document.getElementById('v11');
+        const v20 = document.getElementById('v20'); const v21 = document.getElementById('v21');
+
+        const heatCanvas = document.getElementById('vector-heatmap');
+        const heatCtx = heatCanvas.getContext('2d');
+
+        const d_model = 128; // Example dimension size
+
+        function resizeCanvas() {
+            // Make canvas crisp on high DPI screens
+            const rect = canvas.parentElement.getBoundingClientRect();
+            const dpr = window.devicePixelRatio || 1;
+            canvas.width = rect.width * dpr;
+            canvas.height = rect.height * dpr;
+            ctx.scale(dpr, dpr);
+            canvas.style.width = `${rect.width}px`;
+            canvas.style.height = `${rect.height}px`;
+
+            if (heatCanvas) {
+                const heatRect = heatCanvas.parentElement.getBoundingClientRect();
+                heatCanvas.width = heatRect.width * dpr;
+                heatCanvas.height = heatRect.height * dpr;
+                heatCtx.scale(dpr, dpr);
+                heatCanvas.style.width = `${heatRect.width}px`;
+                heatCanvas.style.height = `${heatRect.height}px`;
+            }
+
+            draw();
+        }
+
+        function getOmega(i) {
+            // Transformer formula frequency: 1 / 10000^(2i/d_model)
+            return 1 / Math.pow(10000, (2 * i) / d_model);
+        }
+
+        function draw() {
+            const width = canvas.width / (window.devicePixelRatio || 1);
+            const height = canvas.height / (window.devicePixelRatio || 1);
+            const cx = width / 2;
+            const cy = height / 2;
+            const radius = Math.min(width, height) * 0.35;
+
+            ctx.clearRect(0, 0, width, height);
+
+            // Get values
+            const pos = parseFloat(posSlider.value);
+            const k = parseFloat(kSlider.value);
+            const i = parseFloat(dimSlider.value);
+            const omega = getOmega(i);
+
+            // Update Labels
+            posVal.innerText = pos;
+            kVal.innerText = k;
+            dimVal.innerText = i;
+            dimLabel.innerText = `${i*2} & ${i*2 + 1}`;
+
+            // Angles
+            const anglePos = pos * omega;
+            const anglePosK = (pos + k) * omega;
+            const angleK = k * omega;
+
+            // Draw Grid & Axes
+            ctx.strokeStyle = '#e2e8f0';
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            ctx.moveTo(0, cy); ctx.lineTo(width, cy); // X axis
+            ctx.moveTo(cx, 0); ctx.lineTo(cx, height); // Y axis
+            ctx.stroke();
+
+            // Labels for axes
+            ctx.fillStyle = '#94a3b8';
+            ctx.font = '12px sans-serif';
+            ctx.fillText('Cos', width - 25, cy - 8);
+            ctx.fillText('Sin', cx + 8, 15);
+
+            // Draw Unit Circle
+            ctx.beginPath();
+            ctx.arc(cx, cy, radius, 0, 2 * Math.PI);
+            ctx.strokeStyle = '#cbd5e1';
+            ctx.lineWidth = 2;
+            ctx.setLineDash([5, 5]);
+            ctx.stroke();
+            ctx.setLineDash([]); // reset
+
+            // Helper to draw a vector
+            const drawVector = (angle, color, label) => {
+                const vx = cx + radius * Math.cos(angle);
+                const vy = cy - radius * Math.sin(angle); // Negative because Canvas Y goes down
+
+                // Line
+                ctx.beginPath();
+                ctx.moveTo(cx, cy);
+                ctx.lineTo(vx, vy);
+                ctx.strokeStyle = color;
+                ctx.lineWidth = 3;
+                ctx.stroke();
+
+                // Arrowhead
+                const headlen = 10;
+                const arrowAngle = Math.atan2(cy - vy, cx - vx);
+                ctx.beginPath();
+                ctx.moveTo(vx, vy);
+                ctx.lineTo(vx + headlen * Math.cos(arrowAngle - Math.PI / 6), vy + headlen * Math.sin(arrowAngle - Math.PI / 6));
+                ctx.lineTo(vx + headlen * Math.cos(arrowAngle + Math.PI / 6), vy + headlen * Math.sin(arrowAngle + Math.PI / 6));
+                ctx.lineTo(vx, vy);
+                ctx.fillStyle = color;
+                ctx.fill();
+
+                // Dot at origin
+                ctx.beginPath();
+                ctx.arc(cx, cy, 4, 0, 2 * Math.PI);
+                ctx.fillStyle = '#334155';
+                ctx.fill();
+            };
+
+            // Draw Vector 1 (pos)
+            drawVector(anglePos, '#2563eb', 'pos'); // Blue
+
+            // Draw Rotation Arc
+            if (k > 0) {
+                ctx.beginPath();
+                // Canvas arc angles are positive clockwise, standard math is counter-clockwise
+                // Since our Y axis is flipped, we draw from -anglePos to -anglePosK
+                ctx.arc(cx, cy, radius * 0.4, -anglePos, -anglePosK, true);
+                ctx.strokeStyle = 'rgba(16, 185, 129, 0.4)'; // Emerald with opacity
+                ctx.lineWidth = 20;
+                ctx.stroke();
+            }
+
+            // Draw Vector 2 (pos + k)
+            drawVector(anglePosK, '#f43f5e', 'pos+k'); // Rose
+
+            // Update Math Text
+            // M(k) Rotation Matrix: [cos(wk)  -sin(wk)]
+            //                       [sin(wk)   cos(wk)]
+            const cosWk = Math.cos(angleK);
+            const sinWk = Math.sin(angleK);
+            
+            // PE(pos): [cos(w*pos), sin(w*pos)]^T
+            const cosPos = Math.cos(anglePos);
+            const sinPos = Math.sin(anglePos);
+
+            // PE(pos+k): [cos(w*(pos+k)), sin(w*(pos+k))]^T
+            const cosPosK = Math.cos(anglePosK);
+            const sinPosK = Math.sin(anglePosK);
+
+            m00.innerText = cosWk.toFixed(2); m01.innerText = (-sinWk).toFixed(2);
+            m10.innerText = sinWk.toFixed(2); m11.innerText = cosWk.toFixed(2);
+
+            v10.innerText = cosPos.toFixed(2);
+            v11.innerText = sinPos.toFixed(2);
+
+            v20.innerText = cosPosK.toFixed(2);
+            v21.innerText = sinPosK.toFixed(2);
+
+            // Draw Heatmap
+            drawHeatmap(pos, k, i);
+        }
+
+        function drawHeatmap(pos, k, selectedI) {
+            if (!heatCanvas) return;
+            const hw = heatCanvas.width / (window.devicePixelRatio || 1);
+            const hh = heatCanvas.height / (window.devicePixelRatio || 1);
+            heatCtx.clearRect(0, 0, hw, hh);
+
+            const cellW = hw / d_model;
+            const rowH = hh / 2;
+
+            function valToColor(val) {
+                if (val < 0) {
+                    const r = 255 - Math.abs(val) * (255 - 239);
+                    const g = 255 - Math.abs(val) * (255 - 68);
+                    const b = 255 - Math.abs(val) * (255 - 68);
+                    return `rgb(${r}, ${g}, ${b})`;
+                } else {
+                    const r = 255 - val * (255 - 59);
+                    const g = 255 - val * (255 - 130);
+                    const b = 255 - val * (255 - 246);
+                    return `rgb(${r}, ${g}, ${b})`;
+                }
+            }
+
+            for (let d = 0; d < d_model / 2; d++) {
+                const om = getOmega(d);
+                const pCos = Math.cos(pos * om); 
+                const pSin = Math.sin(pos * om);
+                const pkCos = Math.cos((pos + k) * om);
+                const pkSin = Math.sin((pos + k) * om);
+
+                // Top row (pos)
+                heatCtx.fillStyle = valToColor(pCos); heatCtx.fillRect((d * 2) * cellW, 0, cellW + 0.5, rowH);
+                heatCtx.fillStyle = valToColor(pSin); heatCtx.fillRect((d * 2 + 1) * cellW, 0, cellW + 0.5, rowH);
+
+                // Bottom row (pos+k)
+                heatCtx.fillStyle = valToColor(pkCos); heatCtx.fillRect((d * 2) * cellW, rowH, cellW + 0.5, rowH);
+                heatCtx.fillStyle = valToColor(pkSin); heatCtx.fillRect((d * 2 + 1) * cellW, rowH, cellW + 0.5, rowH);
+            }
+
+            // Highlight box
+            heatCtx.strokeStyle = '#eab308'; // Yellow
+            heatCtx.lineWidth = 2;
+            heatCtx.strokeRect((selectedI * 2) * cellW, 0, cellW * 2, hh);
+        }
+
+        // Event Listeners
+        posSlider.addEventListener('input', draw);
+        kSlider.addEventListener('input', draw);
+        dimSlider.addEventListener('input', draw);
+        window.addEventListener('resize', resizeCanvas);
+
+        // Initial setup
+        window.setTimeout(resizeCanvas, 0); // Delay slightly to ensure layout is complete
+    </script>
+</body>
+</html>

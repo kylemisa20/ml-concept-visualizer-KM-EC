@@ -1,0 +1,470 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Interactive Masked Attention</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        .matrix-cell {
+            transition: all 0.5s ease;
+        }
+
+        .masked-cell {
+            background-color: #1e293b !important;
+            /* slate-800 */
+            color: #64748b !important;
+            /* slate-500 */
+            border-color: #334155 !important;
+            /* slate-700 */
+            transform: scale(0.95);
+        }
+
+        .zero-cell {
+            background-color: #0f172a !important;
+            /* slate-900 */
+            color: #ef4444 !important;
+            /* red-500 */
+            font-weight: bold;
+        }
+
+        .active-row {
+            outline: 2px solid #3b82f6;
+            /* blue-500 */
+            outline-offset: 2px;
+            z-index: 10;
+        }
+
+        .seq-token {
+            transition: all 0.3s;
+        }
+
+        .seq-token.masked {
+            opacity: 0.4;
+            border-style: dashed;
+        }
+
+        .seq-token.active {
+            transform: scale(1.05);
+            box-shadow: 0 0 15px rgba(59, 130, 246, 0.5);
+        }
+
+        .dimmed-row {
+            opacity: 0.15;
+            filter: grayscale(100%);
+            pointer-events: none;
+        }
+
+        .math-pop {
+            animation: popIn 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
+        }
+
+        @keyframes popIn {
+            0% {
+                transform: scale(0.8);
+                opacity: 0;
+            }
+
+            100% {
+                transform: scale(1);
+                opacity: 1;
+            }
+        }
+    </style>
+</head>
+
+<body class="bg-slate-900 text-slate-100 font-sans min-h-screen p-4 md:p-8 flex flex-col items-center">
+
+    <div class="max-w-5xl w-full">
+        <header class="mb-8 text-center">
+            <h1
+                class="text-3xl font-bold mb-2 text-transparent bg-clip-text bg-gradient-to-r from-pink-400 to-purple-500">
+                How Masked Attention Works
+            </h1>
+            <p class="text-slate-400">Step-by-step computation of the Causal Mask during Training</p>
+        </header>
+
+        <!-- Main Interactive Area -->
+        <div class="bg-slate-800 p-6 md:p-8 rounded-2xl border border-slate-700 shadow-2xl mb-8">
+
+            <!-- Controls -->
+            <div class="flex flex-wrap justify-center gap-4 mb-8">
+                <button onclick="setStep(0)" id="btn-step-0"
+                    class="px-6 py-2 rounded-full font-bold transition-all bg-blue-600 text-white shadow-[0_0_15px_rgba(37,99,235,0.5)]">
+                    1. Raw Scores (Q &times; K)
+                </button>
+                <button onclick="setStep(1)" id="btn-step-1"
+                    class="px-6 py-2 rounded-full font-bold transition-all bg-slate-700 text-slate-300 hover:bg-slate-600">
+                    2. Apply Mask (-&infin;)
+                </button>
+                <button onclick="setStep(2)" id="btn-step-2"
+                    class="px-6 py-2 rounded-full font-bold transition-all bg-slate-700 text-slate-300 hover:bg-slate-600">
+                    3. Softmax (Probabilities)
+                </button>
+            </div>
+
+            <!-- Explanation Text -->
+            <div
+                class="h-24 md:h-20 flex items-center justify-center text-center mb-8 bg-slate-900/50 rounded-xl p-4 border border-slate-700/50">
+                <p id="explanation-text" class="text-lg text-slate-300 math-pop">
+                    <strong>Step 1:</strong> We multiply the Queries by the Keys. Notice that "robot" (Row 1) currently
+                    has a high score for "orders" (Col 4). But "robot" is the first word—it hasn't seen "orders" yet!
+                </p>
+            </div>
+
+            <!-- Time Step Simulator -->
+            <div class="mb-10 bg-slate-900 rounded-xl p-6 border border-slate-700 shadow-inner">
+                <div class="flex flex-col md:flex-row justify-between items-center mb-6 gap-4">
+                    <div>
+                        <h3 class="text-lg font-bold text-slate-200">Input Sequence Timeline</h3>
+                        <p class="text-xs text-slate-400">Select a position to see the available context at that exact
+                            time step.</p>
+                    </div>
+                    <div class="flex gap-2 flex-wrap justify-center bg-slate-950 p-1 rounded-full border border-slate-800"
+                        id="time-step-controls">
+                        <!-- Buttons injected by JS -->
+                    </div>
+                </div>
+                <div class="flex gap-4 justify-center items-end overflow-x-auto py-2" id="sequence-visualizer">
+                    <!-- Sequence injected by JS -->
+                </div>
+            </div>
+
+            <!-- Matrix Visualizer -->
+            <div class="flex flex-col md:flex-row justify-center items-start gap-8">
+
+                <!-- Row Labels (Queries) -->
+                <div class="flex flex-col mt-10 gap-1 text-right font-mono text-purple-400 font-bold hidden md:flex">
+                    <div class="h-12 flex items-center justify-end pr-4">robot</div>
+                    <div class="h-12 flex items-center justify-end pr-4">must</div>
+                    <div class="h-12 flex items-center justify-end pr-4">obey</div>
+                    <div class="h-12 flex items-center justify-end pr-4">orders</div>
+                </div>
+
+                <div class="overflow-x-auto w-full md:w-auto">
+                    <!-- Column Labels (Keys) -->
+                    <div
+                        class="flex gap-1 mb-2 ml-14 md:ml-0 font-mono text-amber-500 font-bold justify-center md:justify-start">
+                        <div class="w-16 text-center">robot</div>
+                        <div class="w-16 text-center">must</div>
+                        <div class="w-16 text-center">obey</div>
+                        <div class="w-16 text-center">orders</div>
+                    </div>
+
+                    <!-- The Matrix -->
+                    <div id="matrix-container"
+                        class="grid grid-cols-4 gap-1 p-2 bg-slate-950 rounded-lg border border-slate-700 inline-block">
+                        <!-- Rows will be injected by JS -->
+                    </div>
+                </div>
+
+                <!-- Live Calculation Tooltip -->
+                <div
+                    class="bg-slate-900 p-4 rounded-xl border border-slate-700 w-full md:w-64 self-center md:self-start mt-8 md:mt-10">
+                    <h4 class="text-sm font-bold text-slate-400 uppercase tracking-wider mb-2">Cell Inspector</h4>
+                    <p class="text-xs text-slate-500 mb-4">Hover over any cell in the matrix to see its calculation.</p>
+                    <div id="inspector-content" class="text-sm font-mono text-blue-300 min-h-[80px]">
+                        Hover over a cell...
+                    </div>
+                </div>
+
+            </div>
+        </div>
+
+        <!-- Context Note -->
+        <p class="text-center text-sm text-slate-500 max-w-2xl mx-auto">
+            Without this mask, the decoder would simply memorize the target sentence during training by looking ahead at
+            the next word, rather than learning to actually predict it based on the past context.
+        </p>
+
+    </div>
+
+    <script>
+        // Data derived from the image
+        const tokens = ["robot", "must", "obey", "orders"];
+        const rawScores = [
+            [0.11, 0.00, 0.81, 0.79],
+            [0.19, 0.50, 0.30, 0.48],
+            [0.53, 0.98, 0.95, 0.14],
+            [0.81, 0.86, 0.38, 0.90]
+        ];
+
+        let currentStep = 0; // 0: Raw, 1: Masked, 2: Softmax
+        let currentTimeStep = 'all'; // 'all', 0, 1, 2, 3
+        let autoPlayInterval = null;
+
+        const matrixContainer = document.getElementById('matrix-container');
+        const inspectorContent = document.getElementById('inspector-content');
+        const explanationText = document.getElementById('explanation-text');
+
+        const explanations = [
+            "<strong>Step 1 (Raw Scores):</strong> We multiply the Queries (Rows) by the Keys (Columns). Notice that 'robot' (Row 1) has a high score (0.79) for 'orders' (Col 4). But 'robot' is the first word—it hasn't seen 'orders' yet! This is 'cheating'.",
+            "<strong>Step 2 (Apply Causal Mask):</strong> We force the upper triangle to negative infinity (-&infin;). Now, 'robot' cannot attend to 'must', 'obey', or 'orders'. It can only look at itself.",
+            "<strong>Step 3 (Softmax):</strong> We apply Softmax row by row to convert scores to probabilities (summing to 1). Because e<sup>-&infin;</sup> = 0, all future tokens get exactly 0% attention. The model is forced to predict the future using only the past!"
+        ];
+
+        function calculateSoftmax(row, rowIndex) {
+            // Apply mask logic first
+            const maskedRow = row.map((val, colIndex) => colIndex > rowIndex ? -Infinity : val);
+
+            // Softmax math
+            const maxVal = Math.max(...maskedRow.filter(v => v !== -Infinity)); // For numerical stability
+            const exps = maskedRow.map(v => v === -Infinity ? 0 : Math.exp(v - maxVal));
+            const sumExps = exps.reduce((a, b) => a + b, 0);
+            return exps.map(e => e / sumExps);
+        }
+
+        const softmaxScores = rawScores.map((row, i) => calculateSoftmax(row, i));
+
+        window.toggleAutoPlay = function () {
+            if (autoPlayInterval) {
+                clearInterval(autoPlayInterval);
+                autoPlayInterval = null;
+                renderSequence();
+            } else {
+                let step = currentTimeStep === 'all' ? 0 : currentTimeStep;
+                setTimeStep(step);
+                autoPlayInterval = setInterval(() => {
+                    step++;
+                    if (step > 4) step = 0;
+                    setTimeStep(step === 4 ? 'all' : step);
+                }, 1500);
+            }
+        }
+
+        function renderSequence() {
+            const container = document.getElementById('sequence-visualizer');
+            const controls = document.getElementById('time-step-controls');
+
+            // Build Controls
+            let autoPlayHtml = `<button onclick="toggleAutoPlay()" class="px-4 py-1.5 text-sm font-bold rounded-full transition-all flex items-center gap-1 ${autoPlayInterval ? 'bg-red-500/20 text-red-400 border border-red-500/50 shadow-[0_0_10px_rgba(239,68,68,0.3)]' : 'bg-emerald-600/20 text-emerald-400 border border-emerald-500/50 hover:bg-emerald-500/30'}">
+                ${autoPlayInterval ? '⏹ Stop' : '▶ Auto-Play'}
+            </button>`;
+
+            let controlsHtml = autoPlayHtml + `<button onclick="setTimeStep('all')" class="px-4 py-1.5 text-sm font-bold rounded-full transition-all ${currentTimeStep === 'all' ? 'bg-indigo-500 text-white shadow-lg' : 'text-slate-400 hover:text-slate-200'}">View All</button>`;
+            for (let i = 0; i < 4; i++) {
+                controlsHtml += `<button onclick="setTimeStep(${i})" class="px-4 py-1.5 text-sm font-bold font-mono rounded-full transition-all ${currentTimeStep === i ? 'bg-blue-500 text-white shadow-[0_0_10px_rgba(59,130,246,0.5)]' : 'text-slate-400 hover:text-slate-200'}">t=${i + 1}</button>`;
+            }
+            controls.innerHTML = controlsHtml;
+
+            // Build Sequence Tokens
+            let seqHtml = '';
+            for (let i = 0; i < 4; i++) {
+                const isMasked = currentTimeStep !== 'all' && i > currentTimeStep;
+                const isActive = currentTimeStep === i;
+
+                let stateClass = "";
+                let iconHtml = "";
+
+                if (isMasked) {
+                    stateClass = "masked bg-slate-800 text-slate-500 border-slate-700";
+                    iconHtml = '<span class="text-[10px] text-red-400 mt-2 font-bold uppercase tracking-wider transition-opacity duration-300">🔒 Masked</span>';
+                } else if (isActive) {
+                    stateClass = "active bg-blue-600 text-white border-blue-400";
+                    iconHtml = '<span class="text-[10px] text-blue-300 mt-2 font-bold uppercase tracking-wider transition-opacity duration-300">📍 Current</span>';
+                } else {
+                    stateClass = "bg-emerald-900/40 text-emerald-400 border-emerald-500/50";
+                    iconHtml = '<span class="text-[10px] text-emerald-500 mt-2 font-bold uppercase tracking-wider transition-opacity duration-300">👁️ Visible</span>';
+                }
+
+                seqHtml += `
+                    <div class="seq-token flex flex-col items-center min-w-[80px]">
+                        <span class="text-[10px] text-slate-500 mb-1 font-mono">Pos ${i + 1}</span>
+                        <div id="seq-box-${i}" class="w-full h-12 flex items-center justify-center font-mono text-sm rounded-lg border transition-all duration-300 ${stateClass}">
+                            ${tokens[i]}
+                        </div>
+                        ${iconHtml}
+                    </div>
+                `;
+            }
+            container.innerHTML = seqHtml;
+        }
+
+        window.setTimeStep = function (step) {
+            currentTimeStep = step;
+            renderSequence();
+            renderMatrix();
+        }
+
+        function renderMatrix() {
+            matrixContainer.innerHTML = '';
+
+            for (let i = 0; i < 4; i++) {
+                const isDimmed = currentTimeStep !== 'all' && i !== currentTimeStep;
+
+                for (let j = 0; j < 4; j++) {
+                    const cell = document.createElement('div');
+                    cell.className = `w-16 h-12 flex items-center justify-center font-mono text-sm rounded bg-slate-800 border border-slate-600 matrix-cell cursor-pointer relative group ${isDimmed ? 'dimmed-row' : ''}`;
+
+                    let displayValue = "";
+                    let isMasked = j > i; // Upper triangle
+
+                    if (currentStep === 0) {
+                        displayValue = rawScores[i][j].toFixed(2);
+                        cell.style.color = '#93c5fd'; // blue-300
+                    } else if (currentStep === 1) {
+                        if (isMasked) {
+                            displayValue = "-∞";
+                            cell.classList.add('masked-cell');
+                        } else {
+                            displayValue = rawScores[i][j].toFixed(2);
+                            cell.style.color = '#93c5fd';
+                        }
+                    } else if (currentStep === 2) {
+                        if (isMasked) {
+                            displayValue = "0.00";
+                            cell.classList.add('zero-cell');
+                        } else {
+                            displayValue = softmaxScores[i][j].toFixed(2);
+                            // Color intensity based on probability
+                            const intensity = softmaxScores[i][j];
+                            cell.style.backgroundColor = `rgba(236, 72, 153, ${0.1 + intensity * 0.5})`; // pink tint
+                            cell.style.borderColor = `rgba(236, 72, 153, ${0.3 + intensity * 0.7})`;
+                            cell.style.color = '#fbcfe8'; // pink-200
+                        }
+                    }
+
+                    cell.innerHTML = displayValue;
+
+                    // Mobile Row Label
+                    if (j === 0) {
+                        const mobileLabel = document.createElement('div');
+                        mobileLabel.className = 'absolute -left-12 text-xs font-bold text-purple-400 md:hidden w-10 text-right';
+                        mobileLabel.innerText = tokens[i];
+                        cell.appendChild(mobileLabel);
+                    }
+
+                    // Hover interactions
+                    cell.addEventListener('mouseenter', () => {
+                        // Stop auto-play if user manually inspects a cell
+                        if (autoPlayInterval) toggleAutoPlay();
+                        updateInspector(i, j, isMasked);
+                    });
+
+                    cell.addEventListener('mouseleave', () => {
+                        inspectorContent.innerHTML = 'Hover over a cell...';
+                        // Re-render sequence to clean up the cross-highlighting styles
+                        renderSequence();
+                    });
+
+                    matrixContainer.appendChild(cell);
+                }
+            }
+        }
+
+        function updateInspector(row, col, isMasked) {
+            let html = `<div class="mb-1"><span class="text-purple-400">Query:</span> "${tokens[row]}" (Pos ${row + 1})</div>`;
+            html += `<div><span class="text-amber-500">Key:</span> "${tokens[col]}" (Pos ${col + 1})</div>`;
+            html += `<hr class="border-slate-700 my-2">`;
+
+            if (currentStep === 0) {
+                html += `Raw Score: <span class="text-white">${rawScores[row][col].toFixed(2)}</span>`;
+                if (isMasked) {
+                    html += `<br><span class="text-red-400 text-xs mt-1 block">Warning: Looking into the future!</span>`;
+                }
+            } else if (currentStep === 1) {
+                if (isMasked) {
+                    html += `Masked Score: <span class="text-slate-400">-&infin;</span>`;
+                    html += `<br><span class="text-emerald-400 text-xs mt-1 block">Mask applied (Future token)</span>`;
+                } else {
+                    html += `Masked Score: <span class="text-white">${rawScores[row][col].toFixed(2)}</span>`;
+                }
+            } else {
+                if (isMasked) {
+                    html += `Probability: <span class="text-red-400">0.00</span><br>`;
+                    html += `<span class="text-xs text-slate-500">e<sup>-&infin;</sup> / sum = 0</span>`;
+
+                    html += `<div class="mt-3 text-xs text-slate-300 bg-slate-800 p-2 rounded border border-slate-700">`;
+                    html += `<strong>Interpretation:</strong> When analyzing <strong>"${tokens[row]}"</strong>, the model is strictly forbidden from paying any attention to <strong>"${tokens[col]}"</strong> because it lies in the future.`;
+                    html += `</div>`;
+                } else {
+                    const probPerc = (softmaxScores[row][col] * 100).toFixed(1);
+                    html += `Probability: <span class="text-pink-400">${probPerc}%</span><br>`;
+
+                    // Show a mini math formula
+                    const rowScores = rawScores[row].filter((_, idx) => idx <= row);
+                    const denom = rowScores.map(s => `e<sup>${s.toFixed(2)}</sup>`).join(' + ');
+                    html += `<div class="text-[10px] text-slate-500 mt-2 leading-tight overflow-hidden text-ellipsis whitespace-nowrap">`;
+                    html += `e<sup>${rawScores[row][col].toFixed(2)}</sup> / (${denom})`;
+                    html += `</div>`;
+
+                    html += `<div class="mt-3 text-xs text-slate-300 bg-slate-800 p-2 rounded border border-slate-700">`;
+                    html += `<strong>Interpretation:</strong> When analyzing <strong>"${tokens[row]}"</strong>, the model pays exactly <span class="text-pink-400 font-bold">${probPerc}%</span> of its focus to <strong>"${tokens[col]}"</strong> to understand the context.`;
+                    html += `</div>`;
+                }
+            }
+
+            inspectorContent.innerHTML = html;
+
+            // --- CROSS-HIGHLIGHTING LOGIC ---
+            for (let k = 0; k < 4; k++) {
+                const box = document.getElementById(`seq-box-${k}`);
+                if (!box) continue;
+
+                // Dim non-involved tokens
+                if (k !== row && k !== col) {
+                    box.style.opacity = '0.3';
+                    box.style.transform = 'scale(0.95)';
+                } else {
+                    box.style.opacity = '1';
+                    box.style.transform = 'scale(1.1)';
+                }
+
+                // Highlight Query Token (Purple)
+                if (k === row) {
+                    box.style.borderColor = '#c084fc';
+                    box.style.boxShadow = '0 0 15px rgba(168, 85, 247, 0.6)';
+                    box.style.color = '#e9d5ff';
+                    if (row === col) box.style.borderWidth = '3px'; // Self-attention emphasis
+                }
+
+                // Highlight Key Token (Amber or Pink)
+                if (k === col && k !== row) {
+                    if (currentStep === 2 && !isMasked) {
+                        const intensity = softmaxScores[row][col];
+                        box.style.backgroundColor = `rgba(236, 72, 153, ${0.3 + intensity * 0.7})`;
+                        box.style.borderColor = '#f472b6';
+                        box.style.boxShadow = `0 0 ${10 + intensity * 15}px rgba(236, 72, 153, 0.8)`;
+                        box.style.color = '#fdf2f8';
+                    } else {
+                        box.style.borderColor = '#fbbf24';
+                        box.style.boxShadow = '0 0 15px rgba(245, 158, 11, 0.6)';
+                        box.style.color = '#fef3c7';
+                    }
+                }
+            }
+        }
+
+        window.setStep = function (step) {
+            currentStep = step;
+
+            // Update button styles
+            for (let i = 0; i < 3; i++) {
+                const btn = document.getElementById(`btn-step-${i}`);
+                if (i === step) {
+                    let colorClass = step === 0 ? 'bg-blue-600 shadow-[0_0_15px_rgba(37,99,235,0.5)] text-white' :
+                        step === 1 ? 'bg-indigo-600 shadow-[0_0_15px_rgba(79,70,229,0.5)] text-white' :
+                            'bg-pink-600 shadow-[0_0_15px_rgba(219,39,119,0.5)] text-white';
+                    btn.className = `px-6 py-2 rounded-full font-bold transition-all ${colorClass}`;
+                } else {
+                    btn.className = `px-6 py-2 rounded-full font-bold transition-all bg-slate-700 text-slate-300 hover:bg-slate-600`;
+                }
+            }
+
+            // Animate text change
+            explanationText.classList.remove('math-pop');
+            void explanationText.offsetWidth; // trigger reflow
+            explanationText.innerHTML = explanations[step];
+            explanationText.classList.add('math-pop');
+
+            renderMatrix();
+        }
+
+        // Initial render
+        renderSequence();
+        renderMatrix();
+    </script>
+</body>
+
+</html>

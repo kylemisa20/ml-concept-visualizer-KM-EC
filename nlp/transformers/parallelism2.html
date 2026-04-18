@@ -1,0 +1,276 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Transformer vs RNN Parallelism</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        .token { transition: all 0.5s ease; }
+        .active-token { transform: scale(1.1); filter: drop-shadow(0 0 8px rgba(59, 130, 246, 0.5)); }
+        .connector { stroke-dasharray: 5; animation: dash 2s linear infinite; }
+        @keyframes dash { to { stroke-dashoffset: -20; } }
+        .matrix-cell { transition: background-color 0.3s; }
+        canvas { border-radius: 8px; }
+    </style>
+</head>
+<body class="bg-slate-900 text-slate-100 font-sans min-h-screen p-4 md:p-8">
+    <div class="max-w-5xl mx-auto">
+        <header class="mb-8 text-center">
+            <h1 class="text-3xl font-bold mb-2">Where is the Parallelism?</h1>
+            <p class="text-slate-400">Comparing RNN (Sequential) vs Transformer (Parallel) processing</p>
+        </header>
+
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
+            <!-- RNN Panel -->
+            <div class="bg-slate-800 p-6 rounded-xl border border-slate-700">
+                <div class="flex justify-between items-center mb-4">
+                    <h2 class="text-xl font-semibold text-blue-400">RNN (Sequential)</h2>
+                    <span class="text-xs bg-blue-900 text-blue-200 px-2 py-1 rounded">O(N) Time</span>
+                </div>
+                <div class="relative h-48 bg-slate-900 rounded-lg flex items-center justify-center overflow-hidden mb-4" id="rnn-container">
+                    <!-- SVG for RNN connections -->
+                    <svg id="rnn-svg" class="absolute inset-0 w-full h-full pointer-events-none"></svg>
+                </div>
+                <p class="text-sm text-slate-400 italic">"I can't start Word 3 until Word 2 tells me what happened."</p>
+            </div>
+
+            <!-- Transformer Panel -->
+            <div class="bg-slate-800 p-6 rounded-xl border border-slate-700">
+                <div class="flex justify-between items-center mb-4">
+                    <h2 class="text-xl font-semibold text-purple-400">Transformer (Parallel)</h2>
+                    <span class="text-xs bg-purple-900 text-purple-200 px-2 py-1 rounded">O(1) Time*</span>
+                </div>
+                <div class="relative h-48 bg-slate-900 rounded-lg flex items-center justify-center overflow-hidden mb-4" id="transformer-container">
+                    <svg id="transformer-svg" class="absolute inset-0 w-full h-full pointer-events-none"></svg>
+                </div>
+                <p class="text-sm text-slate-400 italic">"I see all words at once. I just need to multiply two matrices."</p>
+            </div>
+        </div>
+
+        <!-- Controls -->
+        <div class="flex flex-col md:flex-row gap-4 justify-center items-center mb-12">
+            <button id="btn-play" class="bg-blue-600 hover:bg-blue-500 text-white px-8 py-3 rounded-full font-bold transition-all shadow-lg active:scale-95">
+                Simulate Processing
+            </button>
+            <button id="btn-reset" class="bg-slate-700 hover:bg-slate-600 text-white px-6 py-3 rounded-full font-bold transition-all">
+                Reset
+            </button>
+        </div>
+
+        <!-- Myth vs Reality Section -->
+        <div class="mb-12">
+            <h3 class="text-2xl font-bold mb-6 text-center">The "100 Decoders" Misconception</h3>
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                <!-- Myth -->
+                <div class="bg-slate-800 p-6 rounded-xl border border-red-900/50">
+                    <div class="flex justify-between items-center mb-4">
+                        <h4 class="text-lg font-semibold text-red-400">Myth: 100 Decoders</h4>
+                    </div>
+                    <div class="relative h-48 bg-slate-900 rounded-lg flex flex-col items-center justify-center p-4">
+                        <div class="flex gap-2 mb-4 overflow-hidden w-full justify-center">
+                            <div class="w-8 h-8 bg-slate-700 rounded border border-slate-600 flex items-center justify-center text-xs">D1</div>
+                            <div class="w-8 h-8 bg-slate-700 rounded border border-slate-600 flex items-center justify-center text-xs">D2</div>
+                            <div class="w-8 h-8 bg-slate-700 rounded border border-slate-600 flex items-center justify-center text-xs">D3</div>
+                            <div class="w-8 h-8 flex items-center justify-center text-slate-500">...</div>
+                            <div class="w-8 h-8 bg-slate-700 rounded border border-slate-600 flex items-center justify-center text-xs">D100</div>
+                        </div>
+                        <p class="text-sm text-slate-400 text-center">"Hiring 100 teachers to grade 1 exam each."</p>
+                        <p class="text-xs text-red-400 mt-2 text-center">❌ Inefficient & redundant</p>
+                    </div>
+                </div>
+                
+                <!-- Reality -->
+                <div class="bg-slate-800 p-6 rounded-xl border border-emerald-900/50">
+                    <div class="flex justify-between items-center mb-4">
+                        <h4 class="text-lg font-semibold text-emerald-400">Reality: 1 Matrix + GPU</h4>
+                    </div>
+                    <div class="relative h-48 bg-slate-900 rounded-lg flex items-center justify-center p-4 overflow-hidden" id="reality-container">
+                        <div class="relative z-10 w-full max-w-[240px] p-4 bg-emerald-900/30 border-2 border-emerald-500/50 rounded flex flex-col justify-center items-center backdrop-blur-sm">
+                            <div class="font-mono text-emerald-400 font-bold mb-3 text-sm">1 Decoder Stack</div>
+                            <!-- Matrix representation -->
+                            <div class="grid grid-cols-5 gap-1 p-2 bg-slate-950 rounded">
+                                <!-- Row 1 -->
+                                <div class="w-5 h-5 bg-emerald-500 rounded-sm flex items-center justify-center text-[8px] text-white font-bold" title="Allowed">T1</div>
+                                <div class="w-5 h-5 bg-slate-800 rounded-sm flex items-center justify-center text-[8px] text-slate-500 border border-slate-700" title="Masked">0</div>
+                                <div class="w-5 h-5 bg-slate-800 rounded-sm flex items-center justify-center text-[8px] text-slate-500 border border-slate-700" title="Masked">0</div>
+                                <div class="w-5 h-5 bg-slate-800 rounded-sm flex items-center justify-center text-[8px] text-slate-500 border border-slate-700" title="Masked">0</div>
+                                <div class="w-5 h-5 bg-slate-800 rounded-sm flex items-center justify-center text-[8px] text-slate-500 border border-slate-700" title="Masked">0</div>
+                                <!-- Row 2 -->
+                                <div class="w-5 h-5 bg-emerald-500 rounded-sm flex items-center justify-center text-[8px] text-white font-bold" title="Allowed">T1</div>
+                                <div class="w-5 h-5 bg-emerald-500 rounded-sm flex items-center justify-center text-[8px] text-white font-bold" title="Allowed">T2</div>
+                                <div class="w-5 h-5 bg-slate-800 rounded-sm flex items-center justify-center text-[8px] text-slate-500 border border-slate-700" title="Masked">0</div>
+                                <div class="w-5 h-5 bg-slate-800 rounded-sm flex items-center justify-center text-[8px] text-slate-500 border border-slate-700" title="Masked">0</div>
+                                <div class="w-5 h-5 bg-slate-800 rounded-sm flex items-center justify-center text-[8px] text-slate-500 border border-slate-700" title="Masked">0</div>
+                                <!-- Row 3 -->
+                                <div class="w-5 h-5 bg-emerald-500 rounded-sm flex items-center justify-center text-[8px] text-white font-bold" title="Allowed">T1</div>
+                                <div class="w-5 h-5 bg-emerald-500 rounded-sm flex items-center justify-center text-[8px] text-white font-bold" title="Allowed">T2</div>
+                                <div class="w-5 h-5 bg-emerald-500 rounded-sm flex items-center justify-center text-[8px] text-white font-bold" title="Allowed">T3</div>
+                                <div class="w-5 h-5 bg-slate-800 rounded-sm flex items-center justify-center text-[8px] text-slate-500 border border-slate-700" title="Masked">0</div>
+                                <div class="w-5 h-5 bg-slate-800 rounded-sm flex items-center justify-center text-[8px] text-slate-500 border border-slate-700" title="Masked">0</div>
+                            </div>
+                            <div class="text-[10px] text-slate-400 mt-3 text-center leading-tight">Zeroes = Causal Mask<br>(No looking ahead)</div>
+                        </div>
+                        <!-- Background matrix effect -->
+                        <div class="absolute inset-0 opacity-20 bg-[linear-gradient(rgba(16,185,129,0.2)_1px,transparent_1px),linear-gradient(90deg,rgba(16,185,129,0.2)_1px,transparent_1px)] bg-[size:20px_20px] animate-pulse"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Deep Dive Section -->
+        <div class="bg-slate-800 p-8 rounded-2xl border border-slate-700 shadow-2xl">
+            <h3 class="text-2xl font-bold mb-6 flex items-center gap-2">
+                <span class="p-2 bg-blue-500 rounded-lg">💡</span> The "Aha!" Moment
+            </h3>
+            
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-8 text-sm leading-relaxed">
+                <div class="space-y-4">
+                    <h4 class="font-bold text-lg text-blue-300">1. Training vs Inference</h4>
+                    <p>During <b>training</b>, we have the full sentence. Instead of feeding words one by one, we feed the <b>whole matrix</b>. The hardware (GPU) calculates all positions in one clock cycle.</p>
+                </div>
+                <div class="space-y-4">
+                    <h4 class="font-bold text-lg text-purple-300">2. The Context Vector</h4>
+                    <p>In an RNN, the context is a "summarized bucket" passed forward. In a Transformer, the <b>Self-Attention Score</b> is a matrix of word-to-word relationships calculated all at once.</p>
+                </div>
+                <div class="space-y-4">
+                    <h4 class="font-bold text-lg text-emerald-300">3. Matrix Math (Not 100 Decoders!)</h4>
+                    <p>You don't clone the decoder 100 times. You pack all 100 tokens into <b>one single block of data</b> (a matrix). The GPU uses linear algebra to sweep across the entire grid simultaneously. Think of it as one super-teacher grading all exams at once.</p>
+                </div>
+                <div class="space-y-4">
+                    <h4 class="font-bold text-lg text-amber-300">4. The Causal Mask</h4>
+                    <p>If we feed all 100 words at once, how do we stop Word 5 from looking at Word 6? The model applies a <b>Mask</b> (a triangle of zeros) over future words. Word 5 can only multiply with Words 1-5. It can't "cheat" by looking ahead.</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const tokens = ["The", "cat", "sat", "on", "mat"];
+        const rnnContainer = document.getElementById('rnn-container');
+        const transContainer = document.getElementById('transformer-container');
+        const rnnSvg = document.getElementById('rnn-svg');
+        const transSvg = document.getElementById('transformer-svg');
+        const btnPlay = document.getElementById('btn-play');
+        const btnReset = document.getElementById('btn-reset');
+
+        let isAnimating = false;
+
+        function createTokens() {
+            rnnContainer.innerHTML = '<svg id="rnn-svg" class="absolute inset-0 w-full h-full pointer-events-none"></svg>';
+            transContainer.innerHTML = '<svg id="transformer-svg" class="absolute inset-0 w-full h-full pointer-events-none"></svg>';
+            
+            tokens.forEach((text, i) => {
+                const rNode = document.createElement('div');
+                rNode.className = 'token absolute bg-blue-600 px-3 py-1 rounded text-xs font-mono';
+                rNode.innerText = text;
+                rNode.style.left = `${15 + i * 18}%`;
+                rNode.style.top = '50%';
+                rNode.id = `rnn-token-${i}`;
+                rnnContainer.appendChild(rNode);
+
+                const tNode = document.createElement('div');
+                tNode.className = 'token absolute bg-purple-600 px-3 py-1 rounded text-xs font-mono';
+                tNode.innerText = text;
+                tNode.style.left = `${15 + i * 18}%`;
+                tNode.style.top = '50%';
+                tNode.id = `trans-token-${i}`;
+                transContainer.appendChild(tNode);
+            });
+        }
+
+        async function animateRNN() {
+            const svg = document.getElementById('rnn-svg');
+            for(let i=0; i<tokens.length; i++) {
+                const el = document.getElementById(`rnn-token-${i}`);
+                el.classList.add('active-token', 'bg-blue-400');
+                
+                if (i < tokens.length - 1) {
+                    const nextEl = document.getElementById(`rnn-token-${i+1}`);
+                    const line = document.createElementNS("http://www.w3.org/2000/svg", "line");
+                    const startX = el.offsetLeft + el.offsetWidth;
+                    const startY = el.offsetTop + el.offsetHeight / 2;
+                    const endX = nextEl.offsetLeft;
+                    const endY = nextEl.offsetTop + nextEl.offsetHeight / 2;
+
+                    line.setAttribute("x1", startX);
+                    line.setAttribute("y1", startY);
+                    line.setAttribute("x2", startX); // Start short
+                    line.setAttribute("y2", startY);
+                    line.setAttribute("stroke", "#60a5fa");
+                    line.setAttribute("stroke-width", "2");
+                    line.classList.add('connector');
+                    svg.appendChild(line);
+
+                    // Animate the line growth
+                    let progress = 0;
+                    await new Promise(r => {
+                        const interval = setInterval(() => {
+                            progress += 0.1;
+                            line.setAttribute("x2", startX + (endX - startX) * progress);
+                            line.setAttribute("y2", startY + (endY - startY) * progress);
+                            if (progress >= 1) {
+                                clearInterval(interval);
+                                r();
+                            }
+                        }, 30);
+                    });
+                }
+                await new Promise(r => setTimeout(r, 200));
+                el.classList.remove('active-token');
+            }
+        }
+
+        async function animateTransformer() {
+            const svg = document.getElementById('transformer-svg');
+            // Everything lights up simultaneously
+            tokens.forEach((_, i) => {
+                const el = document.getElementById(`trans-token-${i}`);
+                el.classList.add('active-token', 'bg-purple-400');
+            });
+
+            // Show global dependencies (all at once)
+            for(let i=0; i<tokens.length; i++) {
+                for(let j=0; j<tokens.length; j++) {
+                    if (i === j) continue;
+                    const start = document.getElementById(`trans-token-${i}`);
+                    const end = document.getElementById(`trans-token-${j}`);
+                    
+                    const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+                    const x1 = start.offsetLeft + start.offsetWidth/2;
+                    const y1 = start.offsetTop;
+                    const x2 = end.offsetLeft + end.offsetWidth/2;
+                    const y2 = end.offsetTop;
+                    
+                    const midY = y1 - 40 - (Math.abs(i-j) * 10);
+                    const d = `M ${x1} ${y1} Q ${(x1+x2)/2} ${midY} ${x2} ${y2}`;
+                    
+                    path.setAttribute("d", d);
+                    path.setAttribute("fill", "none");
+                    path.setAttribute("stroke", "rgba(168, 85, 247, 0.3)");
+                    path.setAttribute("stroke-width", "1");
+                    svg.appendChild(path);
+                }
+            }
+        }
+
+        btnPlay.addEventListener('click', async () => {
+            if (isAnimating) return;
+            isAnimating = true;
+            createTokens();
+            
+            // Start both, but see how one is slow and one is instant
+            animateRNN();
+            await animateTransformer();
+            
+            isAnimating = false;
+        });
+
+        btnReset.addEventListener('click', () => {
+            createTokens();
+        });
+
+        window.onload = createTokens;
+    </script>
+</body>
+</html>

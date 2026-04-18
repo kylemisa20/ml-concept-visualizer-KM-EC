@@ -1,0 +1,401 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Add & Norm Layer Explorer</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #0f172a;
+            color: #e2e8f0;
+            overflow: hidden;
+            margin: 0;
+            padding: 0;
+        }
+        #canvas-container {
+            position: relative;
+            width: 100%;
+            height: 100%;
+        }
+        canvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+            cursor: crosshair;
+        }
+        
+        ::-webkit-scrollbar { width: 8px; }
+        ::-webkit-scrollbar-track { background: #1e293b; }
+        ::-webkit-scrollbar-thumb { background: #475569; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #64748b; }
+        
+        .glass-panel {
+            background: rgba(30, 41, 59, 0.7);
+            backdrop-filter: blur(12px);
+            border-right: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .katex { color: #fbbf24; font-size: 1.1em; }
+        .katex-display { margin: 0.5em 0; overflow-x: auto; overflow-y: hidden; padding-bottom: 5px; }
+
+        .num-box {
+            background: rgba(15, 23, 42, 0.8);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            transition: all 0.3s ease;
+        }
+    </style>
+</head>
+<body class="flex h-screen w-screen text-slate-200">
+
+    <!-- Left Control Panel -->
+    <div class="glass-panel w-96 flex-shrink-0 flex flex-col h-full z-10 shadow-2xl relative">
+        <div class="p-6 border-b border-gray-700">
+            <h1 class="text-2xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-amber-400 to-rose-400 mb-2">
+                Add & Norm
+            </h1>
+            <p class="text-sm text-gray-400 mb-4">
+                The stabilization mechanism of the Transformer.
+            </p>
+            
+            <div class="flex items-center space-x-2 mb-4">
+                <button id="btn-back" class="px-3 py-2 bg-slate-700 hover:bg-slate-600 rounded text-sm font-semibold transition-colors disabled:opacity-30 disabled:cursor-not-allowed" disabled>
+                    &larr; Back
+                </button>
+                <button id="btn-animate" class="px-4 py-2 bg-amber-600 hover:bg-amber-500 transition-colors rounded text-sm font-semibold flex-1 shadow-lg shadow-amber-900/50">
+                    ▶ Auto Play
+                </button>
+                <button id="btn-next" class="px-3 py-2 bg-slate-700 hover:bg-slate-600 rounded text-sm font-semibold transition-colors disabled:opacity-30 disabled:cursor-not-allowed">
+                    Next &rarr;
+                </button>
+            </div>
+
+            <button id="btn-reset" class="w-full mb-4 px-4 py-2 bg-slate-800 hover:bg-slate-700 border border-slate-600 transition-colors rounded text-sm font-semibold">
+                ↺ Reset Animation
+            </button>
+        </div>
+
+        <div class="p-6 flex-1 overflow-y-auto" id="info-panel">
+            <div id="default-info" class="space-y-6">
+                <div class="space-y-2">
+                    <h3 class="text-lg font-semibold text-white">Why "Add & Norm"?</h3>
+                    <p class="text-sm text-gray-300 leading-relaxed">
+                        Deep networks struggle with <strong>vanishing gradients</strong>. The Transformer solves this by wrapping every sub-layer in a residual connection followed by normalization.
+                    </p>
+                </div>
+                
+                <div class="space-y-2">
+                    <h3 class="text-lg font-semibold text-amber-400">The "Add" (Residual)</h3>
+                    <p class="text-sm text-gray-300 leading-relaxed">
+                        The original input $X$ is added directly to the sub-layer output. This creates a "highway" for information to flow through without being degraded.
+                    </p>
+                </div>
+
+                <div class="space-y-2">
+                    <h3 class="text-lg font-semibold text-rose-400">Numerical Normalization</h3>
+                    <div class="num-box p-3 rounded-lg text-xs font-mono space-y-2">
+                        <div class="text-gray-400">Example Vector (Before):</div>
+                        <div class="text-amber-300">[10.0, 2.0, -5.0, 20.0, 3.0]</div>
+                        <div class="text-gray-400 mt-2">After LayerNorm (Mean 0, Var 1):</div>
+                        <div class="text-rose-400">[0.47, -0.47, -1.30, 1.65, -0.35]</div>
+                    </div>
+                </div>
+            </div>
+
+            <div id="dynamic-info" class="hidden">
+                <div class="inline-block px-2 py-1 bg-gray-800 rounded text-xs font-mono text-gray-400 mb-2 border border-gray-600" id="dyn-tag"></div>
+                <h3 class="text-xl font-bold text-white mb-2" id="dyn-title">Title</h3>
+                <p class="text-sm text-gray-300 leading-relaxed" id="dyn-desc">Description goes here.</p>
+                <div id="dyn-math" class="mt-4 p-3 bg-gray-900 rounded font-mono text-xs text-amber-300 hidden border border-gray-800"></div>
+            </div>
+        </div>
+        
+        <div class="p-4 border-t border-gray-800 text-xs text-gray-500 text-center">
+            Click Next to see the numerical transformation on the canvas.
+        </div>
+    </div>
+
+    <!-- Right Canvas Area -->
+    <div id="canvas-container" class="flex-1 bg-slate-900 relative">
+        <canvas id="mainCanvas"></canvas>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('mainCanvas');
+        const ctx = canvas.getContext('2d');
+        const container = document.getElementById('canvas-container');
+        
+        const btnAnimate = document.getElementById('btn-animate');
+        const btnNext = document.getElementById('btn-next');
+        const btnBack = document.getElementById('btn-back');
+        const btnReset = document.getElementById('btn-reset');
+        
+        const defaultInfo = document.getElementById('default-info');
+        const dynamicInfo = document.getElementById('dynamic-info');
+        const dynTag = document.getElementById('dyn-tag');
+        const dynTitle = document.getElementById('dyn-title');
+        const dynDesc = document.getElementById('dyn-desc');
+        const dynMath = document.getElementById('dyn-math');
+
+        const C_X = '#3b82f6';
+        const C_SUB = '#a855f7';
+        const C_ADD = '#f59e0b';
+        const C_NORM = '#f43f5e';
+        const C_BG_NODE = '#1e293b'; 
+        const C_TEXT = '#f8fafc';
+
+        let nodes = [];
+        let connections = [];
+        let particles = [];
+        let animationFrameId;
+        let hoveredNode = null;
+        
+        let isAnimating = false;
+        let currentStep = 0;
+        let autoPlayTimer = 0;
+
+        const STAGES = [
+            { id: 'intro', type: null },
+            { id: 'input', type: 'input', title: 'Step 1: Input (X)', desc: 'The input $X$ starts with raw values. Imagine a vector of features representing a word.', math: String.raw`X = [10, 2, -5, 20, 3]` },
+            { id: 'sublayer', type: 'sublayer', title: 'Step 2: Sub-layer Processing', desc: 'The sub-layer (Attention) transforms the input. Let\'s assume the output is balanced.', math: String.raw`Y = \text{Sublayer}(X)` },
+            { id: 'add', type: 'add', title: 'Step 3: Raw Sum (Without Norm)', desc: 'Residual connection adds $X$ back. Notice the values are still large and inconsistent.', math: String.raw`Z = X + Y \approx [10, 2, -5, 20, 3]` },
+            { id: 'norm', type: 'norm', title: 'Step 4: Normalized Result', desc: 'LayerNorm squashes these values into a standard range. Now the model can learn reliably.', math: String.raw`\hat{Z} \approx [0.47, -0.47, -1.30, 1.65, -0.35]` }
+        ];
+
+        function resize() {
+            const rect = container.getBoundingClientRect();
+            const dpr = window.devicePixelRatio || 1;
+            canvas.width = rect.width * dpr;
+            canvas.height = rect.height * dpr;
+            ctx.scale(dpr, dpr);
+            canvas.style.width = `${rect.width}px`;
+            canvas.style.height = `${rect.height}px`;
+            buildGraph(rect.width, rect.height);
+        }
+
+        window.addEventListener('resize', resize);
+
+        class Node {
+            constructor(id, x, y, width, height, color, label, type, description, mathStr) {
+                this.id = id; this.x = x; this.y = y; this.width = width; this.height = height;
+                this.color = color; this.label = label; this.type = type;
+                this.description = description; this.mathStr = mathStr;
+                this.glow = 0; this.targetGlow = 0;
+            }
+            draw(ctx) {
+                this.glow += (this.targetGlow - this.glow) * 0.1;
+                const isHovered = hoveredNode === this;
+                ctx.shadowColor = this.color;
+                ctx.shadowBlur = isHovered ? 20 : (this.glow * 15);
+                ctx.beginPath();
+                ctx.roundRect(this.x - this.width/2, this.y - this.height/2, this.width, this.height, 8);
+                ctx.fillStyle = C_BG_NODE;
+                ctx.fill();
+                ctx.lineWidth = isHovered ? 3 : 2;
+                ctx.strokeStyle = this.color;
+                ctx.stroke();
+                ctx.shadowBlur = 0;
+                
+                if (this.glow > 0) {
+                    ctx.fillStyle = this.color; ctx.globalAlpha = this.glow * 0.3;
+                    ctx.beginPath(); ctx.roundRect(this.x - this.width/2, this.y - this.height/2, this.width, this.height, 8);
+                    ctx.fill(); ctx.globalAlpha = 1.0;
+                }
+                
+                ctx.fillStyle = C_TEXT; ctx.font = '600 13px Inter';
+                ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+                ctx.fillText(this.label, this.x, this.y);
+
+                // Numerical Overlay for Step 3 and 4
+                if (this.type === 'add' && currentStep >= 3) {
+                    this.drawNumbers(ctx, [10, 2, -5, 20, 3], C_ADD, 'Raw Sum:');
+                } else if (this.type === 'norm' && currentStep === 4) {
+                    this.drawNumbers(ctx, [0.47, -0.47, -1.30, 1.65, -0.35], C_NORM, 'Normalized:');
+                }
+            }
+
+            drawNumbers(ctx, values, color, prefix) {
+                const startX = this.x + this.width/2 + 20;
+                ctx.textAlign = 'left';
+                ctx.fillStyle = color;
+                ctx.font = 'bold 12px Inter';
+                ctx.fillText(prefix, startX, this.y - 15);
+                
+                ctx.font = '12px monospace';
+                ctx.fillStyle = '#94a3b8';
+                values.forEach((v, i) => {
+                    ctx.fillText(`${v >= 0 ? ' ' : ''}${v.toFixed(2)}`, startX, this.y + (i * 15));
+                });
+            }
+
+            contains(px, py) {
+                return px >= this.x - this.width/2 && px <= this.x + this.width/2 &&
+                       py >= this.y - this.height/2 && py <= this.y + this.height/2;
+            }
+        }
+
+        class Connection {
+            constructor(fromNode, toNode, color, type = 'curve') {
+                this.from = fromNode; this.to = toNode; this.color = color;
+                this.type = type;
+            }
+            draw(ctx) {
+                const startX = this.from.x;
+                const startY = this.from.y - this.from.height/2;
+                const endX = this.to.x;
+                const endY = this.to.y + this.to.height/2;
+                ctx.beginPath();
+                ctx.moveTo(startX, startY);
+                if (this.type === 'residual') {
+                    const cp1x = startX - 250; const cp1y = startY - 50;
+                    const cp2x = endX - 250; const cp2y = endY + 50;
+                    ctx.bezierCurveTo(cp1x, cp1y, cp2x, cp2y, endX, endY);
+                } else {
+                    const midY = (startY + endY) / 2;
+                    ctx.bezierCurveTo(startX, midY, endX, midY, endX, endY);
+                }
+                ctx.strokeStyle = this.color; ctx.globalAlpha = 0.3; ctx.lineWidth = 2; ctx.stroke(); ctx.globalAlpha = 1.0;
+                ctx.beginPath(); ctx.moveTo(endX, endY); ctx.lineTo(endX - 4, endY + 6); ctx.lineTo(endX + 4, endY + 6);
+                ctx.fillStyle = this.color; ctx.globalAlpha = 0.5; ctx.fill(); ctx.globalAlpha = 1.0;
+            }
+            getPointAt(t) {
+                const startX = this.from.x; const startY = this.from.y - this.from.height/2;
+                const endX = this.to.x; const endY = this.to.y + this.to.height/2;
+                const u = 1 - t;
+                if (this.type === 'residual') {
+                    const cp1x = startX - 250; const cp1y = startY - 50;
+                    const cp2x = endX - 250; const cp2y = endY + 50;
+                    const px = u*u*u*startX + 3*u*u*t*cp1x + 3*u*t*t*cp2x + t*t*t*endX;
+                    const py = u*u*u*startY + 3*u*u*t*cp1y + 3*u*t*t*cp2y + t*t*t*endY;
+                    return {x: px, y: py};
+                } else {
+                    const midY = (startY + endY) / 2;
+                    const px = u*u*u*startX + 3*u*u*t*startX + 3*u*t*t*endX + t*t*t*endX;
+                    const py = u*u*u*startY + 3*u*u*t*midY + 3*u*t*t*midY + t*t*t*endY;
+                    return {x: px, y: py};
+                }
+            }
+        }
+
+        class Particle {
+            constructor(connection, speed, color) {
+                this.connection = connection; this.t = 0; this.speed = speed; this.color = color; this.active = true;
+            }
+            update() { if (!this.active) return; this.t += this.speed; if (this.t >= 1) this.active = false; }
+            draw(ctx) {
+                if (this.t < 0 || !this.active) return;
+                const pos = this.connection.getPointAt(this.t);
+                ctx.beginPath(); ctx.arc(pos.x, pos.y, 4, 0, Math.PI * 2); ctx.fillStyle = '#fff'; ctx.fill();
+                ctx.shadowColor = this.color; ctx.shadowBlur = 10;
+                ctx.beginPath(); ctx.arc(pos.x, pos.y, 6, 0, Math.PI * 2); ctx.fillStyle = this.color; ctx.globalAlpha = 0.8; ctx.fill();
+                ctx.globalAlpha = 1.0; ctx.shadowBlur = 0;
+            }
+        }
+
+        function buildGraph(width, height) {
+            nodes = []; connections = [];
+            const centerX = width / 2;
+            const yInput = height - 100; const ySub = height - 250;
+            const yAdd = height - 400; const yNorm = height - 520;
+
+            const nInput = new Node('X', centerX, yInput, 140, 40, C_X, 'Input (X)', 'input', 'Starting embeddings.', 'X');
+            const nSub = new Node('Sublayer', centerX, ySub, 160, 50, C_SUB, 'MHA / Feed-Forward', 'sublayer', 'The sub-layer transformation.', 'Y');
+            const nAdd = new Node('Add', centerX, yAdd, 80, 40, C_ADD, 'Add (+)', 'add', 'Summing $X$ and $Y$.', 'Z = X + Y');
+            const nNorm = new Node('Norm', centerX, yNorm, 160, 40, C_NORM, 'Layer Norm', 'norm', 'Normalization across features.', String.raw`\hat{Z} = \frac{Z-\mu}{\sigma}`);
+
+            nodes.push(nInput, nSub, nAdd, nNorm);
+            connections.push(new Connection(nInput, nSub, C_SUB));
+            connections.push(new Connection(nInput, nAdd, C_X, 'residual'));
+            connections.push(new Connection(nSub, nAdd, C_SUB));
+            connections.push(new Connection(nAdd, nNorm, C_NORM));
+
+            goToStep(currentStep, true);
+        }
+
+        function draw() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            connections.forEach(conn => conn.draw(ctx));
+            particles = particles.filter(p => p.active);
+            particles.forEach(p => { p.update(); p.draw(ctx); });
+            nodes.forEach(node => node.draw(ctx));
+            manageAnimationFlow();
+            animationFrameId = requestAnimationFrame(draw);
+        }
+
+        function updateInfoPanel() {
+            if (hoveredNode) {
+                defaultInfo.classList.add('hidden'); dynamicInfo.classList.remove('hidden');
+                dynTag.textContent = hoveredNode.type.toUpperCase(); dynTitle.textContent = hoveredNode.label;
+                dynDesc.innerHTML = hoveredNode.description; renderMathInElement(dynDesc, { delimiters: [{left: '$', right: '$', display: false}] });
+                if (hoveredNode.mathStr) renderMathToContainer(hoveredNode.mathStr, dynMath); else dynMath.classList.add('hidden');
+            } else if (currentStep > 0) {
+                defaultInfo.classList.add('hidden'); dynamicInfo.classList.remove('hidden');
+                const stepData = STAGES[currentStep]; dynTag.textContent = `STEP ${currentStep} / ${STAGES.length - 1}`;
+                dynTitle.textContent = stepData.title; dynDesc.innerHTML = stepData.desc;
+                renderMathInElement(dynDesc, { delimiters: [{left: '$', right: '$', display: false}] });
+                if (stepData.math) renderMathToContainer(stepData.math, dynMath); else dynMath.classList.add('hidden');
+            } else {
+                defaultInfo.classList.remove('hidden'); dynamicInfo.classList.add('hidden');
+            }
+        }
+
+        function renderMathToContainer(mathStr, container) {
+            container.classList.remove('hidden');
+            try { katex.render(mathStr, container, { displayMode: true, throwOnError: false }); } catch (e) { container.innerText = mathStr; }
+        }
+
+        function goToStep(step, silent = false) {
+            currentStep = Math.max(0, Math.min(step, STAGES.length - 1));
+            btnBack.disabled = (currentStep === 0); btnNext.disabled = (currentStep === STAGES.length - 1);
+            nodes.forEach(n => { n.targetGlow = (currentStep > 0 && n.type === STAGES[currentStep].type) ? 1 : 0; });
+            if (!silent) {
+                if (currentStep === 1) spawnParticles('input');
+                if (currentStep === 2) spawnParticles('sublayer');
+                if (currentStep === 3) spawnParticles('add');
+                if (currentStep === 4) spawnParticles('norm');
+            }
+            updateInfoPanel();
+        }
+
+        function spawnParticles(phase) {
+            connections.forEach(conn => {
+                if (phase === 'input' && conn.from.type === 'input') particles.push(new Particle(conn, 0.02, conn.color));
+                if (phase === 'sublayer' && conn.from.type === 'sublayer') particles.push(new Particle(conn, 0.02, conn.color));
+                if (phase === 'add' && conn.from.type === 'add') particles.push(new Particle(conn, 0.02, conn.color));
+            });
+        }
+
+        btnBack.addEventListener('click', () => { isAnimating = false; goToStep(currentStep - 1); });
+        btnNext.addEventListener('click', () => { isAnimating = false; goToStep(currentStep + 1); });
+        btnReset.addEventListener('click', () => { location.reload(); });
+        btnAnimate.addEventListener('click', () => { 
+            isAnimating = !isAnimating; 
+            btnAnimate.textContent = isAnimating ? '■ Pause' : '▶ Auto Play'; 
+            if (isAnimating && currentStep === STAGES.length - 1) goToStep(0); 
+        });
+
+        function manageAnimationFlow() {
+            if (!isAnimating) return;
+            autoPlayTimer++;
+            if (autoPlayTimer > 150) { autoPlayTimer = 0; goToStep((currentStep + 1) % STAGES.length); }
+        }
+
+        canvas.addEventListener('mousemove', (e) => {
+            const rect = canvas.getBoundingClientRect(); const dpr = window.devicePixelRatio || 1;
+            const px = (e.clientX - rect.left) * (canvas.width / rect.width / dpr);
+            const py = (e.clientY - rect.top) * (canvas.height / rect.height / dpr);
+            let found = null;
+            for (let i = nodes.length - 1; i >= 0; i--) { if (nodes[i].contains(px, py)) { found = nodes[i]; break; } }
+            if (found !== hoveredNode) { hoveredNode = found; canvas.style.cursor = found ? 'pointer' : 'crosshair'; updateInfoPanel(); }
+        });
+
+        document.addEventListener("DOMContentLoaded", () => renderMathInElement(document.body, { delimiters: [{left: '$$', right: '$$', display: true}, {left: '$', right: '$', display: false}], throwOnError: false }));
+        setTimeout(() => { resize(); draw(); }, 100);
+    </script>
+</body>
+</html>

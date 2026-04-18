@@ -1,0 +1,414 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Interactive Multi-Head Attention</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #0f172a;
+            color: #e2e8f0;
+            overflow: hidden;
+            margin: 0;
+            padding: 0;
+        }
+        #canvas-container {
+            position: relative;
+            width: 100%;
+            height: 100%;
+        }
+        canvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+            cursor: crosshair;
+        }
+        
+        ::-webkit-scrollbar { width: 8px; }
+        ::-webkit-scrollbar-track { background: #1e293b; }
+        ::-webkit-scrollbar-thumb { background: #475569; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #64748b; }
+        
+        .glass-panel {
+            background: rgba(30, 41, 59, 0.7);
+            backdrop-filter: blur(12px);
+            border-right: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        
+        input[type=range] {
+            accent-color: #8b5cf6;
+        }
+
+        .katex { color: #6ee7b7; font-size: 1.1em; }
+        .katex-display { margin: 0.5em 0; overflow-x: auto; overflow-y: hidden; padding-bottom: 5px; }
+    </style>
+</head>
+<body class="flex h-screen w-screen text-slate-200">
+
+    <!-- Left Control Panel -->
+    <div class="glass-panel w-96 flex-shrink-0 flex flex-col h-full z-10 shadow-2xl relative">
+        <div class="p-6 border-b border-gray-700">
+            <h1 class="text-2xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-violet-400 to-emerald-400 mb-2">
+                Multi-Head Attention
+            </h1>
+            <p class="text-sm text-gray-400 mb-4">
+                Visualizing how inputs become head projections.
+            </p>
+            
+            <div class="flex items-center space-x-2 mb-4">
+                <button id="btn-back" class="px-3 py-2 bg-slate-700 hover:bg-slate-600 rounded text-sm font-semibold transition-colors disabled:opacity-30 disabled:cursor-not-allowed" disabled>
+                    &larr; Back
+                </button>
+                <button id="btn-animate" class="px-4 py-2 bg-violet-600 hover:bg-violet-500 transition-colors rounded text-sm font-semibold flex-1 shadow-lg shadow-violet-900/50">
+                    ▶ Auto Play
+                </button>
+                <button id="btn-next" class="px-3 py-2 bg-slate-700 hover:bg-slate-600 rounded text-sm font-semibold transition-colors disabled:opacity-30 disabled:cursor-not-allowed">
+                    Next &rarr;
+                </button>
+            </div>
+
+            <button id="btn-reset" class="w-full mb-4 px-4 py-2 bg-slate-800 hover:bg-slate-700 border border-slate-600 transition-colors rounded text-sm font-semibold">
+                ↺ Reset Visualization
+            </button>
+
+            <div class="space-y-2">
+                <label class="flex justify-between text-sm font-medium">
+                    <span>Number of Heads ($h$)</span>
+                    <span id="head-count-val" class="text-violet-400 font-bold">4</span>
+                </label>
+                <input type="range" id="head-slider" min="1" max="8" value="4" class="w-full">
+            </div>
+        </div>
+
+        <div class="p-6 flex-1 overflow-y-auto" id="info-panel">
+            <div id="default-info" class="space-y-6">
+                <div class="space-y-2">
+                    <h3 class="text-lg font-semibold text-white">The Functional Formula</h3>
+                    <p class="text-sm text-gray-300 leading-relaxed">
+                        The formula $MultiHead(Q,K,V)$ defines the logic. In Self-Attention, we plug our embeddings $X$ into all three inputs.
+                    </p>
+                </div>
+                
+                <div class="space-y-2">
+                    <h3 class="text-lg font-semibold text-white">Projection Matrices ($W_i$)</h3>
+                    <p class="text-sm text-gray-300 leading-relaxed">
+                        To compute $head_i$, we multiply the inputs by learned parameter matrices $W_i^Q, W_i^K,$ and $W_i^V$. These are the <strong>Linear Layers</strong> in the diagram.
+                    </p>
+                </div>
+
+                <div class="space-y-2">
+                    <h3 class="text-lg font-semibold text-emerald-400">Final Aggregation ($W^O$)</h3>
+                    <p class="text-sm text-gray-300 leading-relaxed">
+                        After all heads calculate attention in parallel, they are concatenated and multiplied by $W^O$ to produce the final result.
+                    </p>
+                </div>
+            </div>
+
+            <div id="dynamic-info" class="hidden">
+                <div class="inline-block px-2 py-1 bg-gray-800 rounded text-xs font-mono text-gray-400 mb-2 border border-gray-600" id="dyn-tag"></div>
+                <h3 class="text-xl font-bold text-white mb-2" id="dyn-title">Title</h3>
+                <p class="text-sm text-gray-300 leading-relaxed" id="dyn-desc">Description goes here.</p>
+                <div id="dyn-math" class="mt-4 p-3 bg-gray-900 rounded font-mono text-xs text-emerald-300 hidden border border-gray-800"></div>
+            </div>
+        </div>
+        
+        <div class="p-4 border-t border-gray-800 text-xs text-gray-500 text-center">
+            Hover over blocks to see their mathematical role.
+        </div>
+    </div>
+
+    <!-- Right Canvas Area -->
+    <div id="canvas-container" class="flex-1 bg-slate-900 relative">
+        <canvas id="attnCanvas"></canvas>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('attnCanvas');
+        const ctx = canvas.getContext('2d');
+        const container = document.getElementById('canvas-container');
+        
+        const headSlider = document.getElementById('head-slider');
+        const headCountVal = document.getElementById('head-count-val');
+        const btnAnimate = document.getElementById('btn-animate');
+        const btnNext = document.getElementById('btn-next');
+        const btnBack = document.getElementById('btn-back');
+        const btnReset = document.getElementById('btn-reset');
+        
+        const defaultInfo = document.getElementById('default-info');
+        const dynamicInfo = document.getElementById('dynamic-info');
+        const dynTag = document.getElementById('dyn-tag');
+        const dynTitle = document.getElementById('dyn-title');
+        const dynDesc = document.getElementById('dyn-desc');
+        const dynMath = document.getElementById('dyn-math');
+
+        const C_V = '#10b981';
+        const C_K = '#8b5cf6';
+        const C_Q = '#3b82f6';
+        const C_ATTN = '#a78bfa';
+        const C_CONCAT = '#fde047';
+        const C_LINEAR = '#94a3b8';
+        const C_BG_NODE = '#1e293b'; 
+        const C_TEXT = '#f8fafc';
+
+        let numHeads = parseInt(headSlider.value);
+        let nodes = [];
+        let connections = [];
+        let particles = [];
+        let animationFrameId;
+        let hoveredNode = null;
+        
+        let isAnimating = false;
+        let currentStep = 0;
+        let autoPlayTimer = 0;
+
+        const STAGES = [
+            { id: 'intro', type: null },
+            { id: 'input', type: 'input', title: 'Step 1: Assign Source Roles (V, K, Q)', desc: 'The input $X$ is fed into the three module ports. In Self-Attention, $V=X, K=X, Q=X$.', math: String.raw`MultiHead(Q, K, V)` },
+            { id: 'linear', type: 'linear', title: 'Step 2: Linear Projections ($W_i$)', desc: 'Each head multiplies the inputs by its own learned projection matrices to create $V_i, K_i, Q_i$.', math: String.raw`Q_i = Q W_i^Q,\; K_i = K W_i^K,\; V_i = V W_i^V` },
+            { id: 'attention', type: 'attention', title: 'Step 3: Scaled Dot-Product', desc: 'The attention mechanism operates on the projected subspaces in parallel.', math: String.raw`head_i = Attention(Q_i, K_i, V_i)` },
+            { id: 'concat', type: 'concat', title: 'Step 4: Concatenate & Mix ($W^O$)', desc: 'The outputs are joined and transformed by the final output matrix $W^O$.', math: String.raw`Concat(head_1, \dots) W^O` }
+        ];
+
+        function resize() {
+            const rect = container.getBoundingClientRect();
+            const dpr = window.devicePixelRatio || 1;
+            canvas.width = rect.width * dpr;
+            canvas.height = rect.height * dpr;
+            ctx.scale(dpr, dpr);
+            canvas.style.width = `${rect.width}px`;
+            canvas.style.height = `${rect.height}px`;
+            buildGraph(rect.width, rect.height);
+        }
+
+        window.addEventListener('resize', resize);
+
+        class Node {
+            constructor(id, x, y, width, height, color, label, type, description, mathStr) {
+                this.id = id; this.x = x; this.y = y; this.width = width; this.height = height;
+                this.color = color; this.label = label; this.type = type;
+                this.description = description; this.mathStr = mathStr;
+                this.glow = 0; this.targetGlow = 0;
+            }
+            draw(ctx) {
+                this.glow += (this.targetGlow - this.glow) * 0.1;
+                const isHovered = hoveredNode === this;
+                ctx.shadowColor = this.color;
+                ctx.shadowBlur = isHovered ? 20 : (this.glow * 15);
+                ctx.beginPath();
+                ctx.roundRect(this.x - this.width/2, this.y - this.height/2, this.width, this.height, 6);
+                ctx.fillStyle = C_BG_NODE;
+                ctx.fill();
+                ctx.lineWidth = isHovered ? 3 : 2;
+                ctx.strokeStyle = this.color;
+                ctx.stroke();
+                ctx.shadowBlur = 0;
+                if (this.glow > 0) {
+                    ctx.fillStyle = this.color; ctx.globalAlpha = this.glow * 0.3;
+                    ctx.beginPath(); ctx.roundRect(this.x - this.width/2, this.y - this.height/2, this.width, this.height, 6);
+                    ctx.fill(); ctx.globalAlpha = 1.0;
+                }
+                ctx.fillStyle = C_TEXT; ctx.font = '500 12px Inter';
+                ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+                ctx.fillText(this.label, this.x, this.y);
+            }
+            contains(px, py) {
+                return px >= this.x - this.width/2 && px <= this.x + this.width/2 &&
+                       py >= this.y - this.height/2 && py <= this.y + this.height/2;
+            }
+        }
+
+        class Connection {
+            constructor(fromNode, toNode, color, offsetX = 0, targetOffsetX = 0, pathLabel = null) {
+                this.from = fromNode; this.to = toNode; this.color = color;
+                this.offsetX = offsetX; this.targetOffsetX = targetOffsetX;
+                this.pathLabel = pathLabel;
+            }
+            draw(ctx) {
+                const startX = this.from.x + this.offsetX;
+                const startY = this.from.y - this.from.height/2;
+                const endX = this.to.x + this.targetOffsetX;
+                const endY = this.to.y + this.to.height/2;
+                
+                ctx.beginPath(); ctx.moveTo(startX, startY);
+                const midY = (startY + endY) / 2;
+                ctx.bezierCurveTo(startX, midY, endX, midY, endX, endY);
+                ctx.strokeStyle = this.color; ctx.globalAlpha = 0.3; ctx.lineWidth = 2; ctx.stroke(); ctx.globalAlpha = 1.0;
+                
+                if (this.pathLabel) {
+                    const labelPos = this.getPointAt(0.4);
+                    ctx.fillStyle = this.color;
+                    ctx.font = 'bold 11px Inter';
+                    ctx.textAlign = 'center';
+                    ctx.fillText(this.pathLabel, labelPos.x + 12, labelPos.y);
+                }
+
+                ctx.beginPath(); ctx.moveTo(endX, endY); ctx.lineTo(endX - 4, endY + 6); ctx.lineTo(endX + 4, endY + 6);
+                ctx.fillStyle = this.color; ctx.globalAlpha = 0.5; ctx.fill(); ctx.globalAlpha = 1.0;
+            }
+            getPointAt(t) {
+                const startX = this.from.x + this.offsetX; const startY = this.from.y - this.from.height/2;
+                const endX = this.to.x + this.targetOffsetX; const endY = this.to.y + this.to.height/2;
+                const midY = (startY + endY) / 2; const u = 1 - t;
+                const px = u*u*u*startX + 3*u*u*t*startX + 3*u*t*t*endX + t*t*t*endX;
+                const py = u*u*u*startY + 3*u*u*t*midY + 3*u*t*t*midY + t*t*t*endY;
+                return {x: px, y: py};
+            }
+        }
+
+        class Particle {
+            constructor(connection, speed, color, delay = 0) {
+                this.connection = connection; this.t = 0 - delay; this.speed = speed; this.color = color; this.active = true;
+            }
+            update() { if (!this.active) return; this.t += this.speed; if (this.t >= 1) this.active = false; }
+            draw(ctx) {
+                if (this.t < 0 || !this.active) return;
+                const pos = this.connection.getPointAt(this.t);
+                ctx.beginPath(); ctx.arc(pos.x, pos.y, 4, 0, Math.PI * 2); ctx.fillStyle = '#fff'; ctx.fill();
+                ctx.shadowColor = this.color; ctx.shadowBlur = 10;
+                ctx.beginPath(); ctx.arc(pos.x, pos.y, 6, 0, Math.PI * 2); ctx.fillStyle = this.color; ctx.globalAlpha = 0.8; ctx.fill();
+                ctx.globalAlpha = 1.0; ctx.shadowBlur = 0;
+            }
+        }
+
+        function buildGraph(width, height) {
+            nodes = []; connections = [];
+            const bottomY = height - 80; const roleY = height - 160; const linearY = height - 260; 
+            const attnY = height - 380; const concatY = height - 480; const topY = height - 560;
+
+            // 1. Input X
+            const nX = new Node('X', width/2, bottomY, 140, 40, '#f59e0b', 'Embeddings (X)', 'input',
+                'In Self-Attention, $X$ is plugged into the V, K, and Q arguments of the function.', String.raw`V=X, K=X, Q=X`
+            );
+            nodes.push(nX);
+
+            // 2. Functional Args (Q, K, V)
+            const nV = new Node('V_base', width/2 - 140, roleY, 80, 30, C_V, 'Value (V)', 'input', 'Input port for the Value data.', 'V');
+            const nK = new Node('K_base', width/2, roleY, 80, 30, C_K, 'Key (K)', 'input', 'Input port for the Key data.', 'K');
+            const nQ = new Node('Q_base', width/2 + 140, roleY, 80, 30, C_Q, 'Query (Q)', 'input', 'Input port for the Query data.', 'Q');
+            nodes.push(nV, nK, nQ);
+            connections.push(new Connection(nX, nV, C_V), new Connection(nX, nK, C_K), new Connection(nX, nQ, C_Q));
+
+            const headWidth = (width * 0.8) / numHeads; const startX = width * 0.1 + headWidth/2;
+            let attnNodes = [];
+
+            for (let i = 0; i < numHeads; i++) {
+                const cx = startX + i * headWidth; const lw = Math.min(headWidth / 3.5, 60);
+                
+                // Head Projections (W_i)
+                const lV = new Node(`L_V_${i}`, cx - lw*1.2, linearY, lw, 30, C_V, `Linear (W${i+1}ᵛ)`, 'linear', `Projection matrix for Value head ${i+1}.`, String.raw`V_i = V W_i^V`);
+                const lK = new Node(`L_K_${i}`, cx, linearY, lw, 30, C_K, `Linear (W${i+1}ᴷ)`, 'linear', `Projection matrix for Key head ${i+1}.`, String.raw`K_i = K W_i^K`);
+                const lQ = new Node(`L_Q_${i}`, cx + lw*1.2, linearY, lw, 30, C_Q, `Linear (W${i+1}ᑫ)`, 'linear', `Projection matrix for Query head ${i+1}.`, String.raw`Q_i = Q W_i^Q`);
+                nodes.push(lV, lK, lQ);
+                connections.push(new Connection(nV, lV, C_V), new Connection(nK, lK, C_K), new Connection(nQ, lQ, C_Q));
+
+                const aw = Math.min(headWidth * 0.9, 140);
+                const attn = new Node(`Attn_${i}`, cx, attnY, aw, 50, C_ATTN, 'Dot-Product Attn', 'attention', 'Independent attention calculation on projected data.', String.raw`head_i = Attention(Q_i, K_i, V_i)`);
+                nodes.push(attn); attnNodes.push(attn);
+                
+                // Resulting Projections
+                connections.push(new Connection(lV, attn, C_V, 0, -aw/3, `V${i+1}`));
+                connections.push(new Connection(lK, attn, C_K, 0, 0, `K${i+1}`));
+                connections.push(new Connection(lQ, attn, C_Q, 0, aw/3, `Q${i+1}`));
+            }
+
+            const concatWidth = Math.min(width * 0.6, 300);
+            const concat = new Node('Concat', width/2, concatY, concatWidth, 40, C_CONCAT, 'Concat + Linear (Wᴼ)', 'concat', 'Combines all heads and projects by the output matrix.', String.raw`Concat(h_1, \dots) W^O`);
+            nodes.push(concat);
+            attnNodes.forEach((attn, idx) => {
+                const spacing = concatWidth / (numHeads + 1);
+                connections.push(new Connection(attn, concat, C_ATTN, 0, -concatWidth/2 + spacing * (idx + 1)));
+            });
+
+            const out = new Node('Output', width/2, topY, 100, 30, C_TEXT, 'Result', 'output', 'The context-aware sequence.', '');
+            out.color = 'transparent'; nodes.push(out);
+            connections.push(new Connection(concat, out, C_LINEAR));
+            goToStep(currentStep, true);
+        }
+
+        function draw() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            connections.forEach(conn => conn.draw(ctx));
+            particles = particles.filter(p => p.active);
+            particles.forEach(p => { p.update(); p.draw(ctx); });
+            nodes.forEach(node => node.draw(ctx));
+            manageAnimationFlow();
+            animationFrameId = requestAnimationFrame(draw);
+        }
+
+        function getMousePos(e) {
+            const rect = canvas.getBoundingClientRect(); const dpr = window.devicePixelRatio || 1;
+            return { x: (e.clientX - rect.left) * (canvas.width / rect.width / dpr), y: (e.clientY - rect.top) * (canvas.height / rect.height / dpr) };
+        }
+
+        canvas.addEventListener('mousemove', (e) => {
+            const pos = getMousePos(e); let found = null;
+            for (let i = nodes.length - 1; i >= 0; i--) { if (nodes[i].contains(pos.x, pos.y) && nodes[i].id !== 'Output') { found = nodes[i]; break; } }
+            if (found !== hoveredNode) { hoveredNode = found; canvas.style.cursor = found ? 'pointer' : 'crosshair'; updateInfoPanel(); }
+        });
+
+        function renderMathToContainer(mathStr, container) {
+            container.classList.remove('hidden');
+            try { katex.render(mathStr, container, { displayMode: true, throwOnError: false }); } catch (e) { container.innerText = mathStr; }
+        }
+
+        function updateInfoPanel() {
+            if (hoveredNode) {
+                defaultInfo.classList.add('hidden'); dynamicInfo.classList.remove('hidden');
+                dynTag.textContent = hoveredNode.type.toUpperCase(); dynTitle.textContent = hoveredNode.label;
+                dynDesc.innerHTML = hoveredNode.description; renderMathInElement(dynDesc, { delimiters: [{left: '$', right: '$', display: false}] });
+                if (hoveredNode.mathStr) renderMathToContainer(hoveredNode.mathStr, dynMath); else dynMath.classList.add('hidden');
+            } else if (currentStep > 0) {
+                defaultInfo.classList.add('hidden'); dynamicInfo.classList.remove('hidden');
+                const stepData = STAGES[currentStep]; dynTag.textContent = `STEP ${currentStep} / ${STAGES.length - 1}`;
+                dynTitle.textContent = stepData.title; dynDesc.innerHTML = stepData.desc;
+                renderMathInElement(dynDesc, { delimiters: [{left: '$', right: '$', display: false}] });
+                if (stepData.math) renderMathToContainer(stepData.math, dynMath); else dynMath.classList.add('hidden');
+            } else {
+                defaultInfo.classList.remove('hidden'); dynamicInfo.classList.add('hidden');
+            }
+        }
+
+        headSlider.addEventListener('input', (e) => {
+            numHeads = parseInt(e.target.value); headCountVal.textContent = numHeads;
+            particles = []; resize();
+        });
+
+        function goToStep(step, silent = false) {
+            currentStep = Math.max(0, Math.min(step, STAGES.length - 1));
+            btnBack.disabled = (currentStep === 0); btnNext.disabled = (currentStep === STAGES.length - 1);
+            nodes.forEach(n => { n.targetGlow = (currentStep > 0 && n.type === STAGES[currentStep].type) ? 1 : 0; });
+            if (!silent) {
+                if (currentStep === 1) spawnParticles('input', 'input', 0.02);
+                if (currentStep === 2) spawnParticles('input', 'linear', 0.02);
+                if (currentStep === 3) spawnParticles('linear', 'attention', 0.02);
+                if (currentStep === 4) spawnParticles('attention', 'concat', 0.02);
+            }
+            updateInfoPanel();
+        }
+
+        btnBack.addEventListener('click', () => { isAnimating = false; goToStep(currentStep - 1); });
+        btnNext.addEventListener('click', () => { isAnimating = false; goToStep(currentStep + 1); });
+        btnReset.addEventListener('click', () => { location.reload(); });
+        btnAnimate.addEventListener('click', () => { isAnimating = !isAnimating; btnAnimate.textContent = isAnimating ? '■ Pause' : '▶ Auto Play'; if (isAnimating && currentStep === STAGES.length - 1) goToStep(0); });
+
+        function spawnParticles(fromType, toType, speed = 0.015) {
+            connections.forEach(conn => { if (conn.from.type === fromType && conn.to.type === toType) particles.push(new Particle(conn, speed, conn.color)); });
+        }
+
+        function manageAnimationFlow() {
+            if (!isAnimating) return;
+            autoPlayTimer++;
+            if (autoPlayTimer > 130) { autoPlayTimer = 0; goToStep((currentStep + 1) % STAGES.length); }
+        }
+
+        document.addEventListener("DOMContentLoaded", () => renderMathInElement(document.body, { delimiters: [{left: '$$', right: '$$', display: true}, {left: '$', right: '$', display: false}], throwOnError: false }));
+        setTimeout(() => { resize(); draw(); }, 100);
+    </script>
+</body>
+</html>

@@ -1,0 +1,377 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Transformer KV Cache Visualizer</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        ::-webkit-scrollbar { width: 8px; }
+        ::-webkit-scrollbar-track { background: #f1f5f9; }
+        ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+        
+        .matrix-cell {
+            transition: all 0.3s ease;
+        }
+        .cached {
+            opacity: 0.6;
+            background-color: #f1f5f9;
+            border-style: dashed !important;
+        }
+        .computed {
+            animation: pulse 2s infinite;
+            z-index: 10;
+        }
+        @keyframes pulse {
+            0% { transform: scale(1); box-shadow: 0 0 0 0 rgba(59, 130, 246, 0.4); }
+            50% { transform: scale(1.03); box-shadow: 0 0 0 10px rgba(59, 130, 246, 0); }
+            100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(59, 130, 246, 0); }
+        }
+        .write-animation {
+            animation: slideIn 0.5s ease-out;
+        }
+        @keyframes slideIn {
+            from { transform: translateY(-20px); opacity: 0; }
+            to { transform: translateY(0); opacity: 1; }
+        }
+    </style>
+    <script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+</head>
+<body class="bg-slate-100 text-slate-800 min-h-screen flex items-center justify-center p-4 lg:p-8">
+
+    <div class="max-w-6xl w-full bg-white rounded-2xl shadow-xl overflow-hidden flex flex-col h-[90vh]">
+        
+        <!-- Header & Controls -->
+        <div class="bg-slate-50 p-4 border-b border-slate-200 flex flex-col md:flex-row justify-between items-center gap-4">
+            <div>
+                <h1 class="text-xl font-bold text-slate-900">KV Cache Visualizer</h1>
+                <p class="text-xs text-slate-500 italic">"Don't calculate what you already know."</p>
+            </div>
+            
+            <div class="flex items-center gap-3">
+                <button id="reset-btn" class="px-4 py-2 text-sm font-semibold text-slate-600 bg-white border border-slate-300 rounded-lg hover:bg-slate-50 transition-colors">
+                    Reset
+                </button>
+                <div class="flex bg-white border border-slate-300 rounded-lg p-1 shadow-sm">
+                    <button id="prev-btn" class="p-2 hover:bg-slate-50 rounded disabled:opacity-30" disabled>
+                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg>
+                    </button>
+                    <div class="px-4 flex items-center font-mono font-bold text-blue-600">
+                        Step <span id="step-count" class="ml-1">1</span>
+                    </div>
+                    <button id="next-btn" class="p-2 hover:bg-slate-50 rounded">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <div class="flex flex-col lg:flex-row flex-grow overflow-hidden">
+            <!-- Left Panel: The Visualization -->
+            <div class="flex-grow p-4 lg:p-6 flex flex-col gap-8 bg-white overflow-y-auto">
+                
+                <!-- SEQUENCE DISPLAY -->
+                <div class="bg-slate-50 border border-slate-200 rounded-xl p-4 flex items-center gap-4 shadow-sm">
+                    <span class="text-xs font-bold text-slate-500 uppercase tracking-wider">Generated Text:</span>
+                    <div id="sequence-display" class="flex flex-wrap gap-2 font-mono text-sm">
+                        <!-- Tokens injected here -->
+                    </div>
+                </div>
+
+                <!-- STAGE 1: Current Computation -->
+                <div class="border-2 border-blue-100 bg-blue-50/30 rounded-2xl p-6 relative">
+                    <div class="absolute -top-3 left-6 bg-blue-600 text-white text-[10px] font-bold px-3 py-1 rounded-full uppercase tracking-widest shadow-sm">Current GPU Work</div>
+                    
+                    <div id="viz-container" class="relative w-full flex flex-col gap-10">
+                        
+                        <!-- Top Row: Q x K^T -->
+                        <div class="flex flex-wrap items-center justify-center gap-4">
+                            <div class="flex flex-col items-center gap-2">
+                                <span class="text-[10px] font-bold text-slate-400">QUERY</span>
+                                <div id="q-matrix" class="w-24 h-8 bg-yellow-400 rounded flex flex-col items-center justify-center text-[10px] font-bold text-yellow-900 border border-yellow-500 shadow-sm computed leading-tight">
+                                    <span>Q<sub><span class="current-step-num">1</span></sub></span>
+                                    <span id="q-token-label" class="text-[8px] font-normal opacity-80"></span>
+                                </div>
+                                <span class="text-[9px] font-mono text-slate-400">(1, d)</span>
+                            </div>
+
+                            <span class="text-xl font-bold text-slate-300">×</span>
+
+                            <div class="flex flex-col items-center gap-2">
+                                <span class="text-[10px] font-bold text-slate-400">KEYS (\(K^T\))</span>
+                                <div id="k-matrix" class="flex gap-1 p-1 bg-emerald-50 border border-emerald-200 rounded-lg min-h-[40px]">
+                                    <!-- Dynamic content -->
+                                </div>
+                                <span class="text-[9px] font-mono text-slate-400" id="k-dim">(d, 1)</span>
+                            </div>
+
+                            <span class="text-xl font-bold text-slate-300">=</span>
+
+                            <div class="flex flex-col items-center gap-2">
+                                <span class="text-[10px] font-bold text-slate-400">ATTN SCORES</span>
+                                <div id="score-matrix" class="flex gap-1 p-1 bg-slate-50 border border-slate-200 rounded-lg min-h-[30px]">
+                                    <!-- Dynamic content -->
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Bottom Row: Weights x V -->
+                        <div class="flex flex-wrap items-center justify-center gap-4">
+                            <div class="flex flex-col items-center gap-2">
+                                <span class="text-[10px] font-bold text-slate-400">SOFTMAX</span>
+                                <div id="score-matrix-copy" class="flex gap-1 p-1 bg-purple-50 border border-purple-200 rounded-lg">
+                                    <!-- Dynamic content -->
+                                </div>
+                            </div>
+
+                            <span class="text-xl font-bold text-slate-300">×</span>
+
+                            <div class="flex flex-col items-center gap-2">
+                                <span class="text-[10px] font-bold text-slate-400">VALUES</span>
+                                <div id="v-matrix" class="flex flex-col gap-1 p-1 bg-orange-50 border border-orange-200 rounded-lg min-w-[40px]">
+                                    <!-- Dynamic content -->
+                                </div>
+                            </div>
+
+                            <span class="text-xl font-bold text-slate-300">=</span>
+
+                            <div class="flex flex-col items-center gap-2">
+                                <span class="text-[10px] font-bold text-slate-400">OUTPUT</span>
+                                <div class="w-24 h-8 bg-blue-600 rounded flex items-center justify-center text-[10px] font-bold text-white shadow-lg">New Hidden</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- STAGE 2: The Cache Bank -->
+                <div class="border-2 border-slate-200 bg-slate-50/50 rounded-2xl p-6 relative mt-4">
+                    <div class="absolute -top-3 left-6 bg-slate-500 text-white text-[10px] font-bold px-3 py-1 rounded-full uppercase tracking-widest shadow-sm">KV Cache (RAM)</div>
+                    
+                    <div class="grid grid-cols-2 gap-8">
+                        <!-- Key Cache -->
+                        <div class="space-y-3">
+                            <div class="flex justify-between items-center">
+                                <span class="text-[10px] font-bold text-emerald-700">KEY BANK</span>
+                                <span class="text-[9px] text-slate-400 font-mono" id="k-cache-size">0 / 5 stored</span>
+                            </div>
+                            <div id="k-cache-bank" class="flex gap-2 p-3 bg-white border border-slate-200 rounded-xl min-h-[60px] items-center">
+                                <!-- Cached Keys -->
+                            </div>
+                        </div>
+
+                        <!-- Value Cache -->
+                        <div class="space-y-3">
+                            <div class="flex justify-between items-center">
+                                <span class="text-[10px] font-bold text-orange-700">VALUE BANK</span>
+                                <span class="text-[9px] text-slate-400 font-mono" id="v-cache-size">0 / 5 stored</span>
+                            </div>
+                            <div id="v-cache-bank" class="flex gap-2 p-3 bg-white border border-slate-200 rounded-xl min-h-[60px] items-center">
+                                <!-- Cached Values -->
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Right Panel: Info -->
+            <div class="w-full lg:w-4/12 bg-slate-50 p-6 border-l border-slate-200 flex flex-col gap-6 overflow-y-auto">
+                <div class="space-y-4">
+                    <h3 class="text-xs font-bold text-slate-400 uppercase tracking-widest">How it works</h3>
+                    
+                    <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm space-y-3">
+                        <div id="step-desc" class="text-sm font-medium text-slate-800"></div>
+                        <p class="text-xs text-slate-500 leading-relaxed">
+                            Every time we generate a token, we compute its Key and Value. We then <b>save them</b> to the Cache Bank.
+                        </p>
+                        <p class="text-xs text-slate-500 leading-relaxed">
+                            For the <i>next</i> token, we don't re-calculate Token 1's K and V. We just fetch them from the bank.
+                        </p>
+                    </div>
+
+                    <div class="space-y-3">
+                        <h4 class="text-[10px] font-bold text-slate-500 uppercase">Step Details</h4>
+                        <div class="space-y-2">
+                            <div class="flex items-center gap-2 text-xs">
+                                <div class="w-2 h-2 rounded-full bg-emerald-400"></div>
+                                <span><span class="font-bold text-emerald-600">Keys:</span> \((d, \text{pos})\) matrix</span>
+                            </div>
+                            <div class="flex items-center gap-2 text-xs">
+                                <div class="w-2 h-2 rounded-full bg-orange-400"></div>
+                                <span><span class="font-bold text-orange-600">Values:</span> \((\text{pos}, d)\) matrix</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="p-4 bg-emerald-50 rounded-lg border border-emerald-100">
+                        <h4 class="text-[10px] font-bold text-emerald-700 uppercase mb-1">Efficiency Gain</h4>
+                        <p class="text-[11px] text-emerald-800">
+                            By reusing <span id="reuse-count" class="font-bold">0</span> vectors, we saved <b><span id="saved-ops">0</span></b> redundant matrix operations this step.
+                        </p>
+                    </div>
+
+                    <div class="p-4 bg-purple-50 rounded-lg border border-purple-100">
+                        <h4 class="text-[10px] font-bold text-purple-700 uppercase mb-1">RAM Cost (Footprint)</h4>
+                        <p class="text-[11px] text-purple-800">
+                            Cache size: <b id="ram-usage">0 KB</b>
+                        </p>
+                        <p class="text-[9px] text-purple-600 mt-1 leading-tight">
+                            (Grows linearly with sequence length: pos × layers × heads × d_head × 2 bytes)
+                        </p>
+                    </div>
+
+                    <!-- NEW: Mathematical explanation for not caching Q -->
+                    <div class="p-4 bg-yellow-50 rounded-lg border border-yellow-200 shadow-sm relative overflow-hidden">
+                        <div class="absolute -right-4 -top-4 text-yellow-100 opacity-50">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><path d="M12 17h.01"/></svg>
+                        </div>
+                        <h4 class="text-[10px] font-bold text-yellow-800 uppercase mb-2 relative z-10">Why Not Cache Q? (The Math)</h4>
+                        <div class="overflow-x-auto text-center mb-2 text-xs relative z-10 py-1 font-semibold text-slate-800">
+                            \(\text{Out}_t = \text{softmax}(Q_t \cdot K_{\le t}^T) \cdot V_{\le t}\)
+                        </div>
+                        <p class="text-[10px] text-yellow-900 leading-relaxed relative z-10">
+                            Look at the formulation for generating step \(t\). It <b>only requires \(Q_t\)</b>. 
+                            The previous queries (\(Q_1 \dots Q_{t-1}\)) were consumed to generate previous words and are <b>mathematically never referenced again</b>. Storing them would just waste RAM!
+                        </p>
+                    </div>
+
+                </div>
+
+                <div class="mt-auto pt-4 text-center">
+                    <div class="text-[11px] font-mono text-slate-400">
+                        Attention Complexity: \(O(n^2)\) &rarr; \(O(n)\) per token
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let currentStep = 1;
+        const maxSteps = 5;
+        const tokens = ["The", "robot", "wrote", "a", "poem"]; // Concrete sequence
+
+        const nextBtn = document.getElementById('next-btn');
+        const prevBtn = document.getElementById('prev-btn');
+        const resetBtn = document.getElementById('reset-btn');
+        const stepCountText = document.getElementById('step-count');
+        const stepNumDisplays = document.querySelectorAll('.current-step-num');
+        const stepDesc = document.getElementById('step-desc');
+        
+        const kMatrix = document.getElementById('k-matrix');
+        const vMatrix = document.getElementById('v-matrix');
+        const scoreMatrix = document.getElementById('score-matrix');
+        const scoreMatrixCopy = document.getElementById('score-matrix-copy');
+        const kCacheBank = document.getElementById('k-cache-bank');
+        const vCacheBank = document.getElementById('v-cache-bank');
+        
+        const kDim = document.getElementById('k-dim');
+        const kCacheSize = document.getElementById('k-cache-size');
+        const vCacheSize = document.getElementById('v-cache-size');
+        const reuseCount = document.getElementById('reuse-count');
+        const savedOps = document.getElementById('saved-ops');
+        
+        const sequenceDisplay = document.getElementById('sequence-display');
+        const qTokenLabel = document.getElementById('q-token-label');
+        const ramUsage = document.getElementById('ram-usage');
+
+        function updateStep() {
+            stepCountText.innerText = currentStep;
+            stepNumDisplays.forEach(el => el.innerText = currentStep);
+            
+            prevBtn.disabled = currentStep === 1;
+            nextBtn.disabled = currentStep === maxSteps;
+
+            if (currentStep === 1) {
+                stepDesc.innerHTML = "Generating <b>Token 1</b>: Everything is new. We calculate <span class='text-emerald-600'>K1</span> and <span class='text-orange-600'>V1</span> for the first time.";
+            } else {
+                stepDesc.innerHTML = `Generating <b>Token ${currentStep}</b>: We fetch <span class='text-slate-400'>1 to ${currentStep-1}</span> from cache and only calculate <span class='text-emerald-600 font-bold'>Token ${currentStep}</span>.`;
+            }
+
+            reuseCount.innerText = currentStep - 1;
+            savedOps.innerText = (currentStep - 1) * 2; // Rough approximation (1 for K, 1 for V)
+
+            // Mock RAM calculation (e.g., 2 bytes per float16, 512 dim, 12 layers) -> arbitrary scalar for visualization
+            const mockKbPerToken = 12.5; 
+            ramUsage.innerText = `${((currentStep - 1) * mockKbPerToken).toFixed(1)} KB`;
+
+            render();
+        }
+
+        function render() {
+            // Render Sequence Text
+            sequenceDisplay.innerHTML = '';
+            for(let i=0; i<currentStep; i++) {
+                const t = document.createElement('span');
+                const isCurrent = i === currentStep - 1;
+                t.className = `px-2 py-1 rounded transition-all duration-300 ${isCurrent ? 'bg-blue-100 text-blue-700 font-bold border border-blue-300 shadow-sm scale-105' : 'bg-white border border-slate-200 text-slate-500'}`;
+                t.innerText = tokens[i];
+                sequenceDisplay.appendChild(t);
+            }
+            
+            qTokenLabel.innerText = `("${tokens[currentStep - 1]}")`;
+
+            // Render Interaction Row
+            kMatrix.innerHTML = '';
+            vMatrix.innerHTML = '';
+            scoreMatrix.innerHTML = '';
+            scoreMatrixCopy.innerHTML = '';
+
+            for (let i = 1; i <= currentStep; i++) {
+                const isCached = i < currentStep;
+                const tokenWord = tokens[i-1];
+                
+                // K transpose entry
+                const kCol = document.createElement('div');
+                kCol.className = `w-8 h-24 rounded border flex items-center justify-center text-[9px] font-bold relative group ${isCached ? 'cached border-slate-300' : 'bg-emerald-400 text-emerald-900 border-emerald-600 computed write-animation'}`;
+                kCol.innerHTML = `
+                    <span class="rotate-90 whitespace-nowrap">K<sub>${i}</sub> <span class="font-normal opacity-70">(${tokenWord})</span></span>
+                `;
+                kMatrix.appendChild(kCol);
+
+                // V entry
+                const vRow = document.createElement('div');
+                vRow.className = `w-24 h-8 rounded border flex flex-col items-center justify-center text-[9px] font-bold leading-tight ${isCached ? 'cached border-slate-300' : 'bg-orange-400 text-orange-900 border-orange-600 computed write-animation'}`;
+                vRow.innerHTML = `<span>V<sub>${i}</sub></span><span class="font-normal opacity-70 text-[8px]">"${tokenWord}"</span>`;
+                vMatrix.appendChild(vRow);
+
+                // Score cells
+                const s = document.createElement('div');
+                s.className = `w-6 h-6 rounded border border-slate-200 bg-slate-100 flex items-center justify-center text-[8px]`;
+                s.innerText = `s${i}`;
+                scoreMatrix.appendChild(s);
+
+                const sc = s.cloneNode(true);
+                sc.className = `w-6 h-6 rounded border border-purple-400 bg-purple-200 text-purple-900 font-bold text-[8px]`;
+                scoreMatrixCopy.appendChild(sc);
+            }
+            kDim.innerText = `(d, ${currentStep})`;
+
+            // Render Cache Bank
+            kCacheBank.innerHTML = '';
+            vCacheBank.innerHTML = '';
+            for (let i = 1; i < currentStep; i++) {
+                const tokenWord = tokens[i-1];
+
+                const kItem = document.createElement('div');
+                kItem.className = "w-12 h-12 rounded-lg bg-emerald-50 border border-emerald-200 flex flex-col items-center justify-center text-[10px] font-bold text-emerald-700 shadow-sm leading-tight";
+                kItem.innerHTML = `<span>K<sub>${i}</sub></span><span class="text-[8px] font-normal opacity-70">"${tokenWord}"</span>`;
+                kCacheBank.appendChild(kItem);
+
+                const vItem = document.createElement('div');
+                vItem.className = "w-12 h-12 rounded-lg bg-orange-50 border border-orange-200 flex flex-col items-center justify-center text-[10px] font-bold text-orange-700 shadow-sm leading-tight";
+                vItem.innerHTML = `<span>V<sub>${i}</sub></span><span class="text-[8px] font-normal opacity-70">"${tokenWord}"</span>`;
+                vCacheBank.appendChild(vItem);
+            }
+            kCacheSize.innerText = `${currentStep-1} / ${maxSteps} tokens`;
+            vCacheSize.innerText = `${currentStep-1} / ${maxSteps} tokens`;
+        }
+
+        nextBtn.addEventListener('click', () => { if(currentStep < maxSteps) { currentStep++; updateStep(); } });
+        prevBtn.addEventListener('click', () => { if(currentStep > 1) { currentStep--; updateStep(); } });
+        resetBtn.addEventListener('click', () => { currentStep = 1; updateStep(); });
+
+        updateStep();
+    </script>
+</body>
+</html>

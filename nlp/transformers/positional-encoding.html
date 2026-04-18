@@ -1,0 +1,795 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Positional Encoding Visualization</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body {
+            background-color: #f8fafc;
+            font-family: 'Inter', system-ui, -apple-system, sans-serif;
+        }
+        .math-font {
+            font-family: 'Cambria', 'Cochin', Georgia, Times, 'Times New Roman', serif;
+            font-style: italic;
+        }
+        .flow-line {
+            border-left: 2px dotted #ef4444;
+            height: 20px;
+            margin: 0 auto;
+            position: relative;
+        }
+        .flow-line::after {
+            content: '▼';
+            color: #ef4444;
+            position: absolute;
+            bottom: -8px;
+            left: -6px;
+            font-size: 10px;
+        }
+        .vec-cell {
+            width: 32px;
+            height: 32px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 10px;
+            border: 1px solid #333;
+            color: #000;
+        }
+        canvas {
+            cursor: crosshair;
+        }
+        .wave-point {
+            cursor: crosshair;
+            transition: r 0.15s ease-in-out;
+            pointer-events: all;
+        }
+        .wave-point:hover {
+            r: 6;
+        }
+        .highlight-cell {
+            background-color: #fef08a !important; /* yellow-200 */
+            box-shadow: inset 0 0 0 2px #ca8a04 !important; /* yellow-600 */
+            border-radius: 4px;
+            color: #854d0e !important; /* yellow-800 */
+            font-weight: bold !important;
+        }
+    </style>
+</head>
+<body class="p-4 md:p-8 text-slate-800">
+    <!-- Moved Tooltip to the root and changed from absolute to fixed z-50 -->
+    <div id="tooltip" class="fixed hidden bg-slate-900 text-white text-xs p-2 rounded pointer-events-none z-50 shadow-xl"></div>
+
+    <div class="max-w-7xl mx-auto space-y-8">
+        
+        <!-- Header & Theory Concept -->
+        <header class="text-center space-y-4">
+            <h1 class="text-4xl font-bold text-slate-900">Positional Encoding</h1>
+            <p class="text-lg text-slate-700">
+                <span class="math-font">pos</span> is the position in the sequence, and <span class="math-font">i</span> is the dimension index in the encoding space.
+            </p>
+        </header>
+
+        <!-- Image Theory Cards -->
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+            <div class="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
+                <h3 class="font-bold text-lg mb-3">Why not <span class="math-font">PE(pos)</span>, instead of <span class="math-font">PE(pos, i)</span>?</h3>
+                <p class="text-slate-700 mb-2">Because <strong>positional encoding is a vector</strong>, not a scalar.</p>
+                <p class="text-slate-600 bg-slate-50 p-3 rounded font-mono text-sm border border-slate-100">
+                    PE(pos, i) = the i-th component of the vector for position pos
+                </p>
+            </div>
+            <div class="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
+                <h3 class="font-bold text-lg mb-3">What function should we pick for <span class="math-font">PE(pos, i)</span>?</h3>
+                <ul class="space-y-3 text-sm">
+                    <li><strong class="text-red-600">Monotonic function:</strong> Exploding gradients. Huge values (poor numerical stability).</li>
+                    <li><strong class="text-red-600">Periodic function:</strong> The embedding of different positions would be exactly the same!</li>
+                    <li><strong class="text-green-600">Solution:</strong> A mix of periodic functions (sin/cos) with varying frequencies across dimensions to ensure unique vectors for every position.</li>
+                </ul>
+            </div>
+        </div>
+
+        <!-- Interactive Architecture Diagram -->
+        <div class="bg-white rounded-xl shadow-md border border-slate-200 overflow-hidden">
+            <div class="bg-slate-50 p-4 border-b border-slate-200 flex flex-col md:flex-row justify-between items-center gap-4">
+                <div class="flex-1 w-full">
+                    <label class="block text-sm font-bold text-slate-700 mb-2">Interactive Sentence (Click words to compare)</label>
+                    <input type="text" id="sentenceInput" value="The white cat and the brown cat sat on the mat" 
+                           class="w-full p-3 text-lg border border-slate-300 rounded-md focus:ring-2 focus:ring-blue-500 outline-none">
+                </div>
+            </div>
+
+            <div class="p-6">
+                <h3 class="text-center text-xl font-medium mb-6">
+                    "The same word at different positions will have different encodings"
+                </h3>
+                
+                <div id="clickableSentence" class="flex flex-wrap justify-center gap-3 mb-12 text-xl cursor-pointer">
+                    <!-- Word buttons injected here -->
+                </div>
+
+                <!-- Architecture Flowchart -->
+                <div id="flowchartsContainer" class="grid grid-cols-1 md:grid-cols-2 gap-8 justify-items-center">
+                    <!-- Flowcharts injected here -->
+                    <p class="text-slate-400 italic md:col-span-2">Click on two words above to see their architectural flow.</p>
+                </div>
+                
+                <!-- Explanation of the Diagram -->
+                <div class="bg-blue-50 p-6 rounded-lg border border-blue-100 mt-8">
+                    <h4 class="font-bold text-blue-900 mb-3 text-lg">What does this diagram show?</h4>
+                    <ul class="space-y-3 text-sm text-slate-800">
+                        <li><span class="inline-block w-4 h-4 bg-[rgb(167,208,142)] border border-green-600 rounded-sm align-middle mr-2"></span> <strong>Input Embedding (Green):</strong> The base meaning of the word. If you click the two "cat"s, their green vectors are identical. To the AI, the dictionary definition is the same.</li>
+                        <li><span class="inline-block w-4 h-4 bg-orange-500 border border-amber-700 rounded-sm align-middle mr-2"></span> <strong>Positional Embedding (Orange):</strong> The location of the word. The "cat" at position 2 has a completely different orange vector than the "cat" at position 6.</li>
+                        <li class="pt-2 border-t border-blue-200"><strong>The Takeaway:</strong> By adding (+) these vectors, the final embedding for "cat" at position 2 is completely distinct from "cat" at position 6. The model now sees a single vector that simultaneously means <em>"feline"</em> AND <em>"located near the beginning"</em>.</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+
+        <!-- Positional Encoding as a Matrix -->
+        <div class="bg-white p-6 rounded-xl shadow-md border border-slate-200">
+            <h2 class="text-3xl font-bold mb-8 text-center text-slate-900">Positional Encoding As a Matrix <span class="text-lg text-slate-500 font-normal">(D=4)</span></h2>
+            
+            <div class="flex flex-col items-center mb-10 gap-6">
+                <!-- Formula & Slider Card -->
+                <div class="bg-slate-50 border border-slate-200 p-6 rounded-xl shadow-sm w-full max-w-2xl">
+                    <p class="text-slate-500 text-sm font-bold mb-4 uppercase tracking-wide text-center">The Mathematical Formula</p>
+                    <div class="text-lg font-serif italic mb-6 text-center">
+                        PE(pos, 2i) = sin<span class="text-2xl align-middle">(</span> <span class="inline-block align-middle text-center">pos<hr class="border-black">n<sup>2i/D</sup></span> <span class="text-2xl align-middle">)</span>
+                        <br><br>
+                        PE(pos, 2i+1) = cos<span class="text-2xl align-middle">(</span> <span class="inline-block align-middle text-center">pos<hr class="border-black">n<sup>2i/D</sup></span> <span class="text-2xl align-middle">)</span>
+                    </div>
+                    
+                    <!-- NEW: Effect of n Slider -->
+                    <div class="max-w-md mx-auto bg-white p-5 rounded-lg border border-slate-200 shadow-sm relative overflow-hidden">
+                        <div class="absolute top-0 left-0 w-1 h-full bg-blue-500"></div>
+                        <h4 class="font-bold text-slate-800 text-center mb-4 text-sm uppercase tracking-wide">The Effect of <span class="math-font normal-case font-bold text-lg">n</span></h4>
+                        <label class="block text-sm font-bold text-slate-700 mb-2">Base (<span class="math-font text-lg">n</span>): <span id="nValDisplay" class="text-blue-600 text-lg">10000</span></label>
+                        <input type="range" id="nRange" min="1" max="5" step="1" value="4" class="w-full cursor-pointer accent-blue-600">
+                        <div class="flex justify-between text-xs font-bold text-slate-400 mt-1 px-1">
+                            <span>10</span><span>100</span><span>1k</span><span>10k</span><span>100k</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- NEW: Effect of n Explanations -->
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4 w-full max-w-4xl">
+                    <div class="bg-red-50 p-4 rounded-lg border border-red-200 shadow-sm">
+                        <h4 class="font-bold text-red-800 flex items-center gap-2 mb-2">
+                            <span class="text-lg">📉</span> If n is too small (e.g. 10)
+                        </h4>
+                        <p class="text-red-700 text-sm leading-relaxed">
+                            <strong>Periodic values show up early.</strong> The highest dimensions complete full cycles too quickly. This causes distant positions to end up with very similar encodings, confusing the model.
+                        </p>
+                    </div>
+                    <div class="bg-blue-50 p-4 rounded-lg border border-blue-200 shadow-sm">
+                        <h4 class="font-bold text-blue-800 flex items-center gap-2 mb-2">
+                            <span class="text-lg">📏</span> If n is too large (e.g. 100,000)
+                        </h4>
+                        <p class="text-blue-700 text-sm leading-relaxed">
+                            <strong>Differences are smaller.</strong> The waves for higher dimensions stretch out so much that their values barely change across the sequence, providing very little positional information.
+                        </p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-8 items-start">
+                
+                <!-- Left: Dynamic Table -->
+                <div class="overflow-x-auto w-full shadow-sm rounded-lg border border-orange-200">
+                    <table class="w-full text-sm text-center border-collapse">
+                        <thead class="bg-orange-500 text-white">
+                            <tr>
+                                <th rowspan="2" class="p-3 border border-orange-600 border-t-0 border-l-0">Pos</th>
+                                <th rowspan="2" class="p-3 border border-orange-600 border-t-0">Word</th>
+                                <th colspan="2" class="p-2 border border-orange-600 border-t-0 font-normal">Pair <span class="math-font font-bold">i=0</span></th>
+                                <th colspan="2" class="p-2 border border-orange-600 border-t-0 border-r-0 font-normal">Pair <span class="math-font font-bold">i=1</span></th>
+                            </tr>
+                            <tr class="text-xs">
+                                <th class="p-2 border border-orange-600 font-normal">
+                                    <div class="font-bold mb-1"><span class="bg-blue-500 text-white px-1 rounded text-[9px] tracking-wide">SIN</span> Dim 0</div>
+                                    <i class="opacity-90">sin(pos / 1)</i>
+                                </th>
+                                <th class="p-2 border border-orange-600 font-normal">
+                                    <div class="font-bold mb-1"><span class="bg-purple-500 text-white px-1 rounded text-[9px] tracking-wide">COS</span> Dim 1</div>
+                                    <i class="opacity-90">cos(pos / 1)</i>
+                                </th>
+                                <th class="p-2 border border-orange-600 font-normal">
+                                    <div class="font-bold mb-1"><span class="bg-blue-500 text-white px-1 rounded text-[9px] tracking-wide">SIN</span> Dim 2</div>
+                                    <i class="opacity-90">sin(pos / <span class="denom1-display">100</span>)</i>
+                                </th>
+                                <th class="p-2 border border-orange-600 border-r-0 font-normal">
+                                    <div class="font-bold mb-1"><span class="bg-purple-500 text-white px-1 rounded text-[9px] tracking-wide">COS</span> Dim 3</div>
+                                    <i class="opacity-90">cos(pos / <span class="denom1-display">100</span>)</i>
+                                </th>
+                            </tr>
+                        </thead>
+                        <tbody id="matrixTableBody" class="text-slate-800">
+                            <!-- Rows injected dynamically -->
+                        </tbody>
+                    </table>
+                    <div class="p-2 text-center text-xs text-orange-800 bg-orange-50 italic">
+                        Values calculated live for your sentence above (D=4)
+                    </div>
+                </div>
+
+                <!-- Right: Sinusoidal Wave Charts -->
+                <div class="w-full">
+                    <h3 class="text-sm font-bold text-slate-700 mb-3 text-center uppercase tracking-wide">Sinusoidal Functions Across Sequence</h3>
+                    <div id="waveChartsContainer" class="flex flex-col gap-3">
+                        <!-- SVGs injected dynamically -->
+                    </div>
+                </div>
+                
+            </div>
+        </div>
+
+        <!-- Heatmap Deep Dive -->
+        <div class="bg-white p-6 rounded-xl shadow-md border border-slate-200">
+            <div class="flex flex-col md:flex-row justify-between items-start gap-8">
+                <div class="w-full md:w-1/3 space-y-6">
+                    <h2 class="text-2xl font-bold">The Mathematical Function</h2>
+                    <div class="text-sm text-slate-600 space-y-4">
+                        <p>
+                            While the diagrams above use small 6-dimensional vectors for simplicity, real models use a <span class="math-font">d<sub>model</sub></span> of 512 or higher. How do we generate unique vectors for every position without the numbers exploding?
+                        </p>
+                        <p>
+                            The heatmap reveals the trick: a mix of sine and cosine waves of varying frequencies.
+                        </p>
+                        <ul class="list-disc pl-5 space-y-2">
+                            <li><strong>Top Rows (Fast changes):</strong> Lower dimensions change colors rapidly as you move across the sequence, acting like the "seconds" hand on a clock to track local, small changes in position.</li>
+                            <li><strong>Bottom Rows (Slow changes):</strong> Higher dimensions change colors slowly, acting like the "hours" hand to track macro, long-distance positions.</li>
+                        </ul>
+                        <p class="bg-slate-100 p-3 rounded-md border border-slate-200 font-medium text-slate-800">
+                            <strong>Takeaway:</strong> This wavy mathematical function ensures every single position gets a 100% unique vector, allowing the AI to calculate the exact distance between any two words.
+                        </p>
+                    </div>
+                    
+                    <div class="space-y-4 bg-slate-50 p-4 rounded-lg border border-slate-100">
+                        <div>
+                            <label class="block text-sm font-bold text-slate-700 mb-1">Embedding Dimension (<span class="math-font">d<sub>model</sub></span>): <span id="dimVal" class="text-blue-600">64</span></label>
+                            <input type="range" id="dimRange" min="16" max="128" step="8" value="64" class="w-full">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-bold text-slate-700 mb-1">Max Sequence Length: <span id="lenVal" class="text-blue-600">50</span></label>
+                            <input type="range" id="lenRange" min="10" max="100" step="5" value="50" class="w-full">
+                        </div>
+                    </div>
+                </div>
+
+                <div class="w-full md:w-2/3 relative">
+                    <!-- Tooltip was removed from here -->
+                    <canvas id="heatmapCanvas" class="w-full h-[400px] border border-slate-100 rounded"></canvas>
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+    <script>
+        // --- Shared Logic ---
+        let n_base = 10000;
+
+        function getPE(pos, i, d) {
+            const divisor = Math.pow(n_base, (2 * Math.floor(i / 2)) / d);
+            return i % 2 === 0 ? Math.sin(pos / divisor) : Math.cos(pos / divisor);
+        }
+
+        // Pseudo-random deterministic hash for word embeddings (so "cat" always gets same vector)
+        function getWordEmbedding(word, dim) {
+            let hash = 0;
+            const str = word.toLowerCase();
+            for (let i = 0; i < str.length; i++) {
+                hash = str.charCodeAt(i) + ((hash << 5) - hash);
+            }
+            const vec = [];
+            for (let i = 0; i < dim; i++) {
+                // Generate a pseudo-random value between -1 and 1
+                const val = Math.sin(hash * (i + 1)) * 0.8; 
+                vec.push(val);
+            }
+            return vec;
+        }
+
+        function getColorForVal(val, isPositional) {
+            if(isPositional) {
+                // Amber/Brown scale for PE as per Image 1
+                const intensity = Math.floor(255 - Math.abs(val) * 100);
+                return `rgb(255, ${intensity}, ${intensity-50})`;
+            } else {
+                // Green scale for Input Embedding
+                const intensity = Math.floor(200 + val * 50);
+                return `rgb(167, 208, 142)`; // Base light green
+            }
+        }
+
+        // --- Interactive Architecture Flowchart Logic ---
+        const sentenceInput = document.getElementById('sentenceInput');
+        const clickableSentence = document.getElementById('clickableSentence');
+        const flowchartsContainer = document.getElementById('flowchartsContainer');
+        const matrixTableBody = document.getElementById('matrixTableBody');
+        const waveChartsContainer = document.getElementById('waveChartsContainer');
+        
+        let tokens = [];
+        let selectedIndices = [];
+        const DIAGRAM_DIM = 6; // Fixed small dimension for the visual diagram
+
+        function renderClickableSentence() {
+            const text = sentenceInput.value.trim();
+            tokens = text ? text.split(/\s+/) : [];
+            
+            clickableSentence.innerHTML = tokens.map((token, idx) => {
+                const isSelected = selectedIndices.includes(idx);
+                const bg = isSelected ? 'bg-blue-600 text-white shadow-md' : 'bg-slate-100 text-slate-700 hover:bg-slate-200';
+                return `<span data-idx="${idx}" class="px-3 py-1 rounded transition-colors ${bg}">${token}</span>`;
+            }).join('');
+
+            // Attach listeners
+            clickableSentence.querySelectorAll('span').forEach(el => {
+                el.addEventListener('click', (e) => {
+                    const idx = parseInt(e.target.getAttribute('data-idx'));
+                    toggleSelection(idx);
+                });
+            });
+            
+            renderFlowcharts();
+            updateMatrixView();
+        }
+
+        function toggleSelection(idx) {
+            if (selectedIndices.includes(idx)) {
+                selectedIndices = selectedIndices.filter(i => i !== idx);
+            } else {
+                if (selectedIndices.length >= 2) selectedIndices.shift(); // Keep max 2
+                selectedIndices.push(idx);
+            }
+            renderClickableSentence(); // Re-render to update highlights
+        }
+
+        function generateVectorHTML(vector, isPositional) {
+            return `
+                <div class="flex border-2 ${isPositional ? 'border-amber-600' : 'border-green-600'} rounded overflow-hidden">
+                    ${vector.map(v => `
+                        <div class="vec-cell" style="background-color: ${getColorForVal(v, isPositional)}">
+                            ${v.toFixed(1)}
+                        </div>
+                    `).join('')}
+                </div>
+            `;
+        }
+
+        function renderFlowcharts() {
+            if (selectedIndices.length === 0) {
+                flowchartsContainer.innerHTML = '<p class="text-slate-400 italic md:col-span-2">Click on one or two words above to see their architectural flow.</p>';
+                return;
+            }
+
+            let html = '';
+            selectedIndices.forEach(idx => {
+                const word = tokens[idx];
+                const inputVec = getWordEmbedding(word, DIAGRAM_DIM);
+                const posVec = Array.from({length: DIAGRAM_DIM}, (_, i) => getPE(idx, i, DIAGRAM_DIM));
+                const finalVec = inputVec.map((v, i) => v + posVec[i]);
+
+                html += `
+                    <div class="flex flex-col items-center p-4 bg-slate-50 rounded-xl border border-slate-200 w-full max-w-md">
+                        
+                        <div class="flex w-full mb-4">
+                            <!-- Left Side: Position -->
+                            <div class="flex flex-col items-center w-1/2">
+                                <div class="text-sm font-bold mb-2">Position: <span class="math-font">${idx}</span></div>
+                                <div class="bg-orange-600 text-white text-xs px-3 py-2 rounded text-center shadow-sm w-32">
+                                    Positional<br>Embedding<br><span class="math-font opacity-80">PE(${idx}, i)</span>
+                                </div>
+                                <div class="flow-line"></div>
+                                <div class="text-xs text-slate-500 mb-1">Vector D=${DIAGRAM_DIM}</div>
+                                ${generateVectorHTML(posVec, true)}
+                            </div>
+
+                            <!-- Right Side: Word -->
+                            <div class="flex flex-col items-center w-1/2">
+                                <div class="text-sm font-bold mb-2">Word: "${word}"</div>
+                                <div class="flex gap-1 mb-2">
+                                    <div class="w-4 h-6 bg-yellow-300 border border-yellow-500"></div>
+                                    <div class="w-4 h-6 bg-yellow-300 border border-yellow-500"></div>
+                                    <div class="w-4 h-6 bg-yellow-300 border border-yellow-500"></div>
+                                </div>
+                                <div class="text-[10px] text-slate-500 mb-1">Vector D=${DIAGRAM_DIM}</div>
+                                ${generateVectorHTML(inputVec, false)}
+                            </div>
+                        </div>
+
+                        <!-- Addition -->
+                        <div class="relative w-full flex justify-center mt-2 mb-4">
+                            <!-- Vertical line connecting Positional Vector down to the horizontal line -->
+                            <div class="absolute left-[25%] -top-[24px] h-[40px] border-l-2 border-dotted border-red-500"></div>
+                            
+                            <!-- Vertical line connecting Input Vector down to the horizontal line -->
+                            <div class="absolute right-[25%] -top-[24px] h-[40px] border-r-2 border-dotted border-red-500"></div>
+
+                            <div class="absolute left-[25%] right-[25%] border-t-2 border-dotted border-red-500 top-4 -z-10"></div>
+                            
+                            <!-- Arrowhead pointing to + from the left -->
+                            <div class="absolute right-[calc(50%+16px)] top-[11px] w-0 h-0 border-y-[6px] border-y-transparent border-l-[6px] border-l-red-500"></div>
+
+                            <!-- Arrowhead pointing to + from the right -->
+                            <div class="absolute left-[calc(50%+16px)] top-[11px] w-0 h-0 border-y-[6px] border-y-transparent border-r-[6px] border-r-red-500"></div>
+
+                            <div class="w-8 h-8 rounded-full bg-yellow-300 border-2 border-yellow-500 flex items-center justify-center font-bold text-lg z-10 shadow-sm">
+                                +
+                            </div>
+                        </div>
+
+                        <!-- Final Result -->
+                        <div class="flex flex-col items-center">
+                            <div class="flow-line !h-6 mb-1"></div>
+                            <div class="text-xs font-bold text-slate-700 mb-1">Final Embedding (D=${DIAGRAM_DIM})</div>
+                            <div class="flex border-2 border-slate-800 rounded overflow-hidden shadow-sm">
+                                ${finalVec.map(v => `
+                                    <div class="vec-cell bg-slate-200 font-bold" title="${v.toFixed(3)}">
+                                        ${v.toFixed(1)}
+                                    </div>
+                                `).join('')}
+                            </div>
+                        </div>
+
+                    </div>
+                `;
+            });
+
+            flowchartsContainer.innerHTML = html;
+        }
+
+        // --- Matrix and Wave Charts Logic ---
+        function createWaveSVG(dim, tokensLength) {
+            // Plot across standard sequence length to show the curve, min 9 positions
+            const maxPos = Math.max(9, tokensLength - 1);
+            let vals = [];
+            for(let pos=0; pos<=maxPos; pos++) {
+                vals.push(getPE(pos, dim, 4));
+            }
+            let minVal = Math.min(...vals);
+            let maxVal = Math.max(...vals);
+            
+            // Add tiny padding for perfectly flat graphs so they render
+            const range = maxVal - minVal;
+            if (range === 0) { minVal -= 0.1; maxVal += 0.1; } 
+            else { minVal -= range * 0.1; maxVal += range * 0.1; }
+
+            const width = 400;
+            const height = 80;
+            const padX = 30;
+            const padY = 15;
+            const effW = width - 2 * padX;
+            const effH = height - 2 * padY;
+
+            let points = "";
+            let circles = "";
+            
+            for(let pos=0; pos<=maxPos; pos++) {
+                const val = vals[pos];
+                const x = padX + (pos / maxPos) * effW;
+                const y = padY + effH - ((val - minVal) / (maxVal - minVal)) * effH;
+                points += `${x},${y} `;
+                // Default circles with data attributes for hover tracking
+                circles += `<circle cx="${x}" cy="${y}" r="3" fill="#0ea5e9" class="wave-point" data-pos="${pos}" data-dim="${dim}" data-val="${val}" />`;
+            }
+
+            // Highlights for selected indices
+            let markers = "";
+            selectedIndices.forEach(selectedPos => {
+                if(selectedPos <= maxPos) {
+                    const x = padX + (selectedPos / maxPos) * effW;
+                    const val = vals[selectedPos];
+                    const y = padY + effH - ((val - minVal) / (maxVal - minVal)) * effH;
+                    
+                    // Stagger the text height to prevent overlap if adjacent tokens are selected
+                    const textYOffset = (selectedPos % 2 === 1) ? 9 : 0; 
+
+                    // Draw vertical dotted line
+                    markers += `<line x1="${x}" y1="${padY}" x2="${x}" y2="${height-padY}" stroke="#ef4444" stroke-width="1.5" stroke-dasharray="2,2" />`;
+                    // Draw highlighted point with data attributes
+                    markers += `<circle cx="${x}" cy="${y}" r="4" fill="#ef4444" stroke="#ffffff" stroke-width="1.5" class="wave-point" data-pos="${selectedPos}" data-dim="${dim}" data-val="${val}" />`;
+                    // Add position label at bottom (staggered)
+                    markers += `<text x="${x}" y="${height - 2 - textYOffset}" font-size="8" fill="#ef4444" text-anchor="middle" font-weight="bold">pos ${selectedPos}</text>`;
+                }
+            });
+
+            // Handle labels cleanly, matching the slide's behavior of showing the tiny differences for high n
+            const isZeroDiff = (maxVal - minVal < 0.0001);
+            const minLabel = isZeroDiff ? minVal.toExponential(2) : minVal.toFixed(4);
+            const maxLabel = isZeroDiff ? maxVal.toExponential(2) : maxVal.toFixed(4);
+            
+            // Zero line if crossing 0
+            const zeroLineHtml = (minVal < 0 && maxVal > 0) ? 
+                `<line x1="${padX}" y1="${padY + effH - ((0 - minVal) / (maxVal - minVal)) * effH}" x2="${width-padX/2}" y2="${padY + effH - ((0 - minVal) / (maxVal - minVal)) * effH}" stroke="#cbd5e1" stroke-width="0.5"/>` : '';
+
+            // Annotations based on the user's conceptual slide
+            let annotation = "";
+            if (dim === 3) {
+                annotation = "Where are we in the sequence? (low resolution)";
+            } else if (dim === 2) {
+                annotation = "Distinguishes consecutive tokens more (Higher resolution)";
+            } else {
+                annotation = "High frequencies add more information about where we are in the sequence with highest resolution";
+            }
+
+            const funcBadgeClass = dim % 2 === 0 ? 'bg-blue-500 text-white' : 'bg-purple-500 text-white';
+            const funcName = dim % 2 === 0 ? 'SIN' : 'COS';
+
+            return `
+                <div class="flex flex-row items-center gap-3">
+                    <div class="flex-1 border border-slate-200 rounded relative bg-white overflow-hidden shadow-sm">
+                        <div class="text-[11px] text-center font-bold py-1 bg-slate-50 border-b border-slate-200 text-slate-700">
+                            Dimension ${dim} <span class="${funcBadgeClass} px-1 rounded ml-1 text-[9px] tracking-wide">${funcName}</span>
+                        </div>
+                        <div class="relative">
+                            <svg viewBox="0 0 ${width} ${height}" class="w-full h-auto">
+                                <!-- X & Y Axes -->
+                                <line x1="${padX}" y1="${padY}" x2="${padX}" y2="${height-padY}" stroke="#94a3b8" />
+                                <line x1="${padX}" y1="${height-padY}" x2="${width-padX/2}" y2="${height-padY}" stroke="#94a3b8" />
+                                ${zeroLineHtml}
+                                
+                                <!-- Connecting Line & Points -->
+                                <polyline points="${points}" fill="none" stroke="#0ea5e9" stroke-width="1.5" />
+                                ${circles}
+                                
+                                <!-- Highlights -->
+                                ${markers}
+                            </svg>
+                            <!-- Labels -->
+                            <div class="absolute left-1 top-2 text-[9px] font-mono text-slate-500">${maxLabel}</div>
+                            <div class="absolute left-1 bottom-[14px] text-[9px] font-mono text-slate-500">${minLabel}</div>
+                            <div class="absolute right-1 bottom-0 text-[8px] text-slate-400">Pos ${maxPos}</div>
+                            <div class="absolute left-[30px] bottom-0 text-[8px] text-slate-400">0</div>
+                        </div>
+                    </div>
+                    
+                    <!-- Annotation Box -->
+                    <div class="w-[35%] shrink-0 text-xs text-slate-700 flex items-center gap-2">
+                        <span class="text-red-500 text-[10px]">▶</span>
+                        <span class="leading-snug">${annotation}</span>
+                    </div>
+                </div>
+            `;
+        }
+
+        function updateMatrixView() {
+            // Update Table
+            let tableHtml = '';
+            tokens.forEach((word, pos) => {
+                const pe0 = getPE(pos, 0, 4).toFixed(2);
+                const pe1 = getPE(pos, 1, 4).toFixed(2);
+                const pe2 = getPE(pos, 2, 4).toFixed(2);
+                const pe3 = getPE(pos, 3, 4).toFixed(2);
+                
+                const isSelected = selectedIndices.includes(pos);
+                const rowBgClass = isSelected ? 'bg-blue-100 border-blue-400 shadow-sm' : 'even:bg-orange-50 border-orange-100 hover:bg-orange-100';
+                const borderClass = isSelected ? 'border-blue-300' : 'border-orange-200';
+                
+                // Use distinct colors for SIN and COS columns when selected
+                const sinTextClass = isSelected ? 'text-blue-700 font-bold' : 'text-slate-600 font-mono';
+                const cosTextClass = isSelected ? 'text-purple-700 font-bold' : 'text-slate-600 font-mono';
+                
+                tableHtml += `
+                    <tr data-pos="${pos}" class="${rowBgClass} border-b transition-colors cursor-pointer" title="Click to select/deselect">
+                        <td class="p-2 font-mono ${isSelected ? 'text-blue-900 font-bold' : 'text-orange-900'} border-r ${borderClass}">${pos}</td>
+                        <td class="p-2 font-bold ${isSelected ? 'text-blue-900' : 'text-slate-800'} border-r ${borderClass}">${word}</td>
+                        <td class="p-2 ${sinTextClass} transition-all duration-150" data-cell-pos="${pos}" data-cell-dim="0">${pe0}</td>
+                        <td class="p-2 ${cosTextClass} border-r ${borderClass} transition-all duration-150" data-cell-pos="${pos}" data-cell-dim="1">${pe1}</td>
+                        <td class="p-2 ${sinTextClass} transition-all duration-150" data-cell-pos="${pos}" data-cell-dim="2">${pe2}</td>
+                        <td class="p-2 ${cosTextClass} transition-all duration-150" data-cell-pos="${pos}" data-cell-dim="3">${pe3}</td>
+                    </tr>
+                `;
+            });
+            matrixTableBody.innerHTML = tableHtml;
+
+            // Add click listeners to rows
+            matrixTableBody.querySelectorAll('tr').forEach(row => {
+                row.addEventListener('click', () => {
+                    const pos = parseInt(row.getAttribute('data-pos'));
+                    toggleSelection(pos);
+                });
+            });
+
+            // Update SVGs (Render in reverse order to match slide: Dim 3 at top)
+            let chartsHtml = '';
+            for(let dim = 3; dim >= 0; dim--) {
+                chartsHtml += createWaveSVG(dim, tokens.length);
+            }
+            waveChartsContainer.innerHTML = chartsHtml;
+        }
+
+        // --- Heatmap Logic ---
+        const canvas = document.getElementById('heatmapCanvas');
+        const ctx = canvas.getContext('2d');
+        const tooltip = document.getElementById('tooltip');
+        const dimRange = document.getElementById('dimRange');
+        const lenRange = document.getElementById('lenRange');
+        const dimValDisplay = document.getElementById('dimVal');
+        const lenValDisplay = document.getElementById('lenVal');
+
+        let d_model_heat = parseInt(dimRange.value);
+        let max_len_heat = parseInt(lenRange.value);
+
+        function resizeCanvas() {
+            const rect = canvas.parentElement.getBoundingClientRect();
+            canvas.width = rect.width * window.devicePixelRatio;
+            canvas.height = 400 * window.devicePixelRatio;
+            canvas.style.width = `${rect.width}px`;
+            canvas.style.height = `400px`;
+            drawHeatmap();
+        }
+
+        function drawHeatmap() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            ctx.scale(window.devicePixelRatio, window.devicePixelRatio);
+
+            const padding = 40;
+            const w = (canvas.width / window.devicePixelRatio) - padding * 2;
+            const h = 320;
+            const cellW = w / max_len_heat;
+            const cellH = h / d_model_heat;
+
+            // Labels
+            ctx.fillStyle = '#64748b';
+            ctx.font = '12px Inter';
+            ctx.textAlign = 'center';
+            ctx.fillText('Sequence Position (pos)', padding + w / 2, 20);
+            
+            ctx.save();
+            ctx.translate(15, padding + h / 2);
+            ctx.rotate(-Math.PI / 2);
+            ctx.fillText('Dimension Index (i)', 0, 0);
+            ctx.restore();
+
+            // Draw grid
+            for (let pos = 0; pos < max_len_heat; pos++) {
+                for (let i = 0; i < d_model_heat; i++) {
+                    const val = getPE(pos, i, d_model_heat);
+                    // Blue for negative (-1), Red for positive (+1)
+                    const r = val > 0 ? 255 : Math.floor(255 * (1 + val));
+                    const b = val < 0 ? 255 : Math.floor(255 * (1 - val));
+                    const g = Math.floor(255 * (1 - Math.abs(val)));
+                    
+                    ctx.fillStyle = `rgb(${r}, ${g}, ${b})`;
+                    ctx.fillRect(padding + pos * cellW, padding + i * cellH, cellW + 0.5, cellH + 0.5);
+                }
+            }
+            ctx.resetTransform();
+        }
+
+        // --- Event Listeners ---
+        const nRange = document.getElementById('nRange');
+        const nValDisplay = document.getElementById('nValDisplay');
+
+        nRange.addEventListener('input', () => {
+            // Calculate base 10 power (10^1 to 10^5)
+            n_base = Math.pow(10, parseInt(nRange.value));
+            nValDisplay.textContent = n_base;
+            
+            // Update the denominator formula text dynamically in the table headers!
+            // For D=4, i=1, the denominator is n^(2/4) = n^(0.5) = sqrt(n)
+            const denom1 = Math.pow(n_base, 2/4);
+            const denomStr = denom1 % 1 === 0 ? denom1.toString() : denom1.toFixed(2);
+            document.querySelectorAll('.denom1-display').forEach(el => el.textContent = denomStr);
+            
+            // Re-render everything that relies on n
+            renderFlowcharts();
+            updateMatrixView();
+            drawHeatmap();
+        });
+
+        sentenceInput.addEventListener('input', () => {
+            // reset selection on new input
+            selectedIndices = [];
+            renderClickableSentence();
+        });
+
+        dimRange.addEventListener('input', () => {
+            d_model_heat = parseInt(dimRange.value);
+            dimValDisplay.textContent = d_model_heat;
+            drawHeatmap();
+        });
+
+        lenRange.addEventListener('input', () => {
+            max_len_heat = parseInt(lenRange.value);
+            lenValDisplay.textContent = max_len_heat;
+            drawHeatmap();
+        });
+
+        canvas.addEventListener('mousemove', (e) => {
+            const rect = canvas.getBoundingClientRect();
+            const x = e.clientX - rect.left;
+            const y = e.clientY - rect.top;
+            
+            const padding = 40;
+            const w = rect.width - padding * 2;
+            const h = 320;
+            const cellW = w / max_len_heat;
+            const cellH = h / d_model_heat;
+
+            if (x >= padding && x <= padding + w && y >= padding && y <= padding + h) {
+                // Math.min clamps the value to prevent out-of-bounds phantom indices on the exact pixel edge
+                const pos = Math.min(Math.floor((x - padding) / cellW), max_len_heat - 1);
+                const i = Math.min(Math.floor((y - padding) / cellH), d_model_heat - 1);
+                const val = getPE(pos, i, d_model_heat);
+                
+                tooltip.style.left = `${e.clientX + 15}px`;
+                tooltip.style.top = `${e.clientY + 15}px`;
+                tooltip.classList.remove('hidden');
+                tooltip.innerHTML = `
+                    <div class="font-bold border-b border-slate-700 pb-1 mb-1">Heatmap Value</div>
+                    <div>pos: <span class="math-font">${pos}</span></div>
+                    <div>dim i: <span class="math-font">${i}</span></div>
+                    <div class="text-blue-300 font-mono mt-1">PE = ${val.toFixed(4)}</div>
+                `;
+            } else {
+                tooltip.classList.add('hidden');
+            }
+        });
+        
+        canvas.addEventListener('mouseleave', () => tooltip.classList.add('hidden'));
+        window.addEventListener('resize', resizeCanvas);
+        
+        // --- Wave Charts Hover Logic ---
+        waveChartsContainer.addEventListener('mouseover', (e) => {
+            // Simplified condition to ensure it catches SVG elements robustly across browsers
+            if(e.target.classList && e.target.classList.contains('wave-point')) {
+                const pos = e.target.getAttribute('data-pos');
+                const dim = e.target.getAttribute('data-dim');
+                const val = parseFloat(e.target.getAttribute('data-val'));
+                
+                tooltip.style.left = `${e.clientX + 15}px`;
+                tooltip.style.top = `${e.clientY + 15}px`;
+                tooltip.classList.remove('hidden');
+                tooltip.innerHTML = `
+                    <div class="font-bold border-b border-slate-700 pb-1 mb-1">Wave Value</div>
+                    <div>pos: <span class="math-font">${pos}</span></div>
+                    <div>dim i: <span class="math-font">${dim}</span></div>
+                    <div class="text-blue-300 font-mono mt-1">PE = ${val.toFixed(4)}</div>
+                `;
+
+                // Highlight corresponding table cell
+                const cell = document.querySelector(`td[data-cell-pos="${pos}"][data-cell-dim="${dim}"]`);
+                if(cell) cell.classList.add('highlight-cell');
+            }
+        });
+
+        waveChartsContainer.addEventListener('mousemove', (e) => {
+            if(!tooltip.classList.contains('hidden') && e.target.classList && e.target.classList.contains('wave-point')) {
+                tooltip.style.left = `${e.clientX + 15}px`;
+                tooltip.style.top = `${e.clientY + 15}px`;
+            }
+        });
+
+        waveChartsContainer.addEventListener('mouseout', (e) => {
+            if(e.target.classList && e.target.classList.contains('wave-point')) {
+                tooltip.classList.add('hidden');
+                
+                // Remove highlight from table cell
+                const pos = e.target.getAttribute('data-pos');
+                const dim = e.target.getAttribute('data-dim');
+                const cell = document.querySelector(`td[data-cell-pos="${pos}"][data-cell-dim="${dim}"]`);
+                if(cell) cell.classList.remove('highlight-cell');
+            }
+        });
+
+        // Init
+        window.onload = () => {
+            // Find 'cat' positions to auto-select, but strictly enforce the 2-item maximum
+            const words = sentenceInput.value.trim().split(/\s+/);
+            words.forEach((w, i) => { 
+                if(w.toLowerCase() === 'cat' && selectedIndices.length < 2) {
+                    selectedIndices.push(i); 
+                }
+            });
+            
+            renderClickableSentence();
+            resizeCanvas();
+        };
+    </script>
+</body>
+</html>

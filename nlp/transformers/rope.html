@@ -1,0 +1,352 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RoPE: Rotary Position Embedding Visualizer</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        ::-webkit-scrollbar { width: 8px; }
+        ::-webkit-scrollbar-track { background: #f1f5f9; }
+        ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+        
+        .math-block { font-family: 'Courier New', Courier, monospace; }
+        .dp-track { background: linear-gradient(90deg, #fecaca 0%, #f1f5f9 50%, #bbf7d0 100%); }
+    </style>
+    <!-- Add MathJax for rendering LaTeX -->
+    <script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+</head>
+<body class="bg-slate-100 text-slate-800 min-h-screen flex items-center justify-center p-4 lg:p-8">
+
+    <div class="max-w-6xl w-full bg-white rounded-2xl shadow-xl overflow-hidden flex flex-col md:flex-row">
+        
+        <!-- Left Panel: Controls & Explanation -->
+        <div class="w-full md:w-5/12 bg-slate-50 p-6 md:p-8 border-r border-slate-200 flex flex-col gap-5 overflow-y-auto">
+            <div>
+                <h1 class="text-2xl font-bold text-slate-900 mb-2">RoPE Visualizer</h1>
+                <p class="text-sm text-slate-600 leading-relaxed">
+                    Unlike the original Transformer which adds positions, <b>RoPE rotates the vectors</b> based on their position. 
+                    The magic is in the <b>Dot Product</b>: rotating two vectors by the same amount doesn't change the angle between them!
+                </p>
+                
+                <!-- Mathematical Formulation -->
+                <div class="mt-4 bg-white p-4 rounded-lg border border-slate-200 shadow-sm text-sm text-slate-700">
+                    <div class="font-semibold text-xs uppercase tracking-wider text-slate-500 mb-2">2D Rotation Formulation</div>
+                    <div class="overflow-x-auto text-center pb-2">
+                        \( \text{RoPE}(x, m) = \begin{pmatrix} \cos(m\theta) & -\sin(m\theta) \\ \sin(m\theta) & \cos(m\theta) \end{pmatrix} \begin{pmatrix} x_0 \\ x_1 \end{pmatrix} \)
+                    </div>
+                    <div class="font-semibold text-xs uppercase tracking-wider text-slate-500 mt-3 mb-2">Dot Product Property</div>
+                    <p class="text-xs text-slate-500 mb-1 leading-tight">The rotation matrices cancel out, leaving only the relative distance \((n-m)\):</p>
+                    <div class="overflow-x-auto text-center">
+                        \( \langle \text{RoPE}(Q, m), \text{RoPE}(K, n) \rangle = Q^T R_{n-m} K \)
+                    </div>
+                </div>
+            </div>
+
+            <!-- Sliders -->
+            <div class="space-y-4 flex-grow bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
+                
+                <!-- Query Pos -->
+                <div>
+                    <div class="flex justify-between mb-1">
+                        <label class="text-sm font-semibold text-slate-700">Query Position (<span class="text-blue-600 font-bold">m</span>)</label>
+                        <span id="m-val" class="text-sm font-mono font-bold text-blue-600">2</span>
+                    </div>
+                    <input type="range" id="m-slider" min="0" max="40" value="2" class="w-full accent-blue-600">
+                </div>
+
+                <!-- Key Pos -->
+                <div>
+                    <div class="flex justify-between mb-1">
+                        <label class="text-sm font-semibold text-slate-700">Key Position (<span class="text-rose-500 font-bold">n</span>)</label>
+                        <span id="n-val" class="text-sm font-mono font-bold text-rose-500">6</span>
+                    </div>
+                    <input type="range" id="n-slider" min="0" max="40" value="6" class="w-full accent-rose-500">
+                </div>
+
+                <!-- Lock Feature -->
+                <div class="flex items-center gap-2 pt-2 pb-2 border-b border-slate-100">
+                    <input type="checkbox" id="lock-dist" class="w-4 h-4 accent-purple-600 cursor-pointer">
+                    <label for="lock-dist" class="text-sm font-bold text-purple-700 cursor-pointer select-none">
+                        Lock Relative Distance (<span id="rel-dist-val">4</span>)
+                    </label>
+                </div>
+
+                <!-- Dimension Index -->
+                <div class="pt-2">
+                    <div class="flex justify-between mb-1">
+                        <label class="text-sm font-semibold text-slate-700">Dimension Index (<span class="text-slate-500 font-bold">i</span>)</label>
+                        <span id="dim-val" class="text-sm font-mono font-bold text-slate-500">0</span>
+                    </div>
+                    <input type="range" id="dim-slider" min="0" max="31" value="0" class="w-full accent-slate-500">
+                    <p class="text-xs text-slate-400 mt-1">Changes rotation speed (frequency \(\theta\)).</p>
+                </div>
+            </div>
+
+            <!-- Mathematical breakdown -->
+            <div class="bg-slate-800 p-5 rounded-xl shadow-inner text-slate-100 flex flex-col gap-3">
+                <div class="text-xs font-semibold text-slate-400 uppercase tracking-wider">Attention Score (Dot Product)</div>
+                
+                <div class="flex justify-between items-center math-block text-sm">
+                    <span class="text-blue-300">Q(m)</span> <span class="text-slate-400">•</span> <span class="text-rose-300">K(n)</span>
+                    <span class="text-slate-400">=</span>
+                    <span class="font-bold text-lg" id="dp-val-text">0.000</span>
+                </div>
+
+                <!-- Visual Dot Product Bar -->
+                <div class="relative w-full h-4 rounded-full dp-track overflow-hidden border border-slate-600">
+                    <div id="dp-marker" class="absolute top-0 bottom-0 w-1 bg-slate-900 border-x border-white/20 shadow-[0_0_8px_rgba(0,0,0,0.5)] z-10 transition-all duration-75" style="left: 50%;"></div>
+                </div>
+                <div class="flex justify-between text-[10px] text-slate-400 font-mono">
+                    <span>-1 (Opposite)</span>
+                    <span>0 (Orthogonal)</span>
+                    <span>+1 (Aligned)</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Right Panel: Canvas -->
+        <div class="w-full md:w-7/12 p-6 md:p-8 flex flex-col items-center justify-center relative bg-white">
+            <h2 class="text-lg font-semibold text-slate-700 mb-4 self-start">2D Slice Rotation</h2>
+            
+            <div class="relative w-full max-w-md aspect-square">
+                <!-- Legend -->
+                <div class="absolute top-0 right-0 bg-white/90 backdrop-blur border border-slate-200 p-3 rounded-lg shadow-sm text-xs space-y-2 z-10">
+                    <div class="flex items-center gap-2">
+                        <div class="w-4 h-0 border-t-2 border-dashed border-slate-300"></div>
+                        <span class="text-slate-500">Base Word Embeddings</span>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <div class="w-3 h-3 rounded-full bg-blue-600"></div>
+                        <span>Query Rotated (<strong class="text-blue-600">m·θ</strong>)</span>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <div class="w-3 h-3 rounded-full bg-rose-500"></div>
+                        <span>Key Rotated (<strong class="text-rose-500">n·θ</strong>)</span>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <div class="w-3 h-3 bg-purple-200 border border-purple-400 rounded-sm"></div>
+                        <span>Relative Angle (<strong class="text-purple-600">m-n</strong>)</span>
+                    </div>
+                </div>
+
+                <canvas id="rope-canvas" class="w-full h-full"></canvas>
+            </div>
+            
+            <div class="text-center text-sm text-slate-600 mt-6 max-w-md bg-purple-50 border border-purple-100 p-4 rounded-lg">
+                <b>Try this:</b> Check "Lock Relative Distance" and move a slider. The vectors spin wildly, but the purple relative angle (and the Attention Score) remain <b>perfectly identical</b>!
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('rope-canvas');
+        const ctx = canvas.getContext('2d');
+        
+        // UI Elements
+        const mSlider = document.getElementById('m-slider');
+        const nSlider = document.getElementById('n-slider');
+        const dimSlider = document.getElementById('dim-slider');
+        const lockCheckbox = document.getElementById('lock-dist');
+        
+        const mVal = document.getElementById('m-val');
+        const nVal = document.getElementById('n-val');
+        const dimVal = document.getElementById('dim-val');
+        const relDistVal = document.getElementById('rel-dist-val');
+        
+        const dpValText = document.getElementById('dp-val-text');
+        const dpMarker = document.getElementById('dp-marker');
+
+        const d_model = 128;
+
+        // "Base" Word embeddings before RoPE is applied
+        // We give them arbitrary starting angles and lengths to show how RoPE modifies them.
+        const baseQAngle = 20 * (Math.PI / 180); // 20 degrees
+        const baseKAngle = 65 * (Math.PI / 180); // 65 degrees
+        const magQ = 0.9;
+        const magK = 0.85;
+
+        // Lock State
+        let isLocked = false;
+        let lockedDiff = parseFloat(nSlider.value) - parseFloat(mSlider.value);
+
+        lockCheckbox.addEventListener('change', (e) => {
+            isLocked = e.target.checked;
+            if (isLocked) {
+                lockedDiff = parseFloat(nSlider.value) - parseFloat(mSlider.value);
+            }
+        });
+
+        function handleSliderInteraction(activeSlider, passiveSlider, isMSlider) {
+            if (isLocked) {
+                const val = parseFloat(activeSlider.value);
+                let passiveVal = isMSlider ? (val + lockedDiff) : (val - lockedDiff);
+                
+                // Clamp
+                if (passiveVal > parseFloat(passiveSlider.max)) passiveVal = parseFloat(passiveSlider.max);
+                if (passiveVal < parseFloat(passiveSlider.min)) passiveVal = parseFloat(passiveSlider.min);
+                
+                passiveSlider.value = passiveVal;
+                
+                // Readjust active slider if clamping happened
+                if (isMSlider) {
+                    activeSlider.value = passiveVal - lockedDiff;
+                } else {
+                    activeSlider.value = passiveVal + lockedDiff;
+                }
+            }
+            draw();
+        }
+
+        mSlider.addEventListener('input', () => handleSliderInteraction(mSlider, nSlider, true));
+        nSlider.addEventListener('input', () => handleSliderInteraction(nSlider, mSlider, false));
+        dimSlider.addEventListener('input', draw);
+
+        function resizeCanvas() {
+            const rect = canvas.parentElement.getBoundingClientRect();
+            const dpr = window.devicePixelRatio || 1;
+            canvas.width = rect.width * dpr;
+            canvas.height = rect.height * dpr;
+            ctx.scale(dpr, dpr);
+            canvas.style.width = `${rect.width}px`;
+            canvas.style.height = `${rect.height}px`;
+            draw();
+        }
+
+        function getTheta(i) {
+            // RoPE standard frequency calculation
+            return 1 / Math.pow(10000, (2 * i) / d_model);
+        }
+
+        function draw() {
+            const width = canvas.width / (window.devicePixelRatio || 1);
+            const height = canvas.height / (window.devicePixelRatio || 1);
+            const cx = width / 2;
+            const cy = height / 2;
+            const radius = Math.min(width, height) * 0.4;
+
+            ctx.clearRect(0, 0, width, height);
+
+            // Get values
+            const m = parseFloat(mSlider.value);
+            const n = parseFloat(nSlider.value);
+            const i = parseFloat(dimSlider.value);
+            const theta = getTheta(i);
+
+            // Update Labels
+            mVal.innerText = m;
+            nVal.innerText = n;
+            dimVal.innerText = i;
+            
+            const relDist = Math.abs(m - n);
+            relDistVal.innerText = m <= n ? `+${n-m}` : `-${m-n}`;
+
+            if (isLocked && m <= n) relDistVal.innerText = `+${lockedDiff}`;
+            if (isLocked && m > n) relDistVal.innerText = `${-lockedDiff}`;
+
+            // Calculate Rotations
+            const qRotAngle = baseQAngle + (m * theta);
+            const kRotAngle = baseKAngle + (n * theta);
+
+            // Draw Grid & Axes
+            ctx.strokeStyle = '#e2e8f0';
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            ctx.moveTo(0, cy); ctx.lineTo(width, cy);
+            ctx.moveTo(cx, 0); ctx.lineTo(cx, height);
+            ctx.stroke();
+
+            // Draw Unit Circle
+            ctx.beginPath();
+            ctx.arc(cx, cy, radius, 0, 2 * Math.PI);
+            ctx.strokeStyle = '#e2e8f0';
+            ctx.lineWidth = 2;
+            ctx.stroke();
+
+            // Helper to draw vectors
+            const drawVector = (angle, mag, color, isDashed = false) => {
+                const vx = cx + (radius * mag) * Math.cos(angle);
+                const vy = cy - (radius * mag) * Math.sin(angle);
+
+                ctx.beginPath();
+                ctx.moveTo(cx, cy);
+                ctx.lineTo(vx, vy);
+                ctx.strokeStyle = color;
+                ctx.lineWidth = isDashed ? 2 : 3;
+                if (isDashed) ctx.setLineDash([5, 5]);
+                ctx.stroke();
+                ctx.setLineDash([]); // reset
+
+                if (!isDashed) {
+                    const headlen = 10;
+                    const arrowAngle = Math.atan2(cy - vy, cx - vx);
+                    ctx.beginPath();
+                    ctx.moveTo(vx, vy);
+                    ctx.lineTo(vx + headlen * Math.cos(arrowAngle - Math.PI / 6), vy + headlen * Math.sin(arrowAngle - Math.PI / 6));
+                    ctx.lineTo(vx + headlen * Math.cos(arrowAngle + Math.PI / 6), vy + headlen * Math.sin(arrowAngle + Math.PI / 6));
+                    ctx.lineTo(vx, vy);
+                    ctx.fillStyle = color;
+                    ctx.fill();
+                }
+            };
+
+            // Draw Base Vectors (Faint, Dashed)
+            drawVector(baseQAngle, magQ, '#cbd5e1', true);
+            drawVector(baseKAngle, magK, '#cbd5e1', true);
+
+            // Draw Relative Angle Arc between Q and K
+            ctx.beginPath();
+            // Canvas arcs are clockwise, Math angles are CCW, so invert angles
+            // Draw arc from smallest angle to largest angle
+            const startA = Math.min(-qRotAngle, -kRotAngle);
+            const endA = Math.max(-qRotAngle, -kRotAngle);
+            
+            // Draw filled wedge
+            ctx.moveTo(cx, cy);
+            ctx.arc(cx, cy, radius * 0.3, startA, endA, false);
+            ctx.lineTo(cx, cy);
+            ctx.fillStyle = 'rgba(168, 85, 247, 0.15)'; // Light purple fill
+            ctx.fill();
+            
+            // Draw outline of arc
+            ctx.beginPath();
+            ctx.arc(cx, cy, radius * 0.3, startA, endA, false);
+            ctx.strokeStyle = 'rgba(168, 85, 247, 0.8)';
+            ctx.lineWidth = 4;
+            ctx.stroke();
+
+            // Draw Rotated Vectors (Solid)
+            drawVector(kRotAngle, magK, '#f43f5e'); // Rose (Key)
+            drawVector(qRotAngle, magQ, '#2563eb'); // Blue (Query)
+
+            // Calculate Dot Product
+            // Qx*Kx + Qy*Ky
+            const qx = magQ * Math.cos(qRotAngle);
+            const qy = magQ * Math.sin(qRotAngle);
+            const kx = magK * Math.cos(kRotAngle);
+            const ky = magK * Math.sin(kRotAngle);
+            const dotProduct = (qx * kx) + (qy * ky);
+            
+            // Update UI Dot Product Math
+            dpValText.innerText = dotProduct.toFixed(3);
+            
+            // Max possible theoretical DP with these magnitudes is magQ * magK
+            // We'll normalize it to a visual -1 to 1 scale for the bar
+            const maxDp = magQ * magK; 
+            const normalizedDp = dotProduct / maxDp; // Ranges roughly -1 to 1
+            const dpPercent = ((normalizedDp + 1) / 2) * 100;
+            
+            dpMarker.style.left = `${Math.max(0, Math.min(100, dpPercent))}%`;
+            
+            // Color change for text based on alignment
+            if (dotProduct > 0.4) dpValText.className = "font-bold text-lg text-emerald-400";
+            else if (dotProduct < -0.4) dpValText.className = "font-bold text-lg text-rose-400";
+            else dpValText.className = "font-bold text-lg text-slate-100";
+        }
+
+        window.addEventListener('resize', resizeCanvas);
+        window.setTimeout(resizeCanvas, 0);
+    </script>
+</body>
+</html>

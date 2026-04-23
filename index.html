@@ -7,168 +7,416 @@
     <title>ML Concept Visualizer</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
-        .category-card {
-            transition: all 0.3s ease;
-            border-left: 4px solid transparent;
+        :root {
+            color-scheme: light;
+            --page-bg: #eef4f8;
+            --surface: rgba(255, 255, 255, 0.92);
+            --surface-strong: #ffffff;
+            --border: #d7e2eb;
+            --border-strong: #bfdbfe;
+            --text: #0f172a;
+            --muted: #475569;
+            --muted-soft: #64748b;
+            --shadow: 0 20px 48px rgba(15, 23, 42, 0.1);
+            --shadow-soft: 0 10px 24px rgba(15, 23, 42, 0.08);
         }
 
-        .category-card:hover {
-            transform: translateY(-4px);
-            box-shadow: 0 12px 24px rgba(0, 0, 0, 0.15);
-            border-left-color: #3b82f6;
+        html {
+            scroll-behavior: smooth;
         }
 
-        .viz-link {
-            display: block;
-            height: 100%;
-            overflow: hidden;
-            border: 1px solid #e2e8f0;
-            border-radius: 1rem;
-            background: white;
-            transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
-            padding: 0 !important;
-        }
-
-        .viz-link:hover {
-            transform: translateY(-3px);
-            box-shadow: 0 16px 30px rgba(15, 23, 42, 0.12);
-            border-color: #93c5fd;
-            background: white;
+        body {
+            background:
+                radial-gradient(circle at top left, rgba(56, 189, 248, 0.16), transparent 24%),
+                radial-gradient(circle at top right, rgba(45, 212, 191, 0.14), transparent 22%),
+                linear-gradient(180deg, #f8fbfd 0%, var(--page-bg) 100%);
         }
 
         .hero-gradient {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-        }
-
-        .badge {
-            display: inline-block;
-            padding: 0.25rem 0.75rem;
-            border-radius: 9999px;
-            font-size: 0.75rem;
-            font-weight: 600;
-        }
-
-        .category-card ul {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
-            gap: 1rem;
-        }
-
-        .category-card ul>li {
-            margin: 0 !important;
-        }
-
-        .viz-link-card {
-            display: grid;
-            grid-template-columns: minmax(132px, 164px) minmax(0, 1fr);
-            min-height: 122px;
-            height: 100%;
-        }
-
-        .viz-preview {
             position: relative;
-            min-height: 122px;
-            background: linear-gradient(135deg, #dbeafe 0%, #eff6ff 100%);
-            isolation: isolate;
+            overflow: hidden;
+            background: linear-gradient(135deg, #0f172a 0%, #123a6b 48%, #0f766e 100%);
         }
 
-        .viz-preview img {
-            width: 100%;
-            height: 100%;
-            object-fit: cover;
-            display: block;
-        }
-
-        .viz-preview::after {
+        .hero-gradient::after {
             content: "";
             position: absolute;
             inset: 0;
             background:
-                linear-gradient(180deg, rgba(15, 23, 42, 0.04), rgba(15, 23, 42, 0.22)),
-                linear-gradient(135deg, rgba(255, 255, 255, 0.18), transparent 58%);
+                radial-gradient(circle at 16% 18%, rgba(255, 255, 255, 0.16), transparent 24%),
+                radial-gradient(circle at 82% 12%, rgba(125, 211, 252, 0.14), transparent 20%);
             pointer-events: none;
         }
 
-        .viz-preview-meta {
-            position: absolute;
-            left: 0.75rem;
-            right: 0.75rem;
-            bottom: 0.7rem;
+        .hero-shell {
+            position: relative;
             z-index: 1;
-            color: white;
-            font-size: 0.68rem;
-            font-weight: 700;
-            letter-spacing: 0.08em;
-            text-transform: uppercase;
-            text-shadow: 0 1px 2px rgba(15, 23, 42, 0.4);
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
+            display: flex;
+            align-items: flex-end;
+            justify-content: space-between;
+            gap: 2rem;
         }
 
-        .viz-content {
+        .hero-copy {
+            max-width: 44rem;
+            text-align: left;
+        }
+
+        .hero-kicker {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.45rem 0.85rem;
+            border-radius: 999px;
+            border: 1px solid rgba(255, 255, 255, 0.18);
+            background: rgba(255, 255, 255, 0.08);
+            font-size: 0.74rem;
+            font-weight: 700;
+            letter-spacing: 0.18em;
+            text-transform: uppercase;
+            color: #dbeafe;
+        }
+
+        .hero-stats {
+            display: grid;
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+            gap: 0.85rem;
+            min-width: min(100%, 24rem);
+        }
+
+        .hero-stat {
+            padding: 1rem 1.1rem;
+            border-radius: 1.2rem;
+            border: 1px solid rgba(255, 255, 255, 0.14);
+            background: rgba(15, 23, 42, 0.22);
+            backdrop-filter: blur(12px);
+        }
+
+        .hero-stat strong {
+            display: block;
+            font-size: 1.6rem;
+            font-weight: 800;
+            line-height: 1;
+        }
+
+        .hero-stat span {
+            display: block;
+            margin-top: 0.35rem;
+            font-size: 0.74rem;
+            font-weight: 700;
+            letter-spacing: 0.12em;
+            text-transform: uppercase;
+            color: #cbd5e1;
+        }
+
+        .catalog-intro-card,
+        .category-card {
+            border: 1px solid var(--border);
+            border-radius: 1.5rem;
+            background: var(--surface);
+            box-shadow: var(--shadow-soft);
+            backdrop-filter: blur(10px);
+        }
+
+        .catalog-intro-card {
+            padding: 1.6rem;
+        }
+
+        .quick-nav-wrap {
+            position: sticky;
+            top: 0.9rem;
+            z-index: 40;
+            margin-bottom: 1.75rem;
+        }
+
+        .quick-nav {
+            display: flex;
+            gap: 0.75rem;
+            overflow-x: auto;
+            padding: 0.8rem 1rem;
+            border: 1px solid var(--border);
+            border-radius: 999px;
+            background: rgba(255, 255, 255, 0.88);
+            box-shadow: var(--shadow-soft);
+            backdrop-filter: blur(16px);
+            scrollbar-width: none;
+        }
+
+        .quick-nav::-webkit-scrollbar {
+            display: none;
+        }
+
+        .quick-nav-link {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.55rem;
+            white-space: nowrap;
+            padding: 0.55rem 0.85rem;
+            border-radius: 999px;
+            color: #334155;
+            font-size: 0.9rem;
+            font-weight: 700;
+            line-height: 1;
+            transition: background-color 0.18s ease, color 0.18s ease;
+        }
+
+        .quick-nav-link:hover,
+        .quick-nav-link:focus-visible {
+            background: #e0f2fe;
+            color: var(--text);
+            outline: none;
+        }
+
+        .quick-nav-link.active {
+            background: #0f172a;
+            color: #f8fafc;
+        }
+
+        .quick-nav-count {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            min-width: 1.65rem;
+            padding: 0.15rem 0.42rem;
+            border-radius: 999px;
+            background: rgba(148, 163, 184, 0.18);
+            font-size: 0.72rem;
+            font-weight: 800;
+        }
+
+        .quick-nav-link.active .quick-nav-count {
+            background: rgba(255, 255, 255, 0.16);
+        }
+
+        .directory-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+            gap: 1rem;
+        }
+
+        .directory-link {
+            display: block;
+            padding: 1rem 1rem 1.1rem;
+            border: 1px solid var(--border);
+            border-radius: 1.15rem;
+            background: linear-gradient(180deg, #ffffff 0%, #f7fbff 100%);
+            transition: transform 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease;
+        }
+
+        .directory-link:hover,
+        .directory-link:focus-visible {
+            transform: translateY(-2px);
+            border-color: var(--border-strong);
+            box-shadow: var(--shadow-soft);
+            outline: none;
+        }
+
+        .directory-meta {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 0.75rem;
+        }
+
+        .directory-icon {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 2.6rem;
+            height: 2.6rem;
+            border-radius: 0.95rem;
+            background: #e0f2fe;
+            font-size: 1.2rem;
+        }
+
+        .directory-count,
+        .section-count {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            padding: 0.25rem 0.65rem;
+            border-radius: 999px;
+            background: #eff6ff;
+            color: #1e3a8a;
+            font-size: 0.75rem;
+            font-weight: 800;
+            letter-spacing: 0.03em;
+        }
+
+        .section-count {
+            margin-top: 0.55rem;
+        }
+
+        .catalog-section {
+            scroll-margin-top: 6rem;
+        }
+
+        .category-card {
+            padding: 1.75rem !important;
+            transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
+        }
+
+        .category-card:hover {
+            transform: translateY(-2px);
+            box-shadow: var(--shadow);
+        }
+
+        .category-card ul {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+            gap: 0.8rem 1rem;
+        }
+
+        .category-card ul > li {
+            margin: 0 !important;
+        }
+
+        .viz-link {
+            position: relative;
             display: flex;
             flex-direction: column;
-            justify-content: center;
-            gap: 0.4rem;
-            padding: 1rem 1rem 0.95rem 1.1rem;
+            gap: 0.35rem;
+            min-height: 100%;
+            padding: 1rem 1rem 1.05rem !important;
+            border: 1px solid #dbe5f0;
+            border-radius: 1rem;
+            background: rgba(248, 250, 252, 0.88);
+            transition: transform 0.18s ease, border-color 0.18s ease, background-color 0.18s ease, box-shadow 0.18s ease;
         }
 
-        .viz-title {
-            line-height: 1.25;
-        }
-
-        .viz-description {
-            color: #475569 !important;
-            line-height: 1.45;
-        }
-
-        .viz-path {
-            display: inline-flex;
-            align-self: flex-start;
-            margin-top: 0.15rem;
-            padding: 0.2rem 0.5rem;
-            border-radius: 9999px;
-            background: #eff6ff;
-            color: #475569;
+        .viz-link::after {
+            content: "Open";
+            position: absolute;
+            top: 0.95rem;
+            right: 1rem;
+            color: #94a3b8;
             font-size: 0.68rem;
+            font-weight: 800;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+        }
+
+        .viz-link:hover,
+        .viz-link:focus-visible {
+            transform: translateY(-1px);
+            border-color: var(--border-strong);
+            background: var(--surface-strong);
+            box-shadow: 0 10px 24px rgba(15, 23, 42, 0.06);
+            outline: none;
+        }
+
+        .viz-link .font-semibold {
+            padding-right: 3.1rem;
+            line-height: 1.3;
+        }
+
+        .viz-link .text-sm {
+            color: var(--muted) !important;
+            line-height: 1.5;
+        }
+
+        .section-kicker {
+            font-size: 0.78rem;
             font-weight: 700;
-            letter-spacing: 0.04em;
+            letter-spacing: 0.16em;
+            text-transform: uppercase;
+            color: #0369a1;
+        }
+
+        @media (max-width: 1024px) {
+            .hero-shell {
+                flex-direction: column;
+                align-items: flex-start;
+            }
+
+            .hero-stats {
+                width: 100%;
+            }
+        }
+
+        @media (max-width: 768px) {
+            .quick-nav {
+                border-radius: 1.2rem;
+            }
+
+            .category-card {
+                padding: 1.25rem !important;
+            }
         }
 
         @media (max-width: 640px) {
-            .viz-link-card {
+            .hero-stats {
                 grid-template-columns: 1fr;
             }
 
-            .viz-preview {
-                min-height: 96px;
+            .catalog-intro-card {
+                padding: 1.15rem;
             }
 
-            .viz-content {
-                padding: 0.95rem;
+            .directory-grid,
+            .category-card ul {
+                grid-template-columns: 1fr;
             }
         }
     </style>
 </head>
 
-<body class="bg-gray-50 text-gray-900">
+<body class="text-gray-900" id="top">
     <!-- Hero Section -->
-    <header class="hero-gradient text-white py-8 px-4 shadow-lg">
-        <div class="max-w-6xl mx-auto text-center">
-            <h1 class="text-4xl font-bold tracking-tight mb-2">
-                🧠 ML Concept Visualizer
-            </h1>
-            <p class="text-lg text-purple-100 max-w-2xl mx-auto">
-                Interactive visualizations for machine learning, deep learning, and systems optimization concepts
-            </p>
+    <header class="hero-gradient text-white py-12 px-4 shadow-lg">
+        <div class="hero-shell max-w-7xl mx-auto">
+            <div class="hero-copy">
+                <p class="hero-kicker">Interactive ML Reference Library</p>
+                <h1 class="text-4xl md:text-5xl font-bold tracking-tight mt-5">
+                    Find the right concept family fast
+                </h1>
+                <p class="text-lg text-sky-100 max-w-3xl mt-4">
+                    Browse machine learning, hardware, and systems visualizations by category first, then scan a denser list of pages inside each topic.
+                </p>
+            </div>
+            <div class="hero-stats" aria-label="Catalog summary">
+                <div class="hero-stat">
+                    <strong id="hero-category-count">10</strong>
+                    <span>Categories</span>
+                </div>
+                <div class="hero-stat">
+                    <strong id="hero-viz-count">0</strong>
+                    <span>Visualizations</span>
+                </div>
+                <div class="hero-stat">
+                    <strong>0</strong>
+                    <span>Install Steps</span>
+                </div>
+            </div>
         </div>
     </header>
 
-    <main class="max-w-7xl mx-auto p-6 md:p-12">
+    <main class="max-w-7xl mx-auto px-4 py-6 sm:p-6 lg:px-8 lg:py-10">
+        <section class="catalog-intro mb-8">
+            <div class="catalog-intro-card">
+                <div class="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+                    <div class="max-w-3xl">
+                        <p class="section-kicker">Browse By Category</p>
+                        <h2 class="mt-3 text-3xl font-bold text-slate-900">Jump to a topic before you scan pages.</h2>
+                        <p class="mt-3 text-base text-slate-600">
+                            The catalog works better when categories do the heavy lifting. Start here, pick a concept area, then drill into the visualization list for that section.
+                        </p>
+                    </div>
+                    <a href="#category-quick-nav"
+                        class="inline-flex items-center gap-2 rounded-full border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 transition hover:border-sky-300 hover:text-slate-900">
+                        Jump Bar
+                    </a>
+                </div>
+                <div id="category-directory" class="directory-grid mt-8"></div>
+            </div>
+        </section>
+
+        <div class="quick-nav-wrap">
+            <nav id="category-quick-nav" class="quick-nav" aria-label="Category quick navigation"></nav>
+        </div>
         
         <!-- AI Accelerators & CPU Architectures -->
-        <section class="mb-12">
+        <section class="mb-12 catalog-section">
             <div class="category-card bg-white rounded-xl shadow-md p-8 border-l-4 border-purple-500">
                 <div class="flex items-center gap-3 mb-6">
                     <div class="w-12 h-12 bg-purple-100 rounded-lg flex items-center justify-center text-2xl">
@@ -377,7 +625,7 @@
         </section>
 
         <!-- Classical ML & Clustering -->
-        <section class="mb-12">
+        <section class="mb-12 catalog-section">
             <div class="category-card bg-white rounded-xl shadow-md p-8">
                 <div class="flex items-center gap-3 mb-6">
                     <div class="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center text-2xl">
@@ -450,7 +698,7 @@
         </section>
 
         <!-- CNN Architectures -->
-        <section class="mb-12">
+        <section class="mb-12 catalog-section">
             <div class="category-card bg-white rounded-xl shadow-md p-8">
                 <div class="flex items-center gap-3 mb-6">
                     <div class="w-12 h-12 bg-purple-100 rounded-lg flex items-center justify-center text-2xl">
@@ -537,7 +785,7 @@
         </section>
 
         <!-- Fundamentals -->
-        <section class="mb-12">
+        <section class="mb-12 catalog-section">
             <div class="category-card bg-white rounded-xl shadow-md p-8">
                 <div class="flex items-center gap-3 mb-6">
                     <div class="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center text-2xl">
@@ -582,7 +830,7 @@
         </section>
 
         <!-- NLP & Language Models -->
-        <section class="mb-12">
+        <section class="mb-12 catalog-section">
             <div class="category-card bg-white rounded-xl shadow-md p-8">
                 <div class="flex items-center gap-3 mb-6">
                     <div class="w-12 h-12 bg-indigo-100 rounded-lg flex items-center justify-center text-2xl">
@@ -749,7 +997,7 @@
         </section>
 
         <!-- GEMM Optimization -->
-        <section class="mb-12">
+        <section class="mb-12 catalog-section">
             <div class="category-card bg-white rounded-xl shadow-md p-8">
                 <div class="flex items-center gap-3 mb-6">
                     <div class="w-12 h-12 bg-orange-100 rounded-lg flex items-center justify-center text-2xl">
@@ -822,7 +1070,7 @@
         </section>
 
         <!-- Kernel Optimization -->
-        <section class="mb-12">
+        <section class="mb-12 catalog-section">
             <div class="category-card bg-white rounded-xl shadow-md p-8">
                 <div class="flex items-center gap-3 mb-6">
                     <div class="w-12 h-12 bg-red-100 rounded-lg flex items-center justify-center text-2xl">
@@ -860,7 +1108,7 @@
         </section>
 
         <!-- Cache & Memory -->
-        <section class="mb-12">
+        <section class="mb-12 catalog-section">
             <div class="category-card bg-white rounded-xl shadow-md p-8">
                 <div class="flex items-center gap-3 mb-6">
                     <div class="w-12 h-12 bg-indigo-100 rounded-lg flex items-center justify-center text-2xl">
@@ -891,7 +1139,7 @@
         </section>
 
         <!-- Dataflow Patterns -->
-        <section class="mb-12">
+        <section class="mb-12 catalog-section">
             <div class="category-card bg-white rounded-xl shadow-md p-8">
                 <div class="flex items-center gap-3 mb-6">
                     <div class="w-12 h-12 bg-teal-100 rounded-lg flex items-center justify-center text-2xl">
@@ -964,7 +1212,7 @@
         </section>
 
         <!-- Performance Modeling -->
-        <section class="mb-12">
+        <section class="mb-12 catalog-section">
             <div class="category-card bg-white rounded-xl shadow-md p-8">
                 <div class="flex items-center gap-3 mb-6">
                     <div class="w-12 h-12 bg-pink-100 rounded-lg flex items-center justify-center text-2xl">
@@ -991,7 +1239,7 @@
     <footer class="bg-gray-900 text-gray-300 py-8 px-4 mt-16">
         <div class="max-w-6xl mx-auto text-center">
             <p class="text-sm">
-                Built with 💜 for learning and teaching ML concepts
+                Built for fast topic discovery and in-browser learning
             </p>
             <p class="text-xs text-gray-500 mt-2">
                 All visualizations are interactive and run entirely in your browser
@@ -1000,153 +1248,101 @@
     </footer>
     <script>
         (() => {
-            const accentMap = {
-                "text-purple-600": "#7c3aed",
-                "text-blue-600": "#2563eb",
-                "text-indigo-600": "#4f46e5",
-                "text-green-600": "#16a34a",
-                "text-orange-600": "#ea580c",
-                "text-red-600": "#dc2626",
-                "text-teal-600": "#0f766e",
-                "text-pink-600": "#db2777",
-            };
-
-            const escapeXml = (value) =>
+            const slugify = (value) =>
                 value
-                    .replace(/&/g, "&amp;")
-                    .replace(/"/g, "&quot;")
-                    .replace(/</g, "&lt;")
-                    .replace(/>/g, "&gt;");
+                    .toLowerCase()
+                    .replace(/&/g, "and")
+                    .replace(/[^a-z0-9]+/g, "-")
+                    .replace(/^-+|-+$/g, "");
 
-            const hash = (value) => {
-                let result = 0;
-                for (const char of value) {
-                    result = ((result << 5) - result + char.charCodeAt(0)) | 0;
+            const sections = Array.from(document.querySelectorAll("main > section.catalog-section"));
+            const quickNav = document.getElementById("category-quick-nav");
+            const directory = document.getElementById("category-directory");
+            const heroCategoryCount = document.getElementById("hero-category-count");
+            const heroVizCount = document.getElementById("hero-viz-count");
+
+            if (!sections.length || !quickNav || !directory) {
+                return;
+            }
+
+            const navEntries = [];
+            let totalVisualizations = 0;
+
+            sections.forEach((section, index) => {
+                const title = section.querySelector("h2");
+                const description = section.querySelector("p");
+                const icon = (section.querySelector(".w-12")?.textContent || "•").trim();
+                const linkCount = section.querySelectorAll("a.viz-link").length;
+
+                if (!title || !description || linkCount === 0) {
+                    return;
                 }
-                return Math.abs(result);
-            };
 
-            const accentFor = (element) => {
-                for (const className of element.classList) {
-                    if (accentMap[className]) {
-                        return accentMap[className];
+                totalVisualizations += linkCount;
+
+                const slug = slugify(title.textContent) || `section-${index + 1}`;
+                section.id = slug;
+
+                const countBadge = document.createElement("div");
+                countBadge.className = "section-count";
+                countBadge.textContent = `${linkCount} visualizations`;
+                title.insertAdjacentElement("afterend", countBadge);
+
+                const quickLink = document.createElement("a");
+                quickLink.href = `#${slug}`;
+                quickLink.className = "quick-nav-link";
+                quickLink.innerHTML = `
+                    <span aria-hidden="true">${icon}</span>
+                    <span>${title.textContent.trim()}</span>
+                    <span class="quick-nav-count">${linkCount}</span>
+                `;
+                quickNav.appendChild(quickLink);
+
+                const directoryLink = document.createElement("a");
+                directoryLink.href = `#${slug}`;
+                directoryLink.className = "directory-link";
+                directoryLink.innerHTML = `
+                    <div class="directory-meta">
+                        <span class="directory-icon" aria-hidden="true">${icon}</span>
+                        <span class="directory-count">${linkCount}</span>
+                    </div>
+                    <div class="mt-4">
+                        <h3 class="text-lg font-bold text-slate-900">${title.textContent.trim()}</h3>
+                        <p class="mt-2 text-sm text-slate-600 leading-relaxed">${description.textContent.trim()}</p>
+                    </div>
+                `;
+                directory.appendChild(directoryLink);
+
+                navEntries.push({ section, link: quickLink });
+            });
+
+            if (heroCategoryCount) {
+                heroCategoryCount.textContent = String(navEntries.length);
+            }
+
+            if (heroVizCount) {
+                heroVizCount.textContent = String(totalVisualizations);
+            }
+
+            const setActiveNav = () => {
+                let current = navEntries[0];
+
+                navEntries.forEach((entry) => {
+                    const rect = entry.section.getBoundingClientRect();
+                    if (rect.top <= 180) {
+                        current = entry;
                     }
-                }
-                return "#2563eb";
-            };
-
-            const secondaryAccent = (seed) => {
-                const hue = seed % 360;
-                return `hsl(${hue} 80% 72%)`;
-            };
-
-            const truncate = (value, length) =>
-                value.length <= length ? value : `${value.slice(0, length - 1)}…`;
-
-            const previewSvg = ({ title, description, href, accent }) => {
-                const seed = hash(href);
-                const secondary = secondaryAccent(seed);
-                const folder = href.split("/")[0].replace(/-/g, " ").toUpperCase();
-                const label = truncate(title, 28);
-                const sublabel = truncate(description, 58);
-                const chip = truncate(href.replace(".html", ""), 28);
-
-                const bars = Array.from({ length: 4 }, (_, index) => {
-                    const x = 30 + index * 28;
-                    const height = 18 + ((seed + index * 17) % 58);
-                    const y = 128 - height;
-                    return `<rect x="${x}" y="${y}" width="18" height="${height}" rx="5" fill="rgba(255,255,255,0.78)" />`;
-                }).join("");
-
-                const nodes = Array.from({ length: 5 }, (_, index) => {
-                    const cx = 214 + ((seed + index * 31) % 74);
-                    const cy = 42 + ((seed + index * 19) % 88);
-                    const radius = 6 + ((seed + index) % 7);
-                    return `<circle cx="${cx}" cy="${cy}" r="${radius}" fill="rgba(255,255,255,0.22)" stroke="rgba(255,255,255,0.4)" />`;
-                }).join("");
-
-                const svg = `
-<svg xmlns="http://www.w3.org/2000/svg" width="320" height="192" viewBox="0 0 320 192" fill="none">
-  <defs>
-    <linearGradient id="bg" x1="24" y1="20" x2="294" y2="188" gradientUnits="userSpaceOnUse">
-      <stop stop-color="${accent}" />
-      <stop offset="1" stop-color="${secondary}" />
-    </linearGradient>
-  </defs>
-  <rect width="320" height="192" rx="20" fill="#0f172a" />
-  <rect x="12" y="12" width="296" height="168" rx="18" fill="url(#bg)" />
-  <rect x="28" y="26" width="108" height="24" rx="12" fill="rgba(15,23,42,0.18)" />
-  <text x="40" y="42" fill="white" font-size="11" font-family="Inter, Arial, sans-serif" font-weight="700" letter-spacing="1.4">${escapeXml(folder)}</text>
-  <text x="28" y="84" fill="white" font-size="22" font-family="Inter, Arial, sans-serif" font-weight="800">${escapeXml(label)}</text>
-  <text x="28" y="108" fill="rgba(255,255,255,0.92)" font-size="11" font-family="Inter, Arial, sans-serif" font-weight="500">${escapeXml(sublabel)}</text>
-  <rect x="28" y="144" width="160" height="22" rx="11" fill="rgba(15,23,42,0.18)" />
-  <text x="40" y="158" fill="white" font-size="10" font-family="Inter, Arial, sans-serif" font-weight="700">${escapeXml(chip)}</text>
-  <rect x="194" y="122" width="98" height="34" rx="16" fill="rgba(15,23,42,0.14)" />
-  <text x="212" y="144" fill="white" font-size="13" font-family="Inter, Arial, sans-serif" font-weight="800">Preview</text>
-  ${bars}
-  ${nodes}
-</svg>`.trim();
-
-                return `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(svg)}`;
-            };
-
-            document.querySelectorAll("a.viz-link").forEach((link) => {
-                if (link.dataset.previewReady === "true") {
-                    return;
-                }
-
-                const title = link.querySelector(".font-semibold");
-                const description = link.querySelector(".text-sm");
-                if (!title || !description) {
-                    return;
-                }
-
-                const href = link.getAttribute("href") || "";
-                const accent = accentFor(title);
-
-                const card = document.createElement("span");
-                card.className = "viz-link-card";
-
-                const preview = document.createElement("span");
-                preview.className = "viz-preview";
-
-                const image = document.createElement("img");
-                image.loading = "lazy";
-                image.decoding = "async";
-                image.alt = `${title.textContent.trim()} preview image`;
-                image.src = previewSvg({
-                    title: title.textContent.trim(),
-                    description: description.textContent.trim(),
-                    href,
-                    accent,
                 });
 
-                const previewMeta = document.createElement("span");
-                previewMeta.className = "viz-preview-meta";
-                previewMeta.textContent = href.replace(".html", "");
+                navEntries.forEach(({ link }) => link.classList.remove("active"));
 
-                const content = document.createElement("span");
-                content.className = "viz-content";
+                if (current) {
+                    current.link.classList.add("active");
+                }
+            };
 
-                const existingChildren = Array.from(link.childNodes);
-                existingChildren.forEach((node) => content.appendChild(node));
-
-                const pathPill = document.createElement("span");
-                pathPill.className = "viz-path";
-                pathPill.textContent = href.split("/").slice(0, 2).join(" / ");
-
-                title.classList.add("viz-title");
-                description.classList.add("viz-description");
-                content.appendChild(pathPill);
-
-                preview.appendChild(image);
-                preview.appendChild(previewMeta);
-                card.appendChild(preview);
-                card.appendChild(content);
-
-                link.appendChild(card);
-                link.dataset.previewReady = "true";
-            });
+            setActiveNav();
+            document.addEventListener("scroll", setActiveNav, { passive: true });
         })();
     </script>
 </body>

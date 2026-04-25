@@ -1,15 +1,15 @@
 # 🧠 ML Concept Visualizer
 
-[![GitHub Pages](https://img.shields.io/badge/Live%20Demo-GitHub%20Pages-blue?style=flat-square)](https://ourarash.github.io/ml-concept-visualizer/)
+[![GitHub Pages](https://img.shields.io/badge/Live%20Demo-GitHub%20Pages-blue?style=flat-square)](https://kylemisa20.github.io/ml-concept-visualizer-KM-EC/)
 [![License](https://img.shields.io/badge/License-MIT-green?style=flat-square)](#)
 
 > **Interactive visualizations for machine learning, deep learning, and performance-engineering concepts used in lectures.**
 
 **By Arash Saifhashemi**
 
-## 🌐 [View All Visualizations](https://github.com/kylemisa20/ml-concept-visualizer-KM-EC)
+## 🌐 [View All Visualizations](https://kylemisa20.github.io/ml-concept-visualizer-KM-EC/)
 
-Browse the full catalog of interactive visualizations on the **[live website](https://ourarash.github.io/ml-concept-visualizer/)** or explore them directly by opening the HTML files in your browser.
+Browse the full catalog of interactive visualizations on the **[live website](https://kylemisa20.github.io/ml-concept-visualizer-KM-EC/)** or explore them directly by opening the HTML files in your browser.
 
 ## ✨ Features
 
@@ -169,15 +169,15 @@ ml-concept-visualizer/
 
 ### Option 1: View Online (Recommended)
 
-Visit the **[live website](https://ourarash.github.io/ml-concept-visualizer/)** to browse all visualizations.
+Visit the **[live website](https://kylemisa20.github.io/ml-concept-visualizer-KM-EC/)** to browse all visualizations.
 
 ### Option 2: Run Locally
 
 1. Clone the repository:
 
    ```bash
-   git clone https://github.com/ourarash/ml-concept-visualizer.git
-   cd ml-concept-visualizer
+   git clone https://github.com/kylemisa20/ml-concept-visualizer-KM-EC.git
+   cd ml-concept-visualizer-KM-EC
    ```
 
 2. Open any HTML file in your browser:

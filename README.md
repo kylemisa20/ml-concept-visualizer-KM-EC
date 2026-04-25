@@ -7,7 +7,7 @@
 
 **By Arash Saifhashemi**
 
-## 🌐 [View All Visualizations](https://ourarash.github.io/ml-concept-visualizer-KM-EC/)
+## 🌐 [View All Visualizations](https://github.com/kylemisa20/ml-concept-visualizer-KM-EC/tree/main)
 
 Browse the full catalog of interactive visualizations on the **[live website](https://ourarash.github.io/ml-concept-visualizer/)** or explore them directly by opening the HTML files in your browser.
 
